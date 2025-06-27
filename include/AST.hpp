@@ -13,69 +13,35 @@
 // 辅助定义
 // ===--------------------------------------------------------------------=== //
 
-// 源代码位置信息
 struct SourceLocation {
   int line = 0;
 };
 
-// 基本数据类型
-enum class BaseType {
-  INT,
-  FLOAT,
-  VOID,
-};
-
-// 一元运算符
-enum class UnaryOp {
-  PLUS,  // +
-  MINUS, // -
-  NOT    // !
-};
-
-// 二元运算符
+enum class BaseType { INT, FLOAT, VOID };
+enum class UnaryOp { PLUS, MINUS, NOT };
 enum class BinaryOp {
-  ADD,    // +
-  SUB,    // -
-  MUL,    // *
-  DIV,    // /
-  MOD,    // %
-  GT,     // >
-  GTE,    // >=
-  LT,     // <
-  LTE,    // <=
-  EQ,     // ==
-  NEQ,    // !=
-  AND,    // &&
-  OR,     // ||
-  ASSIGN, // =
+  ADD, SUB, MUL, DIV, MOD,
+  GT, GTE, LT, LTE, EQ, NEQ,
+  AND, OR, ASSIGN
 };
 
 // ===--------------------------------------------------------------------=== //
 // AST节点前向声明
 // ===--------------------------------------------------------------------=== //
 
-// 访问者
 class ASTVisitor;
-
-// 基类
 class SyntaxNode;
 class DeclarationNode;
 class StatementNode;
 class ExpressionNode;
 class InitializerNode;
-
-// 顶层
 class TranslationUnit;
-
-// 声明
 class ConstDeclaration;
 class ConstDefinition;
 class VariableDeclaration;
 class VariableDefinition;
 class FunctionDefinition;
 class FunctionParameter;
-
-// 语句
 class BlockStatement;
 class IfStatement;
 class WhileStatement;
@@ -83,8 +49,6 @@ class ExpressionStatement;
 class ReturnStatement;
 class BreakStatement;
 class ContinueStatement;
-
-// 表达式
 class UnaryExpression;
 class BinaryExpression;
 class VariableAccess;
@@ -92,20 +56,16 @@ class ArrayAccess;
 class FunctionCall;
 class IntegerLiteral;
 class FloatLiteral;
-
-// 初始化
 class ExpressionInitializer;
 class InitializerList;
 
 // ===--------------------------------------------------------------------=== //
-// 访问者模式接口 (AST Visitor Interface)
+// 访问者模式接口
 // ===--------------------------------------------------------------------=== //
 
 class ASTVisitor {
 public:
   virtual ~ASTVisitor() = default;
-
-  // 每个具体的AST节点都需要一个visit方法
   virtual void visit(TranslationUnit &node) = 0;
   virtual void visit(ConstDeclaration &node) = 0;
   virtual void visit(ConstDefinition &node) = 0;
@@ -135,111 +95,104 @@ public:
 // AST节点基类
 // ===--------------------------------------------------------------------=== //
 
-// 所有节点的根基类
 class SyntaxNode {
 public:
   SourceLocation location;
+  explicit SyntaxNode(SourceLocation loc = {}) : location(loc) {}
   virtual ~SyntaxNode() = default;
   virtual void accept(ASTVisitor &visitor) = 0;
 };
 
-// 声明节点的基类
-class DeclarationNode : public SyntaxNode {};
-
-// 语句节点的基类
-class StatementNode : public SyntaxNode {};
-
-// 表达式节点的基类
-class ExpressionNode : public SyntaxNode {};
-
-// 初始化器节点的基类
-class InitializerNode : public SyntaxNode {};
+class DeclarationNode : public SyntaxNode { using SyntaxNode::SyntaxNode; };
+class StatementNode : public SyntaxNode { using SyntaxNode::SyntaxNode; };
+class ExpressionNode : public SyntaxNode { using SyntaxNode::SyntaxNode; };
+class InitializerNode : public SyntaxNode { using SyntaxNode::SyntaxNode; };
 
 // ===--------------------------------------------------------------------=== //
 // 具体AST节点定义
 // ===--------------------------------------------------------------------=== //
 
-// 1. 顶层结构
-// CompUnit -> (Decl | FuncDef)*
 class TranslationUnit : public SyntaxNode {
 public:
   std::vector<std::unique_ptr<DeclarationNode>> declarations;
-
+  explicit TranslationUnit(SourceLocation loc = {}) : SyntaxNode(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 2. 声明 (Declarations)
-// ConstDecl -> 'const' BType ConstDef {',' ConstDef} ';'
 class ConstDeclaration : public DeclarationNode {
 public:
   BaseType type;
   std::vector<std::unique_ptr<ConstDefinition>> definitions;
-
+  ConstDeclaration(BaseType type, std::vector<std::unique_ptr<ConstDefinition>> defs, SourceLocation loc = {})
+      : DeclarationNode(loc), type(type), definitions(std::move(defs)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// ConstDef -> Ident {'[' ConstExp ']'} '=' ConstInitVal
 class ConstDefinition : public SyntaxNode {
 public:
   std::string name;
-  std::vector<std::unique_ptr<ExpressionNode>> array_dimensions; // 空表示非数组
+  std::vector<std::unique_ptr<ExpressionNode>> array_dimensions;
   std::unique_ptr<InitializerNode> initializer;
-
+  ConstDefinition(std::string name, std::vector<std::unique_ptr<ExpressionNode>> dims,
+                    std::unique_ptr<InitializerNode> init, SourceLocation loc = {})
+      : SyntaxNode(loc), name(std::move(name)), array_dimensions(std::move(dims)),
+        initializer(std::move(init)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// VarDecl -> BType VarDef {',' VarDef} ';'
 class VariableDeclaration : public DeclarationNode {
 public:
   BaseType type;
   std::vector<std::unique_ptr<VariableDefinition>> definitions;
-
+  VariableDeclaration(BaseType type, std::vector<std::unique_ptr<VariableDefinition>> defs, SourceLocation loc = {})
+      : DeclarationNode(loc), type(type), definitions(std::move(defs)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// VarDef -> Ident {'[' ConstExp ']'} [ '=' InitVal ]
 class VariableDefinition : public SyntaxNode {
 public:
   std::string name;
   std::vector<std::unique_ptr<ExpressionNode>> array_dimensions;
   std::optional<std::unique_ptr<InitializerNode>> initializer;
-
+  VariableDefinition(std::string name, std::vector<std::unique_ptr<ExpressionNode>> dims,
+                       std::optional<std::unique_ptr<InitializerNode>> init, SourceLocation loc = {})
+      : SyntaxNode(loc), name(std::move(name)), array_dimensions(std::move(dims)),
+        initializer(std::move(init)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// FuncDef -> FuncType Ident '(' [FuncFParamList] ')' Block
 class FunctionDefinition : public DeclarationNode {
 public:
   BaseType return_type;
   std::string name;
   std::vector<std::unique_ptr<FunctionParameter>> parameters;
   std::unique_ptr<BlockStatement> body;
-
+  FunctionDefinition(BaseType ret_type, std::string name,
+                       std::vector<std::unique_ptr<FunctionParameter>> params,
+                       std::unique_ptr<BlockStatement> body, SourceLocation loc = {})
+      : DeclarationNode(loc), return_type(ret_type), name(std::move(name)),
+        parameters(std::move(params)), body(std::move(body)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// FuncFParam -> BType Ident ['[' ']' {'[' Exp ']'}]
 class FunctionParameter : public SyntaxNode {
 public:
   BaseType type;
   std::string name;
-  // SysY中，函数参数的第一个维度是未定长的指针，后续维度是定长的
-  // is_array_pointer 为 true 表示 `int a[]`
-  bool is_array_pointer = false;
+  bool is_array_pointer;
   std::vector<std::unique_ptr<ExpressionNode>> array_dimensions;
-
+  FunctionParameter(BaseType type, std::string name, bool is_array_ptr,
+                      std::vector<std::unique_ptr<ExpressionNode>> dims, SourceLocation loc = {})
+      : SyntaxNode(loc), type(type), name(std::move(name)), is_array_pointer(is_array_ptr),
+        array_dimensions(std::move(dims)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 3. 语句 (Statements)
-// Stmt -> LVal '=' Exp ';' | Block | 'if' ... | ...
 class BlockStatement : public StatementNode {
 public:
-  // 使用 variant 来区分语句和声明
   std::vector<std::variant<std::unique_ptr<StatementNode>,
-                           std::unique_ptr<DeclarationNode>>>
-      items;
-
+                           std::unique_ptr<DeclarationNode>>> items;
+  explicit BlockStatement(SourceLocation loc = {}) : StatementNode(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -248,7 +201,10 @@ public:
   std::unique_ptr<ExpressionNode> condition;
   std::unique_ptr<StatementNode> then_statement;
   std::optional<std::unique_ptr<StatementNode>> else_statement;
-
+  IfStatement(std::unique_ptr<ExpressionNode> cond, std::unique_ptr<StatementNode> then_stmt,
+                std::optional<std::unique_ptr<StatementNode>> else_stmt, SourceLocation loc = {})
+      : StatementNode(loc), condition(std::move(cond)), then_statement(std::move(then_stmt)),
+        else_statement(std::move(else_stmt)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -256,67 +212,77 @@ class WhileStatement : public StatementNode {
 public:
   std::unique_ptr<ExpressionNode> condition;
   std::unique_ptr<StatementNode> body;
-
+  WhileStatement(std::unique_ptr<ExpressionNode> cond, std::unique_ptr<StatementNode> body,
+                   SourceLocation loc = {})
+      : StatementNode(loc), condition(std::move(cond)), body(std::move(body)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 对应 `[Exp];` 形式的语句
 class ExpressionStatement : public StatementNode {
 public:
-  std::optional<std::unique_ptr<ExpressionNode>> expression; // Exp可以为空，即 `;`
-
+  std::optional<std::unique_ptr<ExpressionNode>> expression;
+  explicit ExpressionStatement(std::optional<std::unique_ptr<ExpressionNode>> expr,
+                                 SourceLocation loc = {})
+      : StatementNode(loc), expression(std::move(expr)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 class ReturnStatement : public StatementNode {
 public:
   std::optional<std::unique_ptr<ExpressionNode>> expression;
-
+  explicit ReturnStatement(std::optional<std::unique_ptr<ExpressionNode>> expr,
+                             SourceLocation loc = {})
+      : StatementNode(loc), expression(std::move(expr)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 class BreakStatement : public StatementNode {
 public:
+  explicit BreakStatement(SourceLocation loc = {}) : StatementNode(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 class ContinueStatement : public StatementNode {
 public:
+  explicit ContinueStatement(SourceLocation loc = {}) : StatementNode(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 4. 表达式 (Expressions)
 class UnaryExpression : public ExpressionNode {
 public:
   UnaryOp op;
   std::unique_ptr<ExpressionNode> operand;
-
+  UnaryExpression(UnaryOp op, std::unique_ptr<ExpressionNode> operand, SourceLocation loc = {})
+      : ExpressionNode(loc), op(op), operand(std::move(operand)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 class BinaryExpression : public ExpressionNode {
 public:
   BinaryOp op;
-  std::unique_ptr<ExpressionNode> lhs; // Left-hand side
-  std::unique_ptr<ExpressionNode> rhs; // Right-hand side
-
+  std::unique_ptr<ExpressionNode> lhs;
+  std::unique_ptr<ExpressionNode> rhs;
+  BinaryExpression(BinaryOp op, std::unique_ptr<ExpressionNode> lhs,
+                   std::unique_ptr<ExpressionNode> rhs, SourceLocation loc = {})
+      : ExpressionNode(loc), op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 普通变量访问
 class VariableAccess : public ExpressionNode {
 public:
   std::string name;
-
+  explicit VariableAccess(std::string name, SourceLocation loc = {})
+      : ExpressionNode(loc), name(std::move(name)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 数组元素访问
 class ArrayAccess : public ExpressionNode {
 public:
   std::string name;
   std::vector<std::unique_ptr<ExpressionNode>> indices;
-
+  ArrayAccess(std::string name, std::vector<std::unique_ptr<ExpressionNode>> indices,
+                SourceLocation loc = {})
+      : ExpressionNode(loc), name(std::move(name)), indices(std::move(indices)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -324,41 +290,40 @@ class FunctionCall : public ExpressionNode {
 public:
   std::string function_name;
   std::vector<std::unique_ptr<ExpressionNode>> arguments;
-
+  FunctionCall(std::string name, std::vector<std::unique_ptr<ExpressionNode>> args,
+                 SourceLocation loc = {})
+      : ExpressionNode(loc), function_name(std::move(name)), arguments(std::move(args)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 class IntegerLiteral : public ExpressionNode {
 public:
   int value;
-
+  explicit IntegerLiteral(int val, SourceLocation loc = {}) : ExpressionNode(loc), value(val) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 class FloatLiteral : public ExpressionNode {
 public:
   float value;
-
+  explicit FloatLiteral(float val, SourceLocation loc = {}) : ExpressionNode(loc), value(val) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 5. 初始化 (Initializers)
-// ConstInitVal -> ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
-// InitVal -> Exp | '{' [ InitVal { ',' InitVal } ] '}'
-
-// 单个表达式初始化
 class ExpressionInitializer : public InitializerNode {
 public:
   std::unique_ptr<ExpressionNode> expression;
-
+  explicit ExpressionInitializer(std::unique_ptr<ExpressionNode> expr, SourceLocation loc = {})
+      : InitializerNode(loc), expression(std::move(expr)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-// 列表初始化: `{ ... }`
 class InitializerList : public InitializerNode {
 public:
   std::vector<std::unique_ptr<InitializerNode>> initializers;
-
+  explicit InitializerList(std::vector<std::unique_ptr<InitializerNode>> inits,
+                             SourceLocation loc = {})
+      : InitializerNode(loc), initializers(std::move(inits)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
