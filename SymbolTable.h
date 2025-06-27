@@ -9,7 +9,6 @@
 
 namespace compiler {
 
-// 前向声明，避免循环依赖
 class Type;
 
 // 符号信息类，存储符号的基本信息
