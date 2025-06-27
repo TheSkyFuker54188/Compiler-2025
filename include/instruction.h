@@ -1,5 +1,5 @@
-#ifndef INSTRUCTION_H
-#define INSTRUCTION_H
+#pragma once
+
 #include <iostream>
 #include <vector>
 
@@ -136,5 +136,3 @@ struct Instruction {
   std::vector<int> IntInitVals{}; // used for array
   std::vector<float> FloatInitVals{};
 };
-
-#endif
