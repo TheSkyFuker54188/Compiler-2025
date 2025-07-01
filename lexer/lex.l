@@ -8,9 +8,9 @@
 #include "../parser/parser.tab.h"
 #include <stdio.h>
 
-int line_number = 1;  
-int col_number = 1;   
-int cur_col_number;
+extern int line_number;  
+extern int col_number;   
+extern int cur_col_number;
 void yyerror(char* s, ...);
 std::string tmp_str;
 %}
@@ -54,7 +54,7 @@ hex_float    0[xX]({hexdigit}+\.?|{hexdigit}*\.{hexdigit}+){bin_exponent}
         col_number = 1;
     }
     <<EOF>> {
-        yylval.error_msg = "Line: " + std::to_string(line_number) + " Column: " + std::to_string(cur_col_number) + " EOF in comment";
+        printf("Line %d, Column %d: EOF in comment\n", line_number, cur_col_number);
         return ERROR;
     }
     . {
@@ -105,49 +105,49 @@ hex_float    0[xX]({hexdigit}+\.?|{hexdigit}*\.{hexdigit}+){bin_exponent}
 [_a-zA-Z][_a-zA-Z0-9]* {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.sval = std::string(yytext); 
+    yylval.str_val = strdup(yytext); 
     return IDENT;
 }
 
 {float1}|{float2}|{float3} {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.fval = strtod(yytext, NULL);
+    yylval.float_val = strtod(yytext, NULL);
     return FLOAT_CONST;
 }
 
 {hex_float} {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.fval = strtod(yytext, NULL); 
+    yylval.float_val = strtod(yytext, NULL); 
     return FLOAT_CONST;
 }
 
 "0"[xX]{hexdigit}+ {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.ival = strtol(yytext, NULL, 16);
+    yylval.int_val = strtol(yytext, NULL, 16);
     return INT_CONST;
 }
 
 "0"[0-7]+ {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.ival = strtol(yytext, NULL, 8);
+    yylval.int_val = strtol(yytext, NULL, 8);
     return INT_CONST;
 }
 
 {nonzero}{digit}* {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.ival = strtol(yytext, NULL, 10);
+    yylval.int_val = strtol(yytext, NULL, 10);
     return INT_CONST;
 }
 
 "0" {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.ival = 0;
+    yylval.int_val = 0;
     return INT_CONST;
 }
 
@@ -161,7 +161,7 @@ hex_float    0[xX]({hexdigit}+\.?|{hexdigit}*\.{hexdigit}+){bin_exponent}
 <STRING>{
     \" {
         col_number += strlen(yytext);
-        yylval.sval = tmp_str;
+        yylval.str_val = strdup(tmp_str.c_str());
         BEGIN(INITIAL);
         return STR_CONST;
     }
@@ -176,14 +176,13 @@ hex_float    0[xX]({hexdigit}+\.?|{hexdigit}*\.{hexdigit}+){bin_exponent}
     \\v     { tmp_str += '\v'; col_number += 2; }
 
     \\[^nt\"\\rabfv] {
-        yylval.error_msg = "Line: " + std::to_string(line_number) + " Column: " + std::to_string(col_number) + " Invalid escape sequence";
         col_number += 2;
         BEGIN(INITIAL);
         return ERROR;
     }
 
     \n {
-        yylval.error_msg = "Line: " + std::to_string(line_number) + " Column: " + std::to_string(cur_col_number) + " Unterminated string";
+        printf("Line %d, Column %d: Unterminated string\n", line_number, cur_col_number);
         ++line_number;
         col_number = 1;
         BEGIN(INITIAL);
@@ -191,7 +190,7 @@ hex_float    0[xX]({hexdigit}+\.?|{hexdigit}*\.{hexdigit}+){bin_exponent}
     }
 
     <<EOF>> {
-        yylval.error_msg = "Line: " + std::to_string(line_number) + " Column: " + std::to_string(cur_col_number) + " Unterminated string at EOF";
+        printf("Line %d, Column %d: Unterminated string at EOF\n", line_number, cur_col_number);
         BEGIN(INITIAL);
         return ERROR;
     }
@@ -205,7 +204,7 @@ hex_float    0[xX]({hexdigit}+\.?|{hexdigit}*\.{hexdigit}+){bin_exponent}
 . {
     cur_col_number = col_number;
     col_number += strlen(yytext);
-    yylval.error_msg = "Line: " + std::to_string(line_number) + " Column: " + std::to_string(cur_col_number) + " Unexpected character: " + std::string(1, yytext[0]);
+    printf("Line %d, Column %d: Unexpected character: %c\n", line_number, cur_col_number, yytext[0]);
     return ERROR;
 }
 %%
