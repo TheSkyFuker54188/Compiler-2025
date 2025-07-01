@@ -109,9 +109,35 @@ void ASTPrinter::visit(ConstDecl &node) {
 
 void ASTPrinter::visit(ConstDef &node) {
     out << "ConstDef(\"" << node.name << "\")";
+    
+    // 显示数组维度信息
+    if (!node.array_dimensions.empty()) {
+        out << "[";
+        for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+            if (i > 0) out << ",";
+            out << "dim" << i;
+        }
+        out << "]";
+    }
+    
     print_location(node);
     out << " {" << std::endl;
     indent_level++;
+    
+    // 打印数组维度详细信息
+    if (!node.array_dimensions.empty()) {
+        print_indent();
+        out << "dimensions: [" << std::endl;
+        indent_level++;
+        for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+            print_indent();
+            out << "[" << i << "] ";
+            node.array_dimensions[i]->accept(*this);
+        }
+        indent_level--;
+        print_indent();
+        out << "]" << std::endl;
+    }
     
     if (node.initializer) {
         print_indent();
@@ -146,9 +172,35 @@ void ASTPrinter::visit(VarDecl &node) {
 
 void ASTPrinter::visit(VarDef &node) {
     out << "VarDef(\"" << node.name << "\")";
+    
+    // 显示数组维度信息
+    if (!node.array_dimensions.empty()) {
+        out << "[";
+        for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+            if (i > 0) out << ",";
+            out << "dim" << i;
+        }
+        out << "]";
+    }
+    
     print_location(node);
     out << " {" << std::endl;
     indent_level++;
+    
+    // 打印数组维度详细信息
+    if (!node.array_dimensions.empty()) {
+        print_indent();
+        out << "dimensions: [" << std::endl;
+        indent_level++;
+        for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+            print_indent();
+            out << "[" << i << "] ";
+            node.array_dimensions[i]->accept(*this);
+        }
+        indent_level--;
+        print_indent();
+        out << "]" << std::endl;
+    }
     
     if (node.initializer) {
         print_indent();
@@ -200,11 +252,43 @@ void ASTPrinter::visit(FuncFParam &node) {
     if (show_types) {
         out << "<" << type_to_string(node.type) << ">";
     }
+    
+    // 显示数组信息
     if (node.is_array_pointer) {
         out << " array_ptr";
+        if (!node.array_dimensions.empty()) {
+            out << "[";
+            for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+                if (i > 0) out << ",";
+                out << "dim" << i;
+            }
+            out << "]";
+        }
     }
+    
     print_location(node);
-    out << std::endl;
+    
+    // 如果有数组维度，显示详细信息
+    if (!node.array_dimensions.empty()) {
+        out << " {" << std::endl;
+        indent_level++;
+        print_indent();
+        out << "dimensions: [" << std::endl;
+        indent_level++;
+        for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+            print_indent();
+            out << "[" << i << "] ";
+            node.array_dimensions[i]->accept(*this);
+        }
+        indent_level--;
+        print_indent();
+        out << "]" << std::endl;
+        indent_level--;
+        print_indent();
+        out << "}" << std::endl;
+    } else {
+        out << std::endl;
+    }
 }
 
 void ASTPrinter::visit(Block &node) {

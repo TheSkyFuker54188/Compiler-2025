@@ -4,6 +4,7 @@
 #include <string>
 #include "include/ast.h"
 #include "include/astprinter.h"
+#include "include/semantic.h"
 #include "parser/parser.tab.h"
 
 // 外部变量声明
@@ -18,9 +19,10 @@ int col_number = 1;
 int cur_col_number = 1;
 
 /**
- * 解析单个SYS语言文件并打印AST
+ * 编译单个SYS语言文件：词法分析、语法分析、语义分析
  */
-bool parseAndPrintAST(const std::string& filename, bool verbose = true) {
+bool compileFile(const std::string& filename, bool verbose = true, 
+                 bool enable_semantic = true, bool print_ast = false) {
     // 重置全局变量
     line_number = 1;
     col_number = 1;
@@ -34,59 +36,81 @@ bool parseAndPrintAST(const std::string& filename, bool verbose = true) {
     }
     
     if (verbose) {
-        std::cout << "=== Parsing " << filename << " ===" << std::endl;
+        std::cout << "=== 编译 " << filename << " ===" << std::endl;
     }
     
-    // 执行语法分析
+    // 第一阶段：执行语法分析
+    if (verbose) {
+        std::cout << "阶段1: 词法和语法分析..." << std::endl;
+    }
+    
     int result = yyparse();
     fclose(yyin);
     
     if (result != 0) {
-        std::cerr << "Parse failed!" << std::endl;
+        std::cerr << "语法分析失败!" << std::endl;
         return false;
     }
     
     if (!root) {
-        std::cerr << "No AST generated!" << std::endl;
+        std::cerr << "没有生成AST!" << std::endl;
         return false;
     }
     
     if (verbose) {
-        std::cout << "Parse successful!" << std::endl;
-        std::cout << "\n=== AST Structure ===" << std::endl;
+        std::cout << "语法分析成功!" << std::endl;
     }
     
-    // 创建AST打印器并打印AST
-    ASTPrinter printer;
-    printer.setShowTypes(true);
-    printer.setShowLocations(false);
-    root->accept(printer);
+    // 第二阶段：语义分析
+    bool semantic_success = true;
+    if (enable_semantic) {
+        if (verbose) {
+            std::cout << "阶段2: 语义分析..." << std::endl;
+        }
+        
+        SemanticAnalyzer analyzer;
+        semantic_success = analyzer.analyze(*root);
+        
+        if (semantic_success) {
+            if (verbose) {
+                std::cout << "语义分析成功!" << std::endl;
+            }
+        } else {
+            std::cerr << "语义分析失败!" << std::endl;
+            analyzer.printErrors();
+        }
+    }
     
-    return true;
+    // 第三阶段：打印AST（可选）
+    if (print_ast) {
+        if (verbose) {
+            std::cout << "\n=== AST结构 ===" << std::endl;
+        }
+        
+        ASTPrinter printer;
+        printer.setShowTypes(true);
+        printer.setShowLocations(false);
+        root->accept(printer);
+    }
+    
+    return semantic_success;
 }
 
 /**
  * 显示使用帮助
  */
 void showUsage(const char* program_name) {
-    std::cout << "SYS Language Compiler - AST Parser" << std::endl;
+    std::cout << "SYS Language Compiler - 语义分析器" << std::endl;
     std::cout << "Usage: " << program_name << " [options] <file.sy>" << std::endl;
     std::cout << "\nOptions:" << std::endl;
-    std::cout << "  -h, --help     Show this help message" << std::endl;
-    std::cout << "  -q, --quiet    Quiet mode (only show AST)" << std::endl;
-    std::cout << "  -v, --version  Show version information" << std::endl;
+    std::cout << "  -h, --help       显示帮助信息" << std::endl;
+    std::cout << "  -q, --quiet      静默模式（只显示错误）" << std::endl;
+    std::cout << "  --ast            打印AST结构" << std::endl;
+    std::cout << "  --no-semantic    跳过语义分析" << std::endl;
     std::cout << "\nExample:" << std::endl;
-    std::cout << "  " << program_name << " program.sy" << std::endl;
-    std::cout << "  " << program_name << " -q test.sy" << std::endl;
-}
-
-/**
- * 显示版本信息
- */
-void showVersion() {
-    std::cout << "SYS Language Compiler v1.0" << std::endl;
-    std::cout << "AST Parser and Printer" << std::endl;
-    std::cout << "Built with modern C++17" << std::endl;
+    std::cout << "  " << program_name << " program.sy           # 完整编译" << std::endl;
+    std::cout << "  " << program_name << " --ast test.sy        # 编译并显示AST" << std::endl;
+    std::cout << "  " << program_name << " --no-semantic test.sy # 只进行语法分析" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -96,6 +120,8 @@ int main(int argc, char* argv[]) {
     }
     
     bool quiet_mode = false;
+    bool enable_semantic = true;
+    bool print_ast = false;
     std::string filename;
     
     // 解析命令行参数
@@ -105,33 +131,34 @@ int main(int argc, char* argv[]) {
         if (arg == "-h" || arg == "--help") {
             showUsage(argv[0]);
             return 0;
-        } else if (arg == "-v" || arg == "--version") {
-            showVersion();
-            return 0;
         } else if (arg == "-q" || arg == "--quiet") {
             quiet_mode = true;
+        } else if (arg == "--ast") {
+            print_ast = true;
+        } else if (arg == "--no-semantic") {
+            enable_semantic = false;
         } else if (arg[0] == '-') {
-            std::cerr << "Unknown option: " << arg << std::endl;
+            std::cerr << "未知选项: " << arg << std::endl;
             showUsage(argv[0]);
             return 1;
         } else {
             if (filename.empty()) {
                 filename = arg;
             } else {
-                std::cerr << "Multiple input files not supported" << std::endl;
+                std::cerr << "不支持多个输入文件" << std::endl;
                 return 1;
             }
         }
     }
     
     if (filename.empty()) {
-        std::cerr << "No input file specified" << std::endl;
+        std::cerr << "没有指定输入文件" << std::endl;
         showUsage(argv[0]);
         return 1;
     }
     
-    // 解析并打印AST
-    bool success = parseAndPrintAST(filename, !quiet_mode);
+    // 编译文件
+    bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast);
     
     return success ? 0 : 1;
 } 

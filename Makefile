@@ -42,15 +42,17 @@ PARSER_HDR = $(PARSER_DIR)/parser.tab.h
 # 源文件
 MAIN_SRC = main.cpp
 ASTPRINTER_SRC = $(SRC_DIR)/astprinter.cpp
+SEMANTIC_SRC = $(SRC_DIR)/semantic.cpp
 
 # 目标文件
 MAIN_OBJ = $(BUILD_DIR)/main.o
 ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
+SEMANTIC_OBJ = $(BUILD_DIR)/semantic.o
 LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(LEX_OBJ) $(PARSER_OBJ)
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(LEX_OBJ) $(PARSER_OBJ)
 
 # 可执行文件
 TARGET = sys-compiler
@@ -82,6 +84,11 @@ $(MAIN_OBJ): $(MAIN_SRC) $(PARSER_HDR) | $(BUILD_DIR)
 # AST打印器编译
 $(ASTPRINTER_OBJ): $(ASTPRINTER_SRC) $(INCLUDE_DIR)/astprinter.h $(INCLUDE_DIR)/ast.h | $(BUILD_DIR)
 	@echo "Compiling astprinter.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# 语义分析器编译
+$(SEMANTIC_OBJ): $(SEMANTIC_SRC) $(INCLUDE_DIR)/semantic.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/symtab.h $(INCLUDE_DIR)/types.h | $(BUILD_DIR)
+	@echo "Compiling semantic.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # 词法分析器编译
