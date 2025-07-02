@@ -43,13 +43,5 @@ echo "=== 测试结果 ==="
 echo "通过: $passed"
 echo "失败: $failed"
 
-if [ $failed -eq 0 ]; then
-    echo "✅ 所有测试都通过了！"
-    success_rate=100
-else
-    success_rate=$((passed * 100 / total))
-    echo "❌ 成功率: ${success_rate}%"
-fi
-
 echo
 echo "=== 测试完成 ===" 

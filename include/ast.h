@@ -15,7 +15,7 @@ struct SourceLocation {
   int line = 0;
 };
 
-enum class BaseType { INT, FLOAT, VOID };
+enum class BaseType { INT, FLOAT, VOID, STRING };
 enum class UnaryOp { PLUS, MINUS, NOT };
 enum class BinaryOp {
   ADD,
@@ -64,6 +64,7 @@ class BinaryExp;
 class LVal;
 class FunctionCall;
 class Number;
+class StringLiteral;
 class ConstInitVal;
 
 // ===--------------------------------------------------------------------=== //
@@ -93,6 +94,7 @@ public:
   virtual void visit(LVal &node) = 0;
   virtual void visit(FunctionCall &node) = 0;
   virtual void visit(Number &node) = 0;
+  virtual void visit(StringLiteral &node) = 0;
   virtual void visit(InitVal &node) = 0;
   virtual void visit(ConstInitVal &node) = 0;
 };
@@ -365,6 +367,15 @@ public:
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
+// StringLiteral → StringConst
+class StringLiteral : public Exp {
+public:
+  std::string value;
+  explicit StringLiteral(std::string val, SourceLocation loc = {})
+      : Exp(loc), value(std::move(val)) {}
+  void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
 // ConstInitVal → ConstExp | '{' [ConstInitVal { ',' ConstInitVal }] '}'
 class ConstInitVal : public InitValBase {
 public:
@@ -402,3 +413,48 @@ public:
   
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
+
+// ===--------------------------------------------------------------------=== //
+// 通用工具函数 - 减少代码重复
+// ===--------------------------------------------------------------------=== //
+
+// 枚举到字符串转换函数 - 统一在此处定义，避免重复
+namespace AST {
+  inline std::string baseTypeToString(BaseType type) {
+    switch(type) {
+      case BaseType::INT: return "int";
+      case BaseType::FLOAT: return "float";
+      case BaseType::VOID: return "void";
+      case BaseType::STRING: return "string";
+      default: return "unknown";
+    }
+  }
+
+  inline std::string unaryOpToString(UnaryOp op) {
+    switch(op) {
+      case UnaryOp::PLUS: return "+";
+      case UnaryOp::MINUS: return "-";
+      case UnaryOp::NOT: return "!";
+      default: return "?";
+    }
+  }
+
+  inline std::string binaryOpToString(BinaryOp op) {
+    switch(op) {
+      case BinaryOp::ADD: return "+";
+      case BinaryOp::SUB: return "-";
+      case BinaryOp::MUL: return "*";
+      case BinaryOp::DIV: return "/";
+      case BinaryOp::MOD: return "%";
+      case BinaryOp::GT: return ">";
+      case BinaryOp::GTE: return ">=";
+      case BinaryOp::LT: return "<";
+      case BinaryOp::LTE: return "<=";
+      case BinaryOp::EQ: return "==";
+      case BinaryOp::NEQ: return "!=";
+      case BinaryOp::AND: return "&&";
+      case BinaryOp::OR: return "||";
+      default: return "?";
+    }
+  }
+}

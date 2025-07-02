@@ -46,6 +46,7 @@ std::unique_ptr<T> make_unique_from_ptr(T* ptr) {
     LVal* lval;
     InitVal* init_val;
     ConstInitVal* const_init_val;
+    StringLiteral* string_literal;
     
     // 列表类型
     std::vector<std::unique_ptr<Decl>>* decl_list;
@@ -98,7 +99,7 @@ std::unique_ptr<T> make_unique_from_ptr(T* ptr) {
 %type <func_param> FuncFParam
 %type <stmt> Stmt IfStmt WhileStmt ExpStmt AssignStmt ReturnStmt BreakStmt ContinueStmt
 %type <block> Block
-%type <exp> Exp AddExp MulExp UnaryExp PrimaryExp RelExp EqExp LAndExp LOrExp Cond ConstExp FunctionCall Number
+%type <exp> Exp AddExp MulExp UnaryExp PrimaryExp RelExp EqExp LAndExp LOrExp Cond ConstExp FunctionCall Number StringLiteral
 %type <lval> LVal
 %type <init_val> InitVal
 %type <const_init_val> ConstInitVal
@@ -587,11 +588,12 @@ FuncRParams:
     }
     ;
 
-// PrimaryExp → '(' Exp ')' | LVal | Number
+// PrimaryExp → '(' Exp ')' | LVal | Number | StringLiteral
 PrimaryExp:
     LPAREN Exp RPAREN { $$ = $2; }
     | LVal { $$ = $1; }
     | Number { $$ = $1; }
+    | StringLiteral { $$ = $1; }
     ;
 
 // LVal → Ident { '[' Exp ']' }
@@ -626,6 +628,14 @@ Number:
     }
     | FLOAT_CONST {
         $$ = new Number($1, {line_number});
+    }
+    ;
+
+// StringLiteral → STR_CONST
+StringLiteral:
+    STR_CONST {
+        $$ = new StringLiteral(std::string($1), {line_number});
+        free($1);
     }
     ;
 

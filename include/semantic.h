@@ -119,6 +119,7 @@ public:
   void visit(LVal &node) override;
   void visit(FunctionCall &node) override;
   void visit(Number &node) override;
+  void visit(StringLiteral &node) override;
   void visit(InitVal &node) override;
   void visit(ConstInitVal &node) override;
 

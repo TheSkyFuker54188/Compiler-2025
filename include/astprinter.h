@@ -14,7 +14,6 @@ private:
     int indent_level = 0;
     bool show_types = true;
     bool show_locations = false;
-    bool compact_mode = false;
     
     void print_indent();
     void print_location(const SyntaxNode& node);
@@ -28,7 +27,6 @@ public:
     // 配置选项
     void setShowTypes(bool show);
     void setShowLocations(bool show);
-    void setCompactMode(bool compact);
     
     // 访问者模式接口实现
     void visit(CompUnit &node) override;
@@ -51,6 +49,7 @@ public:
     void visit(LVal &node) override;
     void visit(FunctionCall &node) override;
     void visit(Number &node) override;
+    void visit(StringLiteral &node) override;
     void visit(InitVal &node) override;
     void visit(ConstInitVal &node) override;
 }; 

@@ -12,15 +12,9 @@ void ASTPrinter::setShowLocations(bool show) {
     show_locations = show;
 }
 
-void ASTPrinter::setCompactMode(bool compact) {
-    compact_mode = compact;
-}
-
 void ASTPrinter::print_indent() {
-    if (!compact_mode) {
-        for (int i = 0; i < indent_level; ++i) {
-            out << "  ";
-        }
+    for (int i = 0; i < indent_level; ++i) {
+        out << "  ";
     }
 }
 
@@ -30,41 +24,17 @@ void ASTPrinter::print_location(const SyntaxNode& node) {
     }
 }
 
+// 使用AST命名空间中的通用函数，减少代码重复
 std::string ASTPrinter::type_to_string(BaseType type) {
-    switch(type) {
-        case BaseType::INT: return "int";
-        case BaseType::FLOAT: return "float";
-        case BaseType::VOID: return "void";
-        default: return "unknown";
-    }
+    return AST::baseTypeToString(type);
 }
 
 std::string ASTPrinter::unary_op_to_string(UnaryOp op) {
-    switch(op) {
-        case UnaryOp::PLUS: return "+";
-        case UnaryOp::MINUS: return "-";
-        case UnaryOp::NOT: return "!";
-        default: return "?";
-    }
+    return AST::unaryOpToString(op);
 }
 
 std::string ASTPrinter::binary_op_to_string(BinaryOp op) {
-    switch(op) {
-        case BinaryOp::ADD: return "+";
-        case BinaryOp::SUB: return "-";
-        case BinaryOp::MUL: return "*";
-        case BinaryOp::DIV: return "/";
-        case BinaryOp::MOD: return "%";
-        case BinaryOp::GT: return ">";
-        case BinaryOp::GTE: return ">=";
-        case BinaryOp::LT: return "<";
-        case BinaryOp::LTE: return "<=";
-        case BinaryOp::EQ: return "==";
-        case BinaryOp::NEQ: return "!=";
-        case BinaryOp::AND: return "&&";
-        case BinaryOp::OR: return "||";
-        default: return "?";
-    }
+    return AST::binaryOpToString(op);
 }
 
 void ASTPrinter::visit(CompUnit &node) {
@@ -471,8 +441,40 @@ void ASTPrinter::visit(BinaryExp &node) {
 
 void ASTPrinter::visit(LVal &node) {
     out << "LVal(\"" << node.name << "\")";
+    
+    // 显示数组索引信息
+    if (!node.indices.empty()) {
+        out << "[";
+        for (size_t i = 0; i < node.indices.size(); ++i) {
+            if (i > 0) out << ",";
+            out << "idx" << i;
+        }
+        out << "]";
+    }
+    
     print_location(node);
-    out << std::endl;
+    
+    // 如果有数组索引，显示详细信息
+    if (!node.indices.empty()) {
+        out << " {" << std::endl;
+        indent_level++;
+        print_indent();
+        out << "indices: [" << std::endl;
+        indent_level++;
+        for (size_t i = 0; i < node.indices.size(); ++i) {
+            print_indent();
+            out << "[" << i << "] ";
+            node.indices[i]->accept(*this);
+        }
+        indent_level--;
+        print_indent();
+        out << "]" << std::endl;
+        indent_level--;
+        print_indent();
+        out << "}" << std::endl;
+    } else {
+        out << std::endl;
+    }
 }
 
 void ASTPrinter::visit(FunctionCall &node) {
@@ -507,6 +509,12 @@ void ASTPrinter::visit(Number &node) {
         out << arg; 
     }, node.value);
     out << ")";
+    print_location(node);
+    out << std::endl;
+}
+
+void ASTPrinter::visit(StringLiteral &node) {
+    out << "StringLiteral(\"" << node.value << "\")";
     print_location(node);
     out << std::endl;
 }

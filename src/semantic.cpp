@@ -71,6 +71,10 @@ std::shared_ptr<Type> SemanticAnalyzer::inferExpressionType(Exp* expression) {
     }
   }
   
+  if (dynamic_cast<StringLiteral*>(expression)) {
+    return makeBasicType(BaseType::STRING);
+  }
+  
   if (auto* lval = dynamic_cast<LVal*>(expression)) {
     // 查找符号类型
     auto* symbol = symbol_table.lookup(lval->name);
@@ -174,7 +178,7 @@ bool SemanticAnalyzer::canImplicitConvert(const Type& from, const Type& to) {
   
   if (!from_basic || !to_basic) return false;
   
-  // int可以隐式转换为float（无精度损失）
+  // int和float可以互相隐式转换
   if (from_basic->type == BaseType::INT && to_basic->type == BaseType::FLOAT) {
     return true;
   }
@@ -759,6 +763,10 @@ void SemanticAnalyzer::visit(FunctionCall &node) {
 
 void SemanticAnalyzer::visit(Number &/*node*/) {
   // 数字字面量不需要检查
+}
+
+void SemanticAnalyzer::visit(StringLiteral &/*node*/) {
+  // 字符串字面量不需要检查
 }
 
 void SemanticAnalyzer::visit(InitVal &node) {

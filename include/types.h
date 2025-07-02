@@ -27,6 +27,7 @@ public:
       case BaseType::INT: return "int";
       case BaseType::FLOAT: return "float";
       case BaseType::VOID: return "void";
+      case BaseType::STRING: return "string";
       default: return "unknown";
     }
   }
@@ -77,17 +78,24 @@ class FunctionType : public Type {
 public:
   std::shared_ptr<Type> return_type;
   std::vector<std::shared_ptr<Type>> parameter_types;
+  bool is_variadic;  // 是否支持可变参数
   
   FunctionType(std::shared_ptr<Type> ret_type, 
-               std::vector<std::shared_ptr<Type>> param_types)
+               std::vector<std::shared_ptr<Type>> param_types,
+               bool variadic = false)
       : return_type(std::move(ret_type)), 
-        parameter_types(std::move(param_types)) {}
+        parameter_types(std::move(param_types)),
+        is_variadic(variadic) {}
   
   std::string toString() const override {
     std::string result = return_type->toString() + "(";
     for (size_t i = 0; i < parameter_types.size(); ++i) {
       if (i > 0) result += ", ";
       result += parameter_types[i]->toString();
+    }
+    if (is_variadic) {
+      if (!parameter_types.empty()) result += ", ";
+      result += "...";
     }
     result += ")";
     return result;
@@ -98,6 +106,8 @@ public:
     if (!other_func) return false;
     
     if (!return_type->equals(*other_func->return_type)) return false;
+    
+    if (is_variadic != other_func->is_variadic) return false;
     
     if (parameter_types.size() != other_func->parameter_types.size()) return false;
     
@@ -122,6 +132,7 @@ inline std::shared_ptr<Type> makeArrayType(std::shared_ptr<Type> element_type,
 }
 
 inline std::shared_ptr<Type> makeFunctionType(std::shared_ptr<Type> return_type,
-                                             std::vector<std::shared_ptr<Type>> parameter_types) {
-  return std::make_shared<FunctionType>(std::move(return_type), std::move(parameter_types));
+                                             std::vector<std::shared_ptr<Type>> parameter_types,
+                                             bool is_variadic = false) {
+  return std::make_shared<FunctionType>(std::move(return_type), std::move(parameter_types), is_variadic);
 } 

@@ -211,5 +211,98 @@ private:
       SymbolKind::FUNCTION, getfloat_type, "getfloat", true
     );
     forceInsert("getfloat", getfloat_info);
+    
+    // int getch() - 输入字符，返回ASCII码
+    auto getch_type = makeFunctionType(
+      makeBasicType(BaseType::INT),
+      {}
+    );
+    auto getch_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, getch_type, "getch", true
+    );
+    forceInsert("getch", getch_info);
+    
+    // void putch(int) - 输出字符
+    auto putch_type = makeFunctionType(
+      makeBasicType(BaseType::VOID),
+      {makeBasicType(BaseType::INT)}
+    );
+    auto putch_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, putch_type, "putch", true
+    );
+    forceInsert("putch", putch_info);
+    
+    // int getarray(int[]) - 输入整数数组
+    auto getarray_type = makeFunctionType(
+      makeBasicType(BaseType::INT),
+      {makeArrayType(makeBasicType(BaseType::INT), {-1})}
+    );
+    auto getarray_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, getarray_type, "getarray", true
+    );
+    forceInsert("getarray", getarray_info);
+    
+    // int getfarray(float[]) - 输入浮点数组
+    auto getfarray_type = makeFunctionType(
+      makeBasicType(BaseType::INT),
+      {makeArrayType(makeBasicType(BaseType::FLOAT), {-1})}
+    );
+    auto getfarray_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, getfarray_type, "getfarray", true
+    );
+    forceInsert("getfarray", getfarray_info);
+    
+    // void putarray(int, int[]) - 输出整数数组
+    auto putarray_type = makeFunctionType(
+      makeBasicType(BaseType::VOID),
+      {makeBasicType(BaseType::INT), 
+       makeArrayType(makeBasicType(BaseType::INT), {-1})}
+    );
+    auto putarray_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, putarray_type, "putarray", true
+    );
+    forceInsert("putarray", putarray_info);
+    
+    // void putfarray(int, float[]) - 输出浮点数组
+    auto putfarray_type = makeFunctionType(
+      makeBasicType(BaseType::VOID),
+      {makeBasicType(BaseType::INT), 
+       makeArrayType(makeBasicType(BaseType::FLOAT), {-1})}
+    );
+    auto putfarray_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, putfarray_type, "putfarray", true
+    );
+    forceInsert("putfarray", putfarray_info);
+    
+    // void starttime() - 开始计时
+    auto starttime_type = makeFunctionType(
+      makeBasicType(BaseType::VOID),
+      {}
+    );
+    auto starttime_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, starttime_type, "starttime", true
+    );
+    forceInsert("starttime", starttime_info);
+    
+    // void stoptime() - 停止计时
+    auto stoptime_type = makeFunctionType(
+      makeBasicType(BaseType::VOID),
+      {}
+    );
+    auto stoptime_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, stoptime_type, "stoptime", true
+    );
+    forceInsert("stoptime", stoptime_info);
+    
+    // void putf(string, ...) - 格式化输出
+    auto putf_type = makeFunctionType(
+      makeBasicType(BaseType::VOID),
+      {makeBasicType(BaseType::STRING)},
+      true  // 可变参数
+    );
+    auto putf_info = std::make_shared<SymbolInfo>(
+      SymbolKind::FUNCTION, putf_type, "putf", true
+    );
+    forceInsert("putf", putf_info);
   }
 };
