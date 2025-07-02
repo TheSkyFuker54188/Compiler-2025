@@ -127,6 +127,5 @@ private:
   // 延迟检查阶段
   void performDelayedChecks();
   void checkPendingReferences();
-  void checkFunctionReturns();
   void checkMainFunction();
 }; 
