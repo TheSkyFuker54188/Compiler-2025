@@ -1,138 +1,871 @@
-#pragma once
+#ifndef INSTRUCTION_H
+#define INSTRUCTION_H
 
+#include "ast.h"
+#include "symtab.h"
 #include <iostream>
+#include <map>
+#include <string>
 #include <vector>
+#include <cstring> // 添加 memcpy 支持
 
-// LLVM IR中的指令类型枚举
-enum LLVMInstructionType {
-  Unknown = 0,              // 未定义指令
-  Load = 1,                 // 加载指令
-  Store = 2,                // 存储指令
-  Add = 3,                  // 加法
-  Sub = 4,                  // 减法
-  IntegerCompare = 5,       // 整数比较
-  Phi = 6,                  // Phi节点
-  Allocate = 7,             // 分配内存
-  Multiply = 8,             // 乘法
-  Divide = 9,               // 除法
-  ConditionalBranch = 10,   // 条件分支
-  UnconditionalBranch = 11, // 无条件分支
-  FloatAdd = 12,            // 浮点加法
-  FloatSub = 13,            // 浮点减法
-  FloatMultiply = 14,       // 浮点乘法
-  FloatDivide = 15,         // 浮点除法
-  FloatCompare = 16,        // 浮点比较
-  Modulo = 17,              // 取模
-  BitXor = 18,              // 按位异或
-  Return = 19,              // 返回指令
-  ZeroExtend = 20,          // 零扩展
-  ShiftLeft = 21,           // 左移
-  FloatToSignedInt = 24,    // 浮点转有符号整数
-  GetElementPointer = 25,   // 获取元素指针
-  Call = 26,                // 函数调用
-  SignedIntToFloat = 27,    // 有符号整数转浮点
-  GlobalVariable = 28,      // 全局变量定义
-  GlobalString = 29,        // 全局字符串
-  AddModulo = 30,           // 加法取模
-  UnsignedMinI32 = 31,      // 无符号32位整数最小值
-  UnsignedMaxI32 = 32,      // 无符号32位整数最大值
-  SignedMinI32 = 33,        // 有符号32位整数最小值
-  SignedMaxI32 = 34,        // 有符号32位整数最大值
-  BitCast = 35,             // 位转换
-  FloatMinF32 = 36,         // 32位浮点最小值
-  FloatMaxF32 = 37,         // 32位浮点最大值
-  BitAnd = 38,              // 按位与
-  FloatExt = 39,            // 浮点提升
-  Select = 40,              // 选择指令
-  FunctionDefine = 41,      // 函数定义
-  FunctionDeclare = 42,     // 函数声明
+// @Instruction types
+enum LLVMIROpcode {
+  OTHER = 0,
+  LOAD = 1,
+  STORE = 2,
+  ADD = 3,
+  SUB = 4,
+  ICMP = 5,
+  PHI = 6,
+  ALLOCA = 7,
+  MUL_OP = 8,  // 改为 MUL_OP 避免冲突
+  DIV_OP = 9,  // 改为 DIV_OP 避免冲突
+  BR_COND = 10,
+  BR_UNCOND = 11,
+  FADD = 12,
+  FSUB = 13,
+  FMUL = 14,
+  FDIV = 15,
+  FCMP = 16,
+  MOD_OP = 17, // 改为 MOD_OP 避免冲突
+  BITXOR = 18,
+  RET = 19,
+  ZEXT = 20,
+  SHL = 21,
+  FPTOSI = 24,
+  GETELEMENTPTR = 25,
+  CALL = 26,
+  SITOFP = 27,
+  GLOBAL_VAR = 28,
+  GLOBAL_STR = 29,
+  LL_ADDMOD = 30,
+  UMIN_I32 = 31,
+  UMAX_I32 = 32,
+  SMIN_I32 = 33,
+  SMAX_I32 = 34,
+  BITCAST = 35,
+  FMIN_F32 = 36,
+  FMAX_F32 = 37,
+  BITAND = 38,
+  FPEXT = 39,
+  SELECT = 40,
 };
 
-// 操作数的数据类型
-enum LLVMDataType {
-  I32 = 1,     // 32位整数
-  Float32 = 2, // 32位浮点数
-  Pointer = 3, // 指针
-  Void = 4,    // 无返回值
-  I8 = 5,      // 8位整数
-  I1 = 6,      // 1位布尔值
-  I64 = 7,     // 64位整数
-  Double = 8   // 双精度浮点数
+// @Operand datatypes
+enum LLVMType {
+  I32 = 1,
+  FLOAT32 = 2,
+  PTR = 3,
+  VOID_TYPE = 4, // 改为 VOID_TYPE 避免冲突
+  I8 = 5,
+  I1 = 6,
+  I64 = 7,
+  DOUBLE = 8
 };
 
-// 整数比较条件
-enum IntegerCompareCondition {
-  Equal = 1,                  // 等于
-  NotEqual = 2,               // 不等于
-  UnsignedGreaterThan = 3,    // 无符号大于
-  UnsignedGreaterOrEqual = 4, // 无符号大于等于
-  UnsignedLessThan = 5,       // 无符号小于
-  UnsignedLessOrEqual = 6,    // 无符号小于等于
-  SignedGreaterThan = 7,      // 有符号大于
-  SignedGreaterOrEqual = 8,   // 有符号大于等于
-  SignedLessThan = 9,         // 有符号小于
-  SignedLessOrEqual = 10      // 有符号小于等于
+// @ <cond> in icmp Instruction
+enum IcmpCond {
+  eq = 1,  //: equal
+  ne = 2,  //: not equal
+  ugt = 3, //: unsigned greater than
+  uge = 4, //: unsigned greater or equal
+  ult = 5, //: unsigned less than
+  ule = 6, //: unsigned less or equal
+  sgt = 7, //: signed greater than
+  sge = 8, //: signed greater or equal
+  slt = 9, //: signed less than
+  sle = 10 //: signed less or equal
 };
 
-// 浮点比较条件
-enum FloatCompareCondition {
-  False = 1,                    // 始终返回false
-  OrderedEqual = 2,             // 有序相等
-  OrderedGreaterThan = 3,       // 有序大于
-  OrderedGreaterOrEqual = 4,    // 有序大于等于
-  OrderedLessThan = 5,          // 有序小于
-  OrderedLessOrEqual = 6,       // 有序小于等于
-  OrderedNotEqual = 7,          // 有序不相等
-  Ordered = 8,                  // 有序（无NaN）
-  UnorderedEqual = 9,           // 无序相等
-  UnorderedGreaterThan = 10,    // 无序大于
-  UnorderedGreaterOrEqual = 11, // 无序大于等于
-  UnorderedLessThan = 12,       // 无序小于
-  UnorderedLessOrEqual = 13,    // 无序小于等于
-  UnorderedNotEqual = 14,       // 无序不相等
-  Unordered = 15,               // 无序（可能有NaN）
-  True = 16                     // 始终返回true
+enum FcmpCond {
+  FALSE = 1, //: no comparison, always returns false
+  OEQ = 2,   // ordered and equal
+  OGT = 3,   //: ordered and greater than
+  OGE = 4,   //: ordered and greater than or equal
+  OLT = 5,   //: ordered and less than
+  OLE = 6,   //: ordered and less than or equal
+  ONE = 7,   //: ordered and not equal
+  ORD = 8,   //: ordered (no nans)
+  UEQ = 9,   //: unordered or equal
+  UGT = 10,  //: unordered or greater than
+  UGE = 11,  //: unordered or greater than or equal
+  ULT = 12,  //: unordered or less than
+  ULE = 13,  //: unordered or less than or equal
+  UNE = 14,  //: unordered or not equal
+  UNO = 15,  //: unordered (either nans)
+  TRUE = 16  //: no comparison, always returns true
 };
 
-enum OperandType {
-  REG = 1,
-  IMMI32 = 2,
-  IMMF32 = 3,
-  GLOBAL = 4,
-  LABEL = 5,
-  IMMI64 = 6
-};
 
-struct Operand {
-  OperandType type;
-  union {
-    int reg_num;
-    int immi32;
-    float immf32;
-    std::string global_name;
-    int label_num;
-    long long immi64;
-  };
-};
-
-struct Instruction {
-  int block_id;                                  // 所属基本块ID
-  int id;                                        // 指令ID
-  LLVMInstructionType type;                      // 指令类型
-  Operand *operands;                             // 操作数列表
-  int operand_count;                             // 操作数数量
-  LLVMDataType result_type;                      // 结果类型
-  LLVMDataType function_return_type;             // 函数返回类型
-  std::string function_name;                     // 函数名
-  LLVMDataType return_type;                      // 返回类型
-  IntegerCompareCondition int_compare_condition; // 整数比较条件
-  FloatCompareCondition float_compare_condition; // 浮点比较条件
-  std::vector<std::pair<LLVMDataType, Operand>> args;
-  std::vector<std::pair<Operand, Operand>> phi_list;
-  std::vector<int> dims;
-  std::string str_val;
-  std::string str_name;
-  Operand *init_val;
+class VarAttribute {
+public:
+  BaseType type;
+  bool ConstTag = 0;
+  std::vector<size_t> dims{};
   std::vector<int> IntInitVals{}; // used for array
   std::vector<float> FloatInitVals{};
+  VarAttribute() {
+    type = BaseType::VOID;
+    ConstTag = false;
+  }
 };
+
+class BasicOperand;
+typedef BasicOperand *Operand;
+
+class BasicOperand {
+public:
+  enum operand_type {
+    REG = 1,
+    IMMI32 = 2,
+    IMMF32 = 3,
+    GLOBAL = 4,
+    LABEL = 5,
+    IMMI64 = 6
+  };
+
+protected:
+  operand_type operandType;
+
+public:
+  BasicOperand() {}
+  operand_type GetOperandType() { return operandType; }
+  virtual std::string GetFullName() = 0;
+  virtual Operand CopyOperand() = 0;
+};
+
+class RegOperand : public BasicOperand {
+  int reg_no;
+  RegOperand(int RegNo) {
+    this->operandType = REG;
+    this->reg_no = RegNo;
+  }
+
+public:
+  int GetRegNo() { return reg_no; }
+  friend RegOperand *GetNewRegOperand(int RegNo);
+  virtual std::string GetFullName() { return "%r" + std::to_string(reg_no); }
+  virtual Operand CopyOperand() { return new RegOperand(reg_no); }
+};
+RegOperand *GetNewRegOperand(int RegNo);
+
+class ImmI32Operand : public BasicOperand {
+  int immVal;
+
+public:
+  int GetIntImmVal() { return immVal; }
+  ImmI32Operand(int immVal) {
+    this->operandType = IMMI32;
+    this->immVal = immVal;
+  }
+  virtual std::string GetFullName() { return std::to_string(immVal); }
+  virtual Operand CopyOperand() { return new ImmI32Operand(immVal); }
+};
+
+class ImmI64Operand : public BasicOperand {
+  long long immVal;
+
+public:
+  ImmI64Operand(long long immVal) {
+    this->operandType = IMMI64;
+    this->immVal = immVal;
+  }
+  virtual std::string GetFullName() { return std::to_string(immVal); }
+  virtual Operand CopyOperand() { return new ImmI64Operand(immVal); }
+};
+
+class ImmF32Operand : public BasicOperand {
+  float immVal;
+
+public:
+  float GetFloatVal() { return immVal; }
+  long long GetFloatByteVal();
+  ImmF32Operand(float immVal) {
+    this->operandType = IMMF32;
+    this->immVal = immVal;
+  }
+  virtual std::string GetFullName() { return std::to_string(immVal); }
+  virtual Operand CopyOperand() { return new ImmF32Operand(immVal); }
+};
+
+class LabelOperand : public BasicOperand {
+  int label_no;
+  LabelOperand(int LabelNo) {
+    this->operandType = LABEL;
+    this->label_no = LabelNo;
+  }
+
+public:
+  int GetLabelNo() { return label_no; }
+  friend LabelOperand *GetNewLabelOperand(int LabelNo);
+  virtual std::string GetFullName() { return "%L" + std::to_string(label_no); }
+  virtual Operand CopyOperand() { return new LabelOperand(label_no); }
+};
+
+LabelOperand *GetNewLabelOperand(int RegNo);
+
+class GlobalOperand : public BasicOperand {
+  std::string name;
+  GlobalOperand(std::string gloName) {
+    this->operandType = GLOBAL;
+    this->name = gloName;
+  }
+
+public:
+  std::string GetName() { return name; }
+  friend GlobalOperand *GetNewGlobalOperand(std::string name);
+  virtual std::string GetFullName() { return "@" + name; }
+  virtual Operand CopyOperand() { return new GlobalOperand(name); }
+};
+
+GlobalOperand *GetNewGlobalOperand(std::string name);
+
+std::ostream &operator<<(std::ostream &s, LLVMType type);
+std::ostream &operator<<(std::ostream &s, LLVMIROpcode type);
+std::ostream &operator<<(std::ostream &s, IcmpCond type);
+std::ostream &operator<<(std::ostream &s, FcmpCond type);
+std::ostream &operator<<(std::ostream &s, Operand op);
+
+class BasicInstruction;
+typedef BasicInstruction *Instruction;
+
+class BasicInstruction {
+private:
+  int BlockID = 0;
+
+protected:
+  LLVMIROpcode opcode;
+  int insNo;
+
+public:
+  int GetOpcode() { return opcode; }
+  virtual void PrintIR(std::ostream &s) = 0;
+};
+
+class LoadInstruction : public BasicInstruction {
+  enum LLVMType type;
+  Operand pointer;
+  Operand result;
+
+public:
+  LoadInstruction(enum LLVMType type, Operand pointer, Operand result) {
+    opcode = LLVMIROpcode::LOAD;
+    this->type = type;
+    this->result = result;
+    this->pointer = pointer;
+  }
+  void PrintIR(std::ostream &s) {
+    // s<<"loadinstruction print\n";
+    s << result->GetFullName() << " = load " << type << ", ptr " << pointer->GetFullName() << "\n";
+  }
+};
+
+class StoreInstruction : public BasicInstruction {
+  enum LLVMType type;
+  Operand pointer;
+  Operand value;
+
+public:
+  StoreInstruction(enum LLVMType type, Operand pointer, Operand value) {
+    opcode = LLVMIROpcode::STORE;
+    this->type = type;
+    this->pointer = pointer;
+    this->value = value;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "storeinstruction print\n";
+    s << "store " << type << " " << value->GetFullName() << ", ptr " << pointer->GetFullName() << "\n";
+  }
+};
+
+class ArithmeticInstruction : public BasicInstruction {
+  enum LLVMType type;
+  Operand op1;
+  Operand op2;
+  Operand op3;
+  Operand result;
+
+public:
+  ArithmeticInstruction(LLVMIROpcode opcode, enum LLVMType type, Operand op1,
+                        Operand op2, Operand result) {
+    this->opcode = opcode;
+    this->op1 = op1;
+    this->op2 = op2;
+    this->op3 = nullptr;
+    this->result = result;
+    this->type = type;
+  }
+
+  ArithmeticInstruction(LLVMIROpcode opcode, enum LLVMType type, Operand op1,
+                        Operand op2, Operand op3, Operand result) {
+    this->opcode = opcode;
+    this->op1 = op1;
+    this->op2 = op2;
+    this->op3 = op3;
+    this->result = result;
+    this->type = type;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "arithmeticinstruction print\n";
+    if (opcode == LL_ADDMOD) {
+      s << result->GetFullName() << " = call i32 @___llvm_ll_add_mod(i32 " << op1->GetFullName() << ",i32 "
+        << op2->GetFullName() << ",i32 " << op3->GetFullName() << ")\n";
+      return;
+    } else if (opcode == UMIN_I32) {
+      s << result->GetFullName() << " = call i32 @llvm.umin.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
+        << ")\n";
+      return;
+    } else if (opcode == UMAX_I32) {
+      s << result->GetFullName() << " = call i32 @llvm.umax.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
+        << ")\n";
+      return;
+    } else if (opcode == SMIN_I32) {
+      s << result->GetFullName() << " = call i32 @llvm.smin.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
+        << ")\n";
+      return;
+    } else if (opcode == SMAX_I32) {
+      s << result->GetFullName() << " = call i32 @llvm.smax.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
+        << ")\n";
+      return;
+    } else if (opcode == FMIN_F32) {
+      s << result->GetFullName() << " = call float @___llvm_fmin_f32(float " << op1->GetFullName()
+        << ",float " << op2->GetFullName() << ")\n";
+      return;
+    } else if (opcode == FMAX_F32) {
+      s << result->GetFullName() << " = call float @___llvm_fmax_f32(float " << op1->GetFullName()
+        << ",float " << op2->GetFullName() << ")\n";
+      return;
+    }
+    s << result->GetFullName() << " = " << opcode << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
+      << "\n";
+  }
+};
+
+class IcmpInstruction : public BasicInstruction {
+  enum LLVMType type;
+  Operand op1;
+  Operand op2;
+  IcmpCond cond;
+  Operand result;
+
+public:
+  IcmpInstruction(enum LLVMType type, Operand op1, Operand op2, IcmpCond cond,
+                  Operand result) {
+    this->opcode = LLVMIROpcode::ICMP;
+    this->type = type;
+    this->op1 = op1;
+    this->op2 = op2;
+    this->cond = cond;
+    this->result = result;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "icmpinstruction print\n";
+    s << result->GetFullName() << " = icmp " << cond << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
+      << "\n";
+  }
+};
+
+class FcmpInstruction : public BasicInstruction {
+  enum LLVMType type;
+  Operand op1;
+  Operand op2;
+  FcmpCond cond;
+  Operand result;
+
+public:
+  FcmpInstruction(enum LLVMType type, Operand op1, Operand op2, FcmpCond cond,
+                  Operand result) {
+    this->opcode = LLVMIROpcode::FCMP;
+    this->type = type;
+    this->op1 = op1;
+    this->op2 = op2;
+    this->cond = cond;
+    this->result = result;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "fcmpinstruction print\n";
+    s << result->GetFullName() << " = fcmp " << cond << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
+      << "\n";
+  }
+};
+
+class SelectInstruction : public BasicInstruction {
+private:
+  enum LLVMType type;
+  Operand op1;
+  Operand op2;
+  Operand cond;
+  Operand result;
+
+public:
+  SelectInstruction(enum LLVMType t, Operand o1, Operand o2, Operand c,
+                    Operand res) {
+    this->opcode = LLVMIROpcode::SELECT;
+    this->type = t;
+    this->op1 = o1;
+    this->op2 = o2;
+    this->cond = c;
+    this->result = res;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "selectinstruction print\n";
+    s << result->GetFullName() << " = ";
+    s << "select i1 " << cond->GetFullName();
+    s << ", " << type << " " << op1->GetFullName();
+    s << ", " << type << " " << op2->GetFullName();
+    s << "\n";
+  }
+};
+
+class PhiInstruction : public BasicInstruction {
+private:
+  enum LLVMType type;
+  Operand result;
+  std::vector<std::pair<Operand, Operand>> phi_list;
+
+public:
+  PhiInstruction(enum LLVMType type, Operand result,
+                 decltype(phi_list) val_labels) {
+    this->opcode = LLVMIROpcode::PHI;
+    this->type = type;
+    this->result = result;
+    this->phi_list = val_labels;
+  }
+  PhiInstruction(enum LLVMType type, Operand result) {
+    this->opcode = LLVMIROpcode::PHI;
+    this->type = type;
+    this->result = result;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "phiinstruction print\n";
+    s << result->GetFullName() << " = phi " << type << " ";
+    for (auto it = phi_list.begin(); it != phi_list.end(); ++it) {
+      s << "[" << it->second->GetFullName() << "," << it->first->GetFullName() << "]";
+      auto jt = it;
+      if ((++jt) != phi_list.end())
+        s << ",";
+    }
+    s << '\n';
+  }
+};
+
+class AllocaInstruction : public BasicInstruction {
+  enum LLVMType type;
+  Operand result;
+  std::vector<int> dims;
+
+public:
+  AllocaInstruction(enum LLVMType dttype, Operand result) {
+    this->opcode = LLVMIROpcode::ALLOCA;
+    this->type = dttype;
+    this->result = result;
+  }
+  AllocaInstruction(enum LLVMType dttype, std::vector<int> ArrDims,
+                    Operand result) {
+    this->opcode = LLVMIROpcode::ALLOCA;
+    this->type = dttype;
+    this->result = result;
+    dims = ArrDims;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "allocainstruction print\n";
+    s << result->GetFullName() << " = alloca ";
+    if (dims.empty())
+      s << type << "\n";
+    else {
+      for (std::vector<int>::iterator it = dims.begin(); it != dims.end(); ++it)
+        s << "[" << *it << " x ";
+      s << type << std::string(dims.size(), ']') << "\n";
+    }
+  }
+};
+
+class BrCondInstruction : public BasicInstruction {
+  Operand cond;
+  Operand trueLabel;
+  Operand falseLabel;
+
+public:
+  BrCondInstruction(Operand cond, Operand trueLabel, Operand falseLabel) {
+    this->opcode = BR_COND;
+    this->cond = cond;
+    this->trueLabel = trueLabel;
+    this->falseLabel = falseLabel;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "brcondinstruction print\n";
+    s << "br i1 " << cond->GetFullName() << ", label " << trueLabel->GetFullName() << ", label " << falseLabel->GetFullName()
+      << "\n";
+  }
+};
+
+class BrUncondInstruction : public BasicInstruction {
+  Operand destLabel;
+
+public:
+  BrUncondInstruction(Operand destLabel) {
+    this->opcode = BR_UNCOND;
+    this->destLabel = destLabel;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "bruncondinstruction print\n";
+    s << "br label " << destLabel->GetFullName() << "\n";
+  }
+};
+
+void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
+                     size_t dimDph, size_t beginPos, size_t endPos);
+                     class GlobalVarDefineInstruction : public BasicInstruction {
+                      public:
+                          enum LLVMType type;
+                          std::string name;
+                          Operand init_val;
+                          VarAttribute arval;
+                          GlobalVarDefineInstruction(std::string nam, enum LLVMType typ, VarAttribute v)
+                              : type(typ), name(nam), init_val(nullptr), arval(v) {
+                              this->opcode = LLVMIROpcode::GLOBAL_VAR;
+                          }
+                          void PrintIR(std::ostream &s) {
+                              if (arval.dims.empty()) {
+                                  if (type == I32 && !arval.IntInitVals.empty()) {
+                                      s << "@" << name << " = global i32 " << arval.IntInitVals[0] << "\n";
+                                  } else if (type == FLOAT32 && !arval.FloatInitVals.empty()) {
+                                      s << "@" << name << " = global float " << arval.FloatInitVals[0] << "\n";
+                                  } else {
+                                      s << "@" << name << " = global " << type << " zeroinitializer\n";
+                                  }
+                                  return;
+                              }
+                              s << "@" << name << " = global ";
+                              size_t step = 1;
+                              for (size_t i = 0; i < arval.dims.size(); i++) {
+                                  step *= arval.dims[i];
+                              }
+                              recursive_print(s, type, arval, 0, 0, step - 1);
+                              s << "\n";
+                          }
+                      };
+
+class GlobalStringConstInstruction : public BasicInstruction {
+public:
+  std::string str_val;
+  std::string str_name;
+  GlobalStringConstInstruction(std::string strval, std::string strname)
+      : str_val(strval), str_name(strname) {
+    this->opcode = LLVMIROpcode::GLOBAL_STR;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "globalstringconstinstruction print\n";
+    size_t str_len = str_val.size() + 1;
+    for (char c : str_val) {
+      if (c == '\\')
+        str_len--;
+    }
+    s << "@" << str_name << " = private unnamed_addr constant [" << str_len
+      << " x i8] c\"";
+    for (size_t i = 0; i < str_val.size(); i++) {
+      char c = str_val[i];
+      if (c == '\\') {
+        i++;
+        c = str_val[i];
+        if (c == 'n')
+          s << "\\0A";
+        else if (c == 't')
+          s << "\\09";
+        else if (c == '\"')
+          s << "\\22";
+        else if (c == 'r')
+          s << "\\0D";
+        else if (c == 'b')
+          s << "\\08";
+        else if (c == 'f')
+          s << "\\0C";
+        else if (c == 'v')
+          s << "\\0B";
+        else if (c == 'a')
+          s << "\\07";
+        else if (c == '?')
+          s << "\?";
+        else if (c == '0')
+          s << "\\00";
+        else if (c == '\'')
+          s << "\'";
+        else if (c == '\\')
+          s << "\\\\";
+        else
+          s << c;
+      } else
+        s << c;
+    }
+    s << "\\00"
+      << "\"\n";
+  }
+};
+
+class CallInstruction : public BasicInstruction {
+private:
+  enum LLVMType ret_type;
+  Operand result;
+  std::string name;
+  std::vector<std::pair<enum LLVMType, Operand>> args;
+
+public:
+  CallInstruction(enum LLVMType retType, Operand res, std::string FuncName,
+                  std::vector<std::pair<enum LLVMType, Operand>> arguments)
+      : ret_type(retType), result(res), name(FuncName), args(arguments) {
+    this->opcode = CALL;
+    if (res != NULL && res->GetOperandType() == BasicOperand::REG) {
+      if (((RegOperand *)res)->GetRegNo() == -1) {
+        result = NULL;
+      }
+    }
+  }
+  CallInstruction(enum LLVMType retType, Operand res, std::string FuncName)
+      : ret_type(retType), result(res), name(FuncName) {
+    this->opcode = CALL;
+    if (res != NULL && res->GetOperandType() == BasicOperand::REG) {
+      if (((RegOperand *)res)->GetRegNo() == -1) {
+        result = NULL;
+      }
+    }
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "callinstruction print\n";
+    if (ret_type != LLVMType::VOID_TYPE) {
+      s << result->GetFullName() << " = ";
+    }
+    s << "call " << ret_type << " @" << name;
+    s << "(";
+    for (auto it = args.begin(); it != args.end(); ++it) {
+      s << it->first << " " << it->second->GetFullName();
+      if (it + 1 != args.end())
+        s << ",";
+    }
+    s << ")\n";
+  }
+};
+
+class RetInstruction : public BasicInstruction {
+private:
+  enum LLVMType ret_type;
+  Operand ret_val;
+
+public:
+  RetInstruction(enum LLVMType retType, Operand res)
+      : ret_type(retType), ret_val(res) {
+    this->opcode = RET;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "retinstruction print\n";
+    s << "ret " << ret_type;
+    if (ret_val != nullptr) {
+      s << " " << ret_val->GetFullName();
+    }
+    s << "\n";
+  }
+};
+
+class GetElementptrInstruction : public BasicInstruction {
+private:
+  enum LLVMType type;
+  Operand result;
+  Operand ptrval;
+  std::vector<int> dims;
+  std::vector<Operand> indexes;
+
+public:
+  GetElementptrInstruction(enum LLVMType typ, Operand res, Operand ptr)
+      : type(typ), result(res), ptrval(ptr) {
+    opcode = GETELEMENTPTR;
+  }
+  GetElementptrInstruction(enum LLVMType typ, Operand res, Operand ptr,
+                           std::vector<int> dim)
+      : type(typ), result(res), ptrval(ptr), dims(dim) {
+    opcode = GETELEMENTPTR;
+  }
+  GetElementptrInstruction(enum LLVMType typ, Operand res, Operand ptr,
+                           std::vector<int> dim, std::vector<Operand> index)
+      : type(typ), result(res), ptrval(ptr), dims(dim), indexes(index) {
+    opcode = GETELEMENTPTR;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "getelementptrinstruction print\n";
+    s << result->GetFullName() << " = getelementptr ";
+    if (dims.empty())
+      s << type;
+    else {
+      for (int dim : dims) {
+        s << "[" << dim << " x ";
+      }
+      s << type;
+      s << std::string(dims.size(), ']');
+    }
+    s << ", ptr " << ptrval->GetFullName();
+    for (Operand idx : indexes)
+      s << ", i32 " << idx->GetFullName();
+    s << "\n";
+  }
+};
+
+class FunctionDefineInstruction : public BasicInstruction {
+private:
+  enum LLVMType return_type;
+  std::string Func_name;
+
+public:
+  std::vector<enum LLVMType> formals;
+  std::vector<Operand> formals_reg;
+  FunctionDefineInstruction(enum LLVMType t, std::string n) {
+    return_type = t;
+    Func_name = n;
+  }
+  void InsertFormal(enum LLVMType t){
+    formals.push_back(t);
+    formals_reg.push_back(GetNewRegOperand(formals_reg.size()));
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "functiondefineinstruction print\n";
+    s << "define " << return_type << " @" << Func_name;
+    s << "(";
+    for (uint32_t i = 0; i < formals.size(); ++i) {
+      s << formals[i] << " " << formals_reg[i]->GetFullName();
+      if (i + 1 < formals.size()) {
+        s << ",";
+      }
+    }
+    s << ")\n";
+  }
+};
+typedef FunctionDefineInstruction *FuncDefInstruction;
+
+class FunctionDeclareInstruction : public BasicInstruction {
+private:
+  enum LLVMType return_type;
+  std::string Func_name;
+  bool is_more_args = false;
+
+public:
+  std::vector<enum LLVMType> formals;
+  FunctionDeclareInstruction(enum LLVMType t, std::string n,
+                             bool is_more = false) {
+    return_type = t;
+    Func_name = n;
+    is_more_args = is_more;
+  }
+  void InsertFormal(enum LLVMType t) { formals.push_back(t); }
+  void PrintIR(std::ostream &s) {
+    // s << "functiondeclareinstruction print\n";
+    s << "declare " << return_type << " @" << Func_name << "(";
+    for (uint32_t i = 0; i < formals.size(); ++i) {
+      s << formals[i];
+      if (i + 1 < formals.size()) {
+        s << ",";
+      }
+    }
+    if (is_more_args) {
+      s << ", ...";
+    }
+    s << ")\n";
+  }
+};
+
+class FptosiInstruction : public BasicInstruction {
+private:
+  Operand result;
+  Operand value;
+
+public:
+  FptosiInstruction(Operand result_receiver, Operand value_for_cast)
+      : result(result_receiver), value(value_for_cast) {
+    this->opcode = FPTOSI;
+  }
+  void PrintIR(std::ostream &s) {
+    // s << "fptosiinstruction print\n";
+    s << result->GetFullName() << " = fptosi float"
+      << " " << value->GetFullName() << " to "
+      << "i32"
+      << "\n";
+  }
+};
+
+class FpextInstruction : public BasicInstruction {
+private:
+  Operand result;
+  Operand value;
+
+public:
+  FpextInstruction(Operand result_receiver, Operand value_for_cast)
+      : result(result_receiver), value(value_for_cast) {
+    this->opcode = FPEXT;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "fpextinstruction print\n";
+    s << result->GetFullName() << " = fpext float"
+      << " " << value->GetFullName() << " to "
+      << "double"
+      << "\n";
+  }
+};
+
+class BitCastInstruction : public BasicInstruction {
+private:
+  Operand src;
+  Operand dst;
+  LLVMType src_type;
+  LLVMType dst_type;
+
+public:
+  BitCastInstruction(Operand src_op, Operand dst_op, LLVMType src_t,
+                     LLVMType dst_t)
+      : src(src_op), dst(dst_op), src_type(src_t), dst_type(dst_t) {
+    this->opcode = BITCAST;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "bitcastinstruction print\n";
+    s << dst->GetFullName() << " = bitcast " << src_type << " " << src->GetFullName() << " to " << dst_type
+      << "\n";
+  }
+};
+
+class SitofpInstruction : public BasicInstruction {
+private:
+  Operand result;
+  Operand value;
+
+public:
+  SitofpInstruction(Operand result_receiver, Operand value_for_cast)
+      : result(result_receiver), value(value_for_cast) {
+    this->opcode = SITOFP;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "sitofpinstruction print\n";
+    s << result->GetFullName() << " = sitofp i32"
+      << " " << value->GetFullName() << " to "
+      << "float"
+      << "\n";
+  }
+};
+
+class ZextInstruction : public BasicInstruction {
+private:
+  LLVMType from_type;
+  LLVMType to_type;
+  Operand result;
+  Operand value;
+
+public:
+  ZextInstruction(LLVMType to_type, Operand result_receiver, LLVMType from_type,
+                  Operand value_for_cast)
+      : from_type(from_type), to_type(to_type), result(result_receiver), value(value_for_cast) {
+    this->opcode = ZEXT;
+  }
+  void PrintIR(std::ostream &s) {
+  // s << "zextinstruction print\n";
+    s << result->GetFullName() << " = zext " << from_type << " " << value->GetFullName() << " to " << to_type
+      << "\n";
+  }
+};
+
+
+#endif
