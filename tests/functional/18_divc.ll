@@ -1,0 +1,7 @@
+@a = global i32 10
+define i32 @main()
+{
+L1:  
+    %r5 = sdiv i32 %r1,%r3
+    ret i32 %r5
+}

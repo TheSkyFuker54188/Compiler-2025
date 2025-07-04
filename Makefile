@@ -43,16 +43,18 @@ PARSER_HDR = $(PARSER_DIR)/parser.tab.h
 MAIN_SRC = main.cpp
 ASTPRINTER_SRC = $(SRC_DIR)/astprinter.cpp
 SEMANTIC_SRC = $(SRC_DIR)/semantic.cpp
+IRGENERATE_SRC = $(SRC_DIR)/irgenerate.cpp
 
 # 目标文件
 MAIN_OBJ = $(BUILD_DIR)/main.o
 ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
 SEMANTIC_OBJ = $(BUILD_DIR)/semantic.o
+IRGENERATE_OBJ = $(BUILD_DIR)/irgenerate.o
 LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(LEX_OBJ) $(PARSER_OBJ)
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(LEX_OBJ) $(PARSER_OBJ)
 
 # 可执行文件
 TARGET = sys-compiler
@@ -89,6 +91,11 @@ $(ASTPRINTER_OBJ): $(ASTPRINTER_SRC) $(INCLUDE_DIR)/astprinter.h $(INCLUDE_DIR)/
 # 语义分析器编译
 $(SEMANTIC_OBJ): $(SEMANTIC_SRC) $(INCLUDE_DIR)/semantic.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/symtab.h $(INCLUDE_DIR)/types.h | $(BUILD_DIR)
 	@echo "Compiling semantic.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# IR生成器编译
+$(IRGENERATE_OBJ): $(IRGENERATE_SRC) $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/ast.h $(INCLUDE_DIR)/symtab.h | $(BUILD_DIR)
+	@echo "Compiling irgenerate.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # 词法分析器编译

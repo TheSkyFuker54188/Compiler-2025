@@ -6,6 +6,8 @@
 #include "include/astprinter.h"
 #include "include/semantic.h"
 #include "parser/parser.tab.h"
+#include "include/block.h"
+// #include "include/instruction.h"
 
 // 外部变量声明
 extern std::unique_ptr<CompUnit> root;
@@ -22,7 +24,7 @@ int cur_col_number = 1;
  * 编译单个SYS语言文件：词法分析、语法分析、语义分析
  */
 bool compileFile(const std::string& filename, bool verbose = true, 
-                 bool enable_semantic = true, bool print_ast = false) {
+                 bool enable_semantic = true, bool print_ast = false,bool generate_ir = true) {
     // 重置全局变量
     line_number = 1;
     col_number = 1;
@@ -92,6 +94,30 @@ bool compileFile(const std::string& filename, bool verbose = true,
         printer.setShowLocations(false);
         root->accept(printer);
     }
+
+    // 第四阶段：生成中间代码
+    if (generate_ir && semantic_success) {
+        if (verbose) {
+            std::cout << "阶段3: 中间代码生成..." << std::endl;
+        }
+        
+        IRgenerator irgen;
+        root->accept(irgen);
+        
+        // 输出生成的IR到文件
+        std::string ir_filename = filename.substr(0, filename.find_last_of('.')) + ".ll";
+        std::ofstream ir_file(ir_filename);
+        if (ir_file.is_open()) {
+            irgen.getLLVMIR().printIR(ir_file);
+            ir_file.close();
+            if (verbose) {
+                std::cout << "中间代码已生成到 " << ir_filename << std::endl;
+            }
+        } else {
+            std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
+            return false;
+        }
+    }
     
     return semantic_success;
 }
@@ -122,6 +148,7 @@ int main(int argc, char* argv[]) {
     bool quiet_mode = false;
     bool enable_semantic = true;
     bool print_ast = false;
+    bool generate_ir = true;
     std::string filename;
     
     // 解析命令行参数
@@ -158,7 +185,7 @@ int main(int argc, char* argv[]) {
     }
     
     // 编译文件
-    bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast);
+    bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast,generate_ir);
     
     return success ? 0 : 1;
 } 
