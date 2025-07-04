@@ -9,3 +9,6 @@ sys-compiler
 parser/parser.tab.c
 parser/parser.tab.h
 lexer/lex.yy.c
+
+tests/functional/*.ll
+tests/h_functional/*.ll

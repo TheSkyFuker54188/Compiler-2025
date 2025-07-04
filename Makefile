@@ -157,12 +157,6 @@ test-single: $(TARGET)
 		echo "Usage: make test-single FILE=path/to/test.sy"; \
 	fi
 
-# 安装目标（可选）
-install: $(TARGET)
-	@echo "Installing $(TARGET) to /usr/local/bin..."
-	@sudo cp $(TARGET) /usr/local/bin/
-	@echo "Installation complete"
-
 # ===--------------------------------------------------------------------=== #
 # 清理规则
 # ===--------------------------------------------------------------------=== #
@@ -215,7 +209,6 @@ info:
 	@echo "  clean        - Remove build files"
 	@echo "  distclean    - Remove all generated files"
 	@echo "  rebuild      - Clean and build"
-	@echo "  install      - Install to system"
 	@echo "  help         - Show this help"
 
 # 帮助信息
@@ -237,4 +230,4 @@ $(LEX_OBJ): $(PARSER_HDR)
 # ===--------------------------------------------------------------------=== #
 
 # 防止目标名与文件名冲突
-.PHONY: all clean test debug release help install rebuild check-conflicts info distclean test-single 
+.PHONY: all clean test debug release help rebuild check-conflicts info distclean test-single 

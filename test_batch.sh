@@ -22,6 +22,16 @@ for file in tests/h_functional/*.sy; do
     fi
 done
 
+for file in tests/h_functional/*.c; do
+    if [ -f "$file" ]; then
+        echo -n "测试 $file ... "
+        clang -S -emit-llvm "$file" -o "${file}.ll"
+    else
+        echo "跳过 $file (文件不存在)"
+        ((failed++))
+    fi
+done
+
 for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
@@ -32,6 +42,16 @@ for file in tests/functional/*.sy; do
             echo "失败"
             ((failed++))
         fi
+    else
+        echo "跳过 $file (文件不存在)"
+        ((failed++))
+    fi
+done
+
+for file in tests/functional/*.c; do
+    if [ -f "$file" ]; then
+        echo -n "测试 $file ... "
+        clang -S -emit-llvm "$file" -o "${file}.ll"
     else
         echo "跳过 $file (文件不存在)"
         ((failed++))
