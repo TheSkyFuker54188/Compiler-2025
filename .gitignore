@@ -12,3 +12,6 @@ lexer/lex.yy.c
 
 tests/functional/*.ll
 tests/h_functional/*.ll
+
+tests/functional/*.ast
+tests/h_functional/*.ast

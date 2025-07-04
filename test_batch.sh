@@ -10,10 +10,10 @@ for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
         if ./sys-compiler "$file"; then
-            echo "通过"
+            echo "$file 通过"
             ((passed++))
         else
-            echo "失败"
+            echo "$file 失败"
             ((failed++))
         fi
     else
@@ -28,7 +28,6 @@ for file in tests/h_functional/*.c; do
         clang -S -emit-llvm "$file" -o "${file}.ll"
     else
         echo "跳过 $file (文件不存在)"
-        ((failed++))
     fi
 done
 
@@ -36,10 +35,10 @@ for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
         if ./sys-compiler "$file"; then
-            echo "通过"
+            echo "$file 通过"
             ((passed++))
         else
-            echo "失败"
+            echo "$file 失败"
             ((failed++))
         fi
     else
@@ -54,7 +53,6 @@ for file in tests/functional/*.c; do
         clang -S -emit-llvm "$file" -o "${file}.ll"
     else
         echo "跳过 $file (文件不存在)"
-        ((failed++))
     fi
 done
 
