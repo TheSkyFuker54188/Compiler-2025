@@ -74,7 +74,10 @@ public:
 class IRgenerator : public ASTVisitor {
     public:
       LLVMIR llvmIR;
+      Operand current_ptr;         // Added for pointer operand
+      LLVMType current_llvm_type;  // Added for LLVM type
       BaseType current_type; // Added to track type from VarDecl/ConstDecl
+      int current_reg_counter = -1; // Reset per function
       // 返回生成的 LLVM IR
       LLVMIR& getLLVMIR() { return llvmIR; }
       // Helper function to get the current block
@@ -88,6 +91,7 @@ class IRgenerator : public ASTVisitor {
     
       // Helper to check if we are in global scope
       bool isGlobalScope();
+      bool isPointer(int reg);
 
       std::optional<int> evaluateConstExpression(Exp* expr);
     std::shared_ptr<Type> inferExpressionType(Exp* expression);

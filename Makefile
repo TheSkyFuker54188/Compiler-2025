@@ -166,6 +166,10 @@ clean:
 	@echo "Cleaning build files..."
 	rm -rf build/
 	rm -f $(TARGET)
+	rm -f tests/h_functional/*.ll
+	rm -f tests/functional/*.ll
+	rm -f tests/h_functional/*.c
+	rm -f tests/functional/*.c
 
 # 深度清理（包括生成的词法分析器和语法分析器）
 distclean: clean
