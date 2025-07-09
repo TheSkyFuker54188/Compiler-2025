@@ -139,6 +139,7 @@ CompUnit:
         $$->items = std::move(*$1);
         delete $1;
         root = make_unique_from_ptr($$);
+        $$ = nullptr;
     }
     ;
 
@@ -158,10 +159,12 @@ CompItemList:
     | CompItemList Decl {
         $1->emplace_back(make_unique_from_ptr($2));
         $$ = $1;
+        $2 = nullptr;
     }
     | CompItemList FuncDef {
         $1->emplace_back(make_unique_from_ptr($2));
         $$ = $1;
+        $2 = nullptr; 
     }
     ;
 
