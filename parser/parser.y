@@ -194,6 +194,7 @@ ConstDefList:
     | ConstDefList COMMA ConstDef {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr; 
     }
     ;
 
@@ -272,6 +273,7 @@ ArrayDims:
     | ArrayDims LBRACKET ConstExp RBRACKET {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr; 
     }
     ;
 
@@ -319,6 +321,7 @@ FuncFParams:
     | FuncFParams COMMA FuncFParam {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr;
     }
     ;
 
@@ -371,12 +374,14 @@ BlockItemList:
         item = make_unique_from_ptr($2);
         $1->push_back(std::move(item));
         $$ = $1;
+        $2 = nullptr; 
     }
     | BlockItemList Stmt {
         std::variant<std::unique_ptr<Stmt>, std::unique_ptr<Decl>> item;
         item = make_unique_from_ptr($2);
         $1->push_back(std::move(item));
         $$ = $1;
+        $2 = nullptr;
     }
     ;
 
@@ -588,6 +593,7 @@ FuncRParams:
     | FuncRParams COMMA Exp {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr;
     }
     ;
 
@@ -621,6 +627,7 @@ ArrayIndices:
     | ArrayIndices LBRACKET Exp RBRACKET {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr;
     }
     ;
 
@@ -674,6 +681,7 @@ InitValList:
     | InitValList COMMA InitVal {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr;
     }
     ;
 
@@ -704,6 +712,7 @@ ConstInitValList:
     | ConstInitValList COMMA ConstInitVal {
         $1->push_back(make_unique_from_ptr($3));
         $$ = $1;
+        $3 = nullptr;
     }
     ;
 
