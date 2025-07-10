@@ -7,7 +7,8 @@
 #include <set>
 #include <vector>
 
-class BasicBlock {
+class BasicBlock
+{
 public:
   std::string comment; // used for debug
   int block_id = 0;
@@ -15,10 +16,12 @@ public:
 
   void InsertInstruction(int pos, Instruction Ins);
 
-  void printIR(std::ostream &s) {
+  void printIR(std::ostream &s)
+  {
     s << "L" << block_id << ":  " << comment << "\n";
 
-    for (Instruction ins : Instruction_list) {
+    for (Instruction ins : Instruction_list)
+    {
       s << "    ";
       ins->PrintIR(s); // Auto "\n" In Instruction::printIR()
     }
@@ -27,7 +30,8 @@ public:
 };
 typedef BasicBlock *LLVMBlock;
 
-class LLVMIR {
+class LLVMIR
+{
 public:
   std::vector<Instruction> global_def{};
   std::vector<Instruction> function_declare{};
@@ -36,34 +40,41 @@ public:
       function_block_map; //<function,<id,block> >
 
   void NewFunction(FuncDefInstruction I) { function_block_map[I] = {}; }
-  LLVMBlock GetBlock(FuncDefInstruction I, int now_label) {
+  LLVMBlock GetBlock(FuncDefInstruction I, int now_label)
+  {
     return function_block_map[I][now_label];
   }
-  LLVMBlock NewBlock(FuncDefInstruction I, int &max_label) {
+  LLVMBlock NewBlock(FuncDefInstruction I, int &max_label)
+  {
     ++max_label;
     function_block_map[I][max_label] = new BasicBlock(max_label);
     return GetBlock(I, max_label);
   }
-  void printIR(std::ostream &s) {
+  void printIR(std::ostream &s)
+  {
     // output lib func decl
-    for (Instruction lib_func_decl : function_declare) {
+    for (Instruction lib_func_decl : function_declare)
+    {
       lib_func_decl->PrintIR(s);
     }
 
     // output global
-    for (Instruction global_decl_ins : global_def) {
+    for (Instruction global_decl_ins : global_def)
+    {
       global_decl_ins->PrintIR(s);
     }
 
     // output Functions
-    for (auto Func_Block_item : function_block_map) { //<function,<id,block> >
+    for (auto Func_Block_item : function_block_map)
+    { //<function,<id,block> >
       FuncDefInstruction f = Func_Block_item.first;
       // output function Syntax
       f->PrintIR(s);
 
       // output Blocks in functions
       s << "{\n";
-      for (auto block : Func_Block_item.second) {
+      for (auto block : Func_Block_item.second)
+      {
         block.second->printIR(s);
       }
       s << "}\n";
@@ -71,55 +82,57 @@ public:
   }
 };
 
-class IRgenerator : public ASTVisitor {
-    public:
-      LLVMIR llvmIR;
-      Operand current_ptr;         // Added for pointer operand
-      LLVMType current_llvm_type;  // Added for LLVM type
-      BaseType current_type; // Added to track type from VarDecl/ConstDecl
-      int current_reg_counter = -1; // Reset per function
-      // 返回生成的 LLVM IR
-      LLVMIR& getLLVMIR() { return llvmIR; }
-      // Helper function to get the current block
-      LLVMBlock getCurrentBlock() ;
-    
-      // Helper to allocate a new register
-      int newReg();
-    
-      // Helper to allocate a new label
-      int newLabel() ;
-    
-      // Helper to check if we are in global scope
-      bool isGlobalScope();
-      bool isPointer(int reg);
+class IRgenerator : public ASTVisitor
+{
+public:
+  LLVMIR llvmIR;
+  Operand current_ptr;          // Added for pointer operand
+  LLVMType current_llvm_type;   // Added for LLVM type
+  BaseType current_type;        // Added to track type from VarDecl/ConstDecl
+  int current_reg_counter = -1; // Reset per function
+  // 返回生成的 LLVM IR
+  LLVMIR &getLLVMIR() { return llvmIR; }
+  // Helper function to get the current block
+  LLVMBlock getCurrentBlock();
 
-      std::optional<int> evaluateConstExpression(Exp* expr);
-    std::shared_ptr<Type> inferExpressionType(Exp* expression);
-    void handleArrayInitializer(InitVal* init, int base_reg, VarAttribute& attr, const std::vector<int>& dims, size_t dim_idx);
-      
-      void visit(CompUnit &node) override;
-      void visit(ConstDecl &node) override;
-      void visit(ConstDef &node) override;
-      void visit(VarDecl &node) override;
-      void visit(VarDef &node) override;
-      void visit(FuncDef &node) override;
-      void visit(FuncFParam &node) override;
-      void visit(Block &node) override;
-      void visit(IfStmt &node) override;
-      void visit(WhileStmt &node) override;
-      void visit(ExpStmt &node) override;
-      void visit(AssignStmt &node) override;
-      void visit(ReturnStmt &node) override;
-      void visit(BreakStmt &node) override;
-      void visit(ContinueStmt &node) override;
-      void visit(UnaryExp &node) override;
-      void visit(BinaryExp &node) override;
-      void visit(LVal &node) override;
-      void visit(FunctionCall &node) override;
-      void visit(Number &node) override;
-      void visit(StringLiteral &node) override;
-      void visit(InitVal &node) override;
-      void visit(ConstInitVal &node) override;
-    };
+  // Helper to allocate a new register
+  int newReg();
+
+  // Helper to allocate a new label
+  int newLabel();
+
+  // Helper to check if we are in global scope
+  bool isGlobalScope();
+  bool isPointer(int reg);
+
+  std::optional<int> evaluateConstExpression(Exp *expr);
+  std::optional<float> evaluateConstExpressionFloat(Exp *expr);
+  std::shared_ptr<Type> inferExpressionType(Exp *expression);
+  void handleArrayInitializer(InitVal *init, int base_reg, VarAttribute &attr, const std::vector<int> &dims, size_t dim_idx);
+
+  void visit(CompUnit &node) override;
+  void visit(ConstDecl &node) override;
+  void visit(ConstDef &node) override;
+  void visit(VarDecl &node) override;
+  void visit(VarDef &node) override;
+  void visit(FuncDef &node) override;
+  void visit(FuncFParam &node) override;
+  void visit(Block &node) override;
+  void visit(IfStmt &node) override;
+  void visit(WhileStmt &node) override;
+  void visit(ExpStmt &node) override;
+  void visit(AssignStmt &node) override;
+  void visit(ReturnStmt &node) override;
+  void visit(BreakStmt &node) override;
+  void visit(ContinueStmt &node) override;
+  void visit(UnaryExp &node) override;
+  void visit(BinaryExp &node) override;
+  void visit(LVal &node) override;
+  void visit(FunctionCall &node) override;
+  void visit(Number &node) override;
+  void visit(StringLiteral &node) override;
+  void visit(InitVal &node) override;
+  void visit(ConstInitVal &node) override;
+};
 
 #endif

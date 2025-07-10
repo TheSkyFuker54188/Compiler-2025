@@ -138,6 +138,7 @@ CompUnit:
         $$ = new CompUnit({line_number});
         $$->items = std::move(*$1);
         delete $1;
+        $1 = nullptr;
         root = make_unique_from_ptr($$);
         $$ = nullptr;
     }
@@ -184,6 +185,7 @@ ConstDecl:
             defs.push_back(std::move(def));
         }
         delete $3;
+        $3 = nullptr;
         $$ = new ConstDecl($2, std::move(defs), {line_number});
     }
     ;
@@ -215,6 +217,7 @@ ConstDef:
                          make_unique_from_ptr($4), {line_number});
         free($1);
         delete $2;
+        $2 = nullptr;
         $4 = nullptr; 
     }
     ;
@@ -227,6 +230,7 @@ VarDecl:
             defs.push_back(std::move(def));
         }
         delete $2;
+        $2 = nullptr;
         $$ = new VarDecl($1, std::move(defs), {line_number});
     }
     ;
@@ -257,6 +261,7 @@ VarDef:
         $$ = new VarDef(std::string($1), std::move(*$2), std::move(init), {line_number});
         free($1);
         delete $2;
+        $2 = nullptr;
     }
     | IDENT ASSIGN InitVal {
         std::vector<std::unique_ptr<Exp>> dims;
@@ -270,6 +275,7 @@ VarDef:
         $$ = new VarDef(std::string($1), std::move(*$2), std::move(init), {line_number});
         free($1);
         delete $2;
+        $2 = nullptr;
         $4 = nullptr; 
     }
     ;
@@ -302,6 +308,7 @@ FuncDef:
             params.push_back(std::move(param));
         }
         delete $4;
+        $4 = nullptr;
         $$ = new FuncDef(BaseType::VOID, std::string($2), std::move(params), 
                         make_unique_from_ptr($6), {line_number});
         free($2);
@@ -320,6 +327,7 @@ FuncDef:
             params.push_back(std::move(param));
         }
         delete $4;
+        $4 = nullptr;
         $$ = new FuncDef($1, std::string($2), std::move(params), 
                         make_unique_from_ptr($6), {line_number});
         free($2);
@@ -356,6 +364,7 @@ FuncFParam:
         $$ = new FuncFParam($1, std::string($2), true, std::move(*$5), {line_number});
         free($2);
         delete $5;
+        $5 = nullptr;
     }
     ;
 
@@ -368,6 +377,7 @@ Block:
         $$ = new Block({line_number});
         $$->items = std::move(*$2);
         delete $2;
+        $2 = nullptr;
     }
     ;
 
@@ -738,6 +748,7 @@ InitVal:
             inits.push_back(std::move(init));
         }
         delete $2;
+        $2 = nullptr;
         $$ = new InitVal(std::move(inits), {line_number});
     }
     ;
@@ -771,6 +782,7 @@ ConstInitVal:
             inits.push_back(std::move(init));
         }
         delete $2;
+        $2 = nullptr;
         $$ = new ConstInitVal(std::move(inits), {line_number});
     }
     ;
