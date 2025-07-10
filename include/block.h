@@ -10,7 +10,7 @@
 class BasicBlock
 {
 public:
-  std::string comment; // used for debug
+  std::string comment; // 调试信息
   int block_id = 0;
   std::deque<Instruction> Instruction_list{};
 
@@ -23,7 +23,7 @@ public:
     for (Instruction ins : Instruction_list)
     {
       s << "    ";
-      ins->PrintIR(s); // Auto "\n" In Instruction::printIR()
+      ins->PrintIR(s); // 指令会自动添加换行符
     }
   }
   BasicBlock(int id) : block_id(id) {}
@@ -37,7 +37,7 @@ public:
   std::vector<Instruction> function_declare{};
 
   std::map<FuncDefInstruction, std::map<int, LLVMBlock>>
-      function_block_map; //<function,<id,block> >
+      function_block_map; // 函数到基本块的映射表
 
   void NewFunction(FuncDefInstruction I) { function_block_map[I] = {}; }
   LLVMBlock GetBlock(FuncDefInstruction I, int now_label)
@@ -66,12 +66,12 @@ public:
 
     // output Functions
     for (auto Func_Block_item : function_block_map)
-    { //<function,<id,block> >
+    { // 遍历每个函数
       FuncDefInstruction f = Func_Block_item.first;
-      // output function Syntax
+      // 输出函数声明
       f->PrintIR(s);
 
-      // output Blocks in functions
+      // 输出函数内的基本块
       s << "{\n";
       for (auto block : Func_Block_item.second)
       {
@@ -86,22 +86,24 @@ class IRgenerator : public ASTVisitor
 {
 public:
   LLVMIR llvmIR;
-  Operand current_ptr;          // Added for pointer operand
-  LLVMType current_llvm_type;   // Added for LLVM type
-  BaseType current_type;        // Added to track type from VarDecl/ConstDecl
-  int current_reg_counter = -1; // Reset per function
-  // 返回生成的 LLVM IR
+  Operand current_ptr;          // 当前指针操作数
+  LLVMType current_llvm_type;   // 当前LLVM类型
+  BaseType current_type;        // 跟踪当前变量声明类型
+  int current_reg_counter = -1; // 函数内寄存器计数器
+
+  // 获取生成的LLVM IR
   LLVMIR &getLLVMIR() { return llvmIR; }
-  // Helper function to get the current block
+
+  // 获取当前基本块
   LLVMBlock getCurrentBlock();
 
-  // Helper to allocate a new register
+  // 分配新寄存器
   int newReg();
 
-  // Helper to allocate a new label
+  // 分配新标签
   int newLabel();
 
-  // Helper to check if we are in global scope
+  // 检查是否在全局作用域
   bool isGlobalScope();
   bool isPointer(int reg);
 

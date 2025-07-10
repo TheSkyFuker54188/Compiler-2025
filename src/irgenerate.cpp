@@ -705,7 +705,7 @@ void IRgenerator::handleArrayInitializer(InitVal *init, int base_reg, VarAttribu
     {
         auto &init_list = std::get<std::vector<std::unique_ptr<InitVal>>>(init->value);
         size_t flat_idx = 0;
-        // Compute the limit as size_t to avoid sign-compare warning
+        // 计算限制值，使用size_t避免符号比较警告
         size_t limit = static_cast<size_t>(dims[0]) * (dim_idx + 1 < dims.size() ? static_cast<size_t>(dims[1]) : 1);
         for (size_t i = 0; i < init_list.size() && flat_idx < limit; i++)
         {
@@ -745,7 +745,7 @@ int IRgenerator::newLabel() { return ++max_label; }
 
 bool IRgenerator::isGlobalScope() { return function_now == nullptr; }
 
-// New helper function to evaluate constant expressions
+// 整数常量表达式求值
 std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr)
 {
     if (auto *num = dynamic_cast<Number *>(expr))
@@ -756,7 +756,7 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr)
         }
         else if (std::holds_alternative<float>(num->value))
         {
-            // 浮点数到整数的转换
+            // 浮点数到整数转换
             return static_cast<int>(std::get<float>(num->value));
         }
     }
@@ -814,7 +814,7 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr)
             }
             else if (auto val = sym->getConstantValue<float>())
             {
-                // 浮点数常量转换为整数
+                // 浮点常量转换为整数
                 return static_cast<int>(*val);
             }
         }
@@ -822,7 +822,7 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr)
     return std::nullopt;
 }
 
-// New helper function to evaluate constant expressions for float
+// 浮点常量表达式求值
 std::optional<float> IRgenerator::evaluateConstExpressionFloat(Exp *expr)
 {
     if (auto *num = dynamic_cast<Number *>(expr))
@@ -833,7 +833,7 @@ std::optional<float> IRgenerator::evaluateConstExpressionFloat(Exp *expr)
         }
         else if (std::holds_alternative<int>(num->value))
         {
-            // 整数到浮点数的转换
+            // 整数到浮点数转换
             return static_cast<float>(std::get<int>(num->value));
         }
     }
@@ -899,7 +899,7 @@ std::optional<float> IRgenerator::evaluateConstExpressionFloat(Exp *expr)
     return std::nullopt;
 }
 
-// New helper function to infer expression type
+// 表达式类型推断
 std::shared_ptr<Type> IRgenerator::inferExpressionType(Exp *expression)
 {
     if (auto *lval = dynamic_cast<LVal *>(expression))
@@ -949,7 +949,7 @@ std::shared_ptr<Type> IRgenerator::inferExpressionType(Exp *expression)
         {
             if (dynamic_cast<BasicType *>(lhs_type.get()) && dynamic_cast<BasicType *>(rhs_type.get()))
             {
-                return lhs_type; // Simplified: assumes compatible types
+                return lhs_type; // 简化处理：假设类型兼容
             }
         }
     }
@@ -966,14 +966,14 @@ std::shared_ptr<Type> IRgenerator::inferExpressionType(Exp *expression)
     return nullptr;
 }
 
-// New helper function to check if a register is a pointer
+// 检查寄存器是否为指针类型
 bool IRgenerator::isPointer(int reg)
 {
     auto it = irgen_table.RegTable.find(reg);
     if (it == irgen_table.RegTable.end())
         return false;
 
-    // Check if the register is associated with a variable in the symbol table
+    // 检查寄存器是否与符号表中的变量关联
     for (const auto &[name, reg_id] : irgen_table.name_to_reg)
     {
         if (reg_id == reg)
@@ -981,7 +981,7 @@ bool IRgenerator::isPointer(int reg)
             SymbolInfo *sym = str_table.lookup(name);
             if (sym && (sym->kind == SymbolKind::VARIABLE || sym->kind == SymbolKind::PARAMETER))
             {
-                // If it's a variable or parameter with no indices, it's a pointer (e.g., from alloca or global)
+                // 如果是变量或参数且无索引，则为指针（如alloca或全局变量）
                 auto *arr_type = dynamic_cast<ArrayType *>(sym->type.get());
                 if (!arr_type || sym->is_array_pointer)
                 {
@@ -991,7 +991,7 @@ bool IRgenerator::isPointer(int reg)
             break;
         }
     }
-    // If the register has dimensions, it's likely a pointer (e.g., array base)
+    // 如果寄存器有维度信息，可能是指针（如数组基址）
     return !it->second.dims.empty();
 }
 
@@ -1033,13 +1033,13 @@ void IRgenerator::visit(ConstDef &node)
             attr.dims.push_back(val.value_or(1));
         }
 
-        // For global constants, evaluate at compile time, don't generate IR
+        // 全局常量在编译时求值，不生成运行时IR代码
         if (auto *const_init = dynamic_cast<ConstInitVal *>(node.initializer.get()))
         {
             if (std::holds_alternative<std::unique_ptr<Exp>>(const_init->value))
             {
                 auto &expr = std::get<std::unique_ptr<Exp>>(const_init->value);
-                // Try to evaluate the constant expression
+                // 尝试对常量表达式求值
                 if (current_type == BaseType::INT)
                 {
                     auto int_val = evaluateConstExpression(expr.get());
@@ -1070,7 +1070,7 @@ void IRgenerator::visit(ConstDef &node)
         }
         llvmIR.global_def.push_back(new GlobalVarDefineInstruction(node.name, Type2LLvm[static_cast<int>(attr.type)], attr));
 
-        // Add to symbol table with constant value
+        // 添加到符号表并设置常量值
         SymbolInfo *sym = str_table.lookup(node.name);
         if (!sym)
         {
@@ -1113,7 +1113,7 @@ void IRgenerator::visit(ConstDef &node)
         }
         IRgenStore(getCurrentBlock(), Type2LLvm[static_cast<int>(attr.type)], value, GetNewRegOperand(reg));
 
-        // Add to symbol table with constant value
+        // 添加到符号表并设置常量值
         SymbolInfo *sym = str_table.lookupCurrent(node.name);
         if (!sym)
         {
@@ -1166,7 +1166,7 @@ void IRgenerator::visit(VarDef &node)
         }
         llvmIR.global_def.push_back(new GlobalVarDefineInstruction(node.name, Type2LLvm[static_cast<int>(attr.type)], attr));
 
-        // Add to symbol table
+        // 添加到符号表
         SymbolInfo *sym = str_table.lookup(node.name);
         if (!sym)
         {
@@ -1177,7 +1177,7 @@ void IRgenerator::visit(VarDef &node)
     }
     else
     {
-        int reg = newReg(); // Use node.name directly for clarity
+        int reg = newReg(); // 为变量分配寄存器
         VarAttribute attr;
         attr.type = current_type;
         std::vector<int> dims;
@@ -1190,10 +1190,10 @@ void IRgenerator::visit(VarDef &node)
             }
             else
             {
-                dims.push_back(1); // Fallback for non-constant dimensions
+                dims.push_back(1); // 非常量维度的回退值
             }
         }
-        // Convert dims to std::vector<size_t>
+        // 转换为 std::vector<size_t>
         attr.dims = std::vector<size_t>(dims.begin(), dims.end());
         if (!dims.empty())
         {
@@ -1209,7 +1209,7 @@ void IRgenerator::visit(VarDef &node)
         {
             if (dims.empty())
             {
-                // Scalar variable initialization
+                // 标量变量初始化
                 (*node.initializer)->accept(*this);
                 int init_reg = max_reg;
                 Operand value;
@@ -1235,12 +1235,12 @@ void IRgenerator::visit(VarDef &node)
             }
             else
             {
-                // Array initialization
+                // 数组初始化
                 handleArrayInitializer(node.initializer->get(), reg, attr, dims, 0);
             }
         }
 
-        // Add to symbol table
+        // 添加到符号表
         SymbolInfo *sym = str_table.lookupCurrent(node.name);
         if (!sym)
         {
@@ -1257,10 +1257,10 @@ void IRgenerator::visit(FuncDef &node)
     function_returntype = node.return_type;
     llvmIR.NewFunction(function_now);
     now_label = 0;
-    current_reg_counter = -1; // Reset register counter
+    current_reg_counter = -1; // 重置寄存器计数器
     llvmIR.NewBlock(function_now, now_label);
 
-    // Symbol table setup
+    // 符号表设置
     std::vector<std::shared_ptr<Type>> param_types;
     for (const auto &param : node.parameters)
     {
@@ -1281,24 +1281,24 @@ void IRgenerator::visit(FuncDef &node)
 
 void IRgenerator::visit(FuncFParam &node)
 {
-    int reg = newReg(); // Use node.name for clarity
+    int reg = newReg(); // 为参数分配寄存器
     VarAttribute attr;
     attr.type = node.type;
     if (node.is_array_pointer || !node.array_dimensions.empty())
     {
-        attr.dims.push_back(0); // Array parameters are pointers
+        attr.dims.push_back(0); // 数组参数作为指针处理
         function_now->InsertFormal(Type2LLvm[static_cast<int>(node.type)]);
     }
     else
     {
-        // Scalar parameter: treat as value, not pointer
+        // 标量参数：按值传递，不是指针
         function_now->InsertFormal(Type2LLvm[static_cast<int>(node.type)]);
     }
     function_now->formals_reg.push_back(GetNewRegOperand(reg));
     irgen_table.RegTable[reg] = attr;
     irgen_table.name_to_reg[node.name] = reg;
 
-    // Add parameter to symbol table
+    // 添加参数到符号表
     auto param_type = node.is_array_pointer ? makeArrayType(makeBasicType(node.type), {-1}) : makeBasicType(node.type);
     auto sym_info = std::make_shared<SymbolInfo>(SymbolKind::PARAMETER, param_type, node.name, true);
     sym_info->is_array_pointer = node.is_array_pointer;
@@ -1406,7 +1406,7 @@ void IRgenerator::visit(ReturnStmt &node)
         }
         else if (node.expression.has_value() && dynamic_cast<FunctionCall *>((*node.expression).get()))
         {
-            // Directly return function call result
+            // 直接返回函数调用结果
             IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
         }
         else if (isPointer(ret_reg))
@@ -1450,7 +1450,7 @@ void IRgenerator::visit(UnaryExp &node)
     // 操作数寄存器有效性检查
     if (irgen_table.RegTable.find(operand_reg) == irgen_table.RegTable.end())
     {
-        // 如果操作数寄存器不存在，创建一个默认的属性
+        // 如果操作数寄存器不存在，创建默认属性
         VarAttribute default_attr;
         default_attr.type = BaseType::INT;
         irgen_table.RegTable[operand_reg] = default_attr;
@@ -1486,7 +1486,7 @@ void IRgenerator::visit(UnaryExp &node)
         }
         else
         {
-            // 生成 0 - operand 的指令
+            // 生成 0 - operand 指令
             IRgenArithmeticI32ImmLeft(getCurrentBlock(), SUB, 0, operand_reg, result_reg);
             VarAttribute attr;
             attr.type = irgen_table.RegTable[operand_reg].type;
@@ -1501,7 +1501,7 @@ void IRgenerator::visit(UnaryExp &node)
         // 确保操作数有效
         if (irgen_table.RegTable[operand_reg].IntInitVals.size() > 0)
         {
-            // 常量优化：直接计算!值
+            // 常量优化：直接计算逻辑非值
             int val = irgen_table.RegTable[operand_reg].IntInitVals[0];
             VarAttribute attr;
             attr.type = BaseType::INT;
@@ -1531,22 +1531,22 @@ void IRgenerator::visit(BinaryExp &node)
     VarAttribute rhs_attr = irgen_table.RegTable[rhs_reg];
     int result_reg = newReg();
 
-    // Determine the type of operation
+    // 确定运算类型
     LLVMType type = Type2LLvm[static_cast<int>(lhs_attr.type)];
     if (lhs_attr.type != rhs_attr.type)
     {
-        // Handle type mismatches if necessary (e.g., int and float)
-        type = LLVMType::I32; // For this test case, assume integer operations
+        // 处理类型不匹配（如int和float混合运算）
+        type = LLVMType::I32; // 简化处理，假设为整数运算
     }
 
-    // Prepare operands
+    // 准备操作数
     Operand lhs_operand, rhs_operand;
     bool is_lhs_constant = !lhs_attr.IntInitVals.empty();
     bool is_rhs_constant = !rhs_attr.IntInitVals.empty();
     bool is_lhs_pointer = isPointer(lhs_reg);
     bool is_rhs_pointer = isPointer(rhs_reg);
 
-    // Handle LHS
+    // 处理左操作数
     if (is_lhs_constant)
     {
         lhs_operand = new ImmI32Operand(lhs_attr.IntInitVals[0]);
@@ -1559,7 +1559,7 @@ void IRgenerator::visit(BinaryExp &node)
     }
     else if (auto *lval = dynamic_cast<LVal *>(node.lhs.get()))
     {
-        // Check if LHS is a global variable
+        // 检查左操作数是否为全局变量
         auto it = irgen_table.name_to_reg.find(lval->name);
         SymbolInfo *sym = str_table.lookup(lval->name);
         if (sym && sym->kind == SymbolKind::CONSTANT && lval->indices.empty())
@@ -1621,7 +1621,7 @@ void IRgenerator::visit(BinaryExp &node)
         lhs_operand = GetNewRegOperand(lhs_reg);
     }
 
-    // Handle RHS
+    // 处理右操作数
     if (is_rhs_constant)
     {
         rhs_operand = new ImmI32Operand(rhs_attr.IntInitVals[0]);
@@ -1634,7 +1634,7 @@ void IRgenerator::visit(BinaryExp &node)
     }
     else if (auto *lval = dynamic_cast<LVal *>(node.rhs.get()))
     {
-        // Check if RHS is a global variable
+        // 检查右操作数是否为全局变量
         auto it = irgen_table.name_to_reg.find(lval->name);
         SymbolInfo *sym = str_table.lookup(lval->name);
         if (sym && sym->kind == SymbolKind::CONSTANT && lval->indices.empty())
@@ -1696,7 +1696,7 @@ void IRgenerator::visit(BinaryExp &node)
         rhs_operand = GetNewRegOperand(rhs_reg);
     }
 
-    // Generate the appropriate instruction
+    // 生成相应的指令
     switch (node.op)
     {
     case BinaryOp::ADD:
@@ -1755,7 +1755,7 @@ void IRgenerator::visit(BinaryExp &node)
         break;
     }
     VarAttribute result_attr;
-    result_attr.type = lhs_attr.type; // Assuming same type as LHS
+    result_attr.type = lhs_attr.type; // 假设结果类型与左操作数相同
     irgen_table.RegTable[result_reg] = result_attr;
     max_reg = result_reg;
 }
@@ -1765,7 +1765,7 @@ void IRgenerator::visit(LVal &node)
     auto it = irgen_table.name_to_reg.find(node.name);
     if (it != irgen_table.name_to_reg.end())
     {
-        // Local variable or parameter
+        // 局部变量或参数
         int reg = it->second;
         if (!node.indices.empty())
         {
@@ -1793,7 +1793,7 @@ void IRgenerator::visit(LVal &node)
     }
     else
     {
-        // Check if it's a global variable or constant
+        // 检查是否为全局变量或常量
         SymbolInfo *sym = str_table.lookup(node.name);
         if (sym && (sym->kind == SymbolKind::VARIABLE || sym->kind == SymbolKind::CONSTANT))
         {
