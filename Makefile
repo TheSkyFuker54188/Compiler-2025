@@ -45,6 +45,9 @@ ASTPRINTER_SRC = $(SRC_DIR)/astprinter.cpp
 SEMANTIC_SRC = $(SRC_DIR)/semantic.cpp
 IRGENERATE_SRC = $(SRC_DIR)/irgenerate.cpp
 
+# 寄存器分配模块源文件
+REGALLOC_SRC = $(SRC_DIR)/regalloc.cpp
+
 # 目标文件
 MAIN_OBJ = $(BUILD_DIR)/main.o
 ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
@@ -53,8 +56,11 @@ IRGENERATE_OBJ = $(BUILD_DIR)/irgenerate.o
 LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
+# 寄存器分配模块目标文件
+REGALLOC_OBJ = $(BUILD_DIR)/regalloc.o
+
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(LEX_OBJ) $(PARSER_OBJ)
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(LEX_OBJ) $(PARSER_OBJ) $(REGALLOC_OBJ)
 
 # 可执行文件
 TARGET = sys-compiler
@@ -106,6 +112,11 @@ $(LEX_OBJ): $(LEX_SRC) $(PARSER_HDR) | $(BUILD_DIR)
 # 语法分析器编译
 $(PARSER_OBJ): $(PARSER_SRC) | $(BUILD_DIR)
 	@echo "Compiling parser..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# 寄存器分配模块编译规则
+$(REGALLOC_OBJ): $(REGALLOC_SRC) $(INCLUDE_DIR)/regalloc.h | $(BUILD_DIR)
+	@echo "Compiling regalloc.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ===--------------------------------------------------------------------=== #
