@@ -19,8 +19,8 @@ enum LLVMIROpcode {
   ICMP = 5,
   PHI = 6,
   ALLOCA = 7,
-  MUL_OP = 8,  // 改为 MUL_OP 避免冲突
-  DIV_OP = 9,  // 改为 DIV_OP 避免冲突
+  MUL_OP = 8,
+  DIV_OP = 9,
   BR_COND = 10,
   BR_UNCOND = 11,
   FADD = 12,
@@ -28,7 +28,7 @@ enum LLVMIROpcode {
   FMUL = 14,
   FDIV = 15,
   FCMP = 16,
-  MOD_OP = 17, // 改为 MOD_OP 避免冲突
+  MOD_OP = 17,
   BITXOR = 18,
   RET = 19,
   ZEXT = 20,
@@ -48,8 +48,9 @@ enum LLVMIROpcode {
   FMIN_F32 = 36,
   FMAX_F32 = 37,
   BITAND = 38,
-  FPEXT = 39,
-  SELECT = 40,
+  BITOR = 39,
+  FPEXT = 40,
+  SELECT = 41,
 };
 
 // @Operand datatypes
@@ -231,7 +232,7 @@ class BasicInstruction;
 typedef BasicInstruction *Instruction;
 
 class BasicInstruction {
-private:
+public:
   int BlockID = 0;
 
 protected:
@@ -391,7 +392,7 @@ public:
 };
 
 class SelectInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType type;
   Operand op1;
   Operand op2;
@@ -419,7 +420,7 @@ public:
 };
 
 class PhiInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType type;
   Operand result;
   std::vector<std::pair<Operand, Operand>> phi_list;
@@ -514,6 +515,8 @@ public:
   }
 };
 
+long long Float_to_Byte(float f);
+
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
                      size_t dimDph, size_t beginPos, size_t endPos);
                      class GlobalVarDefineInstruction : public BasicInstruction {
@@ -531,7 +534,7 @@ void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
                                   if (type == I32 && !arval.IntInitVals.empty()) {
                                       s << "@" << name << " = global i32 " << arval.IntInitVals[0] << "\n";
                                   } else if (type == FLOAT32 && !arval.FloatInitVals.empty()) {
-                                      s << "@" << name << " = global float " << arval.FloatInitVals[0] << "\n";
+                                      s << "@" << name << " = global float 0x" << std::hex << Float_to_Byte(arval.FloatInitVals[0])<<std::dec  << "\n";
                                   } else {
                                       s << "@" << name << " = global " << type << " zeroinitializer\n";
                                   }
@@ -562,7 +565,7 @@ public:
       if (c == '\\')
         str_len--;
     }
-    s << "@" << str_name << " = private unnamed_addr constant [" << str_len
+    s << "@" << str_name << " = public unnamed_addr constant [" << str_len
       << " x i8] c\"";
     for (size_t i = 0; i < str_val.size(); i++) {
       char c = str_val[i];
@@ -604,7 +607,7 @@ public:
 };
 
 class CallInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType ret_type;
   Operand result;
   std::string name;
@@ -647,7 +650,7 @@ public:
 };
 
 class RetInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType ret_type;
   Operand ret_val;
 
@@ -667,7 +670,7 @@ public:
 };
 
 class GetElementptrInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType type;
   Operand result;
   Operand ptrval;
@@ -709,7 +712,7 @@ public:
 };
 
 class FunctionDefineInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType return_type;
   std::string Func_name;
 
@@ -740,7 +743,7 @@ public:
 typedef FunctionDefineInstruction *FuncDefInstruction;
 
 class FunctionDeclareInstruction : public BasicInstruction {
-private:
+public:
   enum LLVMType return_type;
   std::string Func_name;
   bool is_more_args = false;
@@ -771,7 +774,7 @@ public:
 };
 
 class FptosiInstruction : public BasicInstruction {
-private:
+public:
   Operand result;
   Operand value;
 
@@ -790,7 +793,7 @@ public:
 };
 
 class FpextInstruction : public BasicInstruction {
-private:
+public:
   Operand result;
   Operand value;
 
@@ -809,7 +812,7 @@ public:
 };
 
 class BitCastInstruction : public BasicInstruction {
-private:
+public:
   Operand src;
   Operand dst;
   LLVMType src_type;
@@ -829,7 +832,7 @@ public:
 };
 
 class SitofpInstruction : public BasicInstruction {
-private:
+public:
   Operand result;
   Operand value;
 
@@ -848,7 +851,7 @@ public:
 };
 
 class ZextInstruction : public BasicInstruction {
-private:
+public:
   LLVMType from_type;
   LLVMType to_type;
   Operand result;
