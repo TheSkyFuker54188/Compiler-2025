@@ -240,7 +240,7 @@ protected:
   int insNo;
 
 public:
-  int GetOpcode() { return opcode; }
+  int GetOpcode() const { return opcode; }
   virtual void PrintIR(std::ostream &s) = 0;
 };
 
@@ -256,6 +256,12 @@ public:
     this->result = result;
     this->pointer = pointer;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetPointer() const { return pointer; }
+  Operand GetResult() const { return result; }
+  
   void PrintIR(std::ostream &s) {
     // s<<"loadinstruction print\n";
     s << result->GetFullName() << " = load " << type << ", ptr " << pointer->GetFullName() << "\n";
@@ -274,6 +280,12 @@ public:
     this->pointer = pointer;
     this->value = value;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetPointer() const { return pointer; }
+  Operand GetValue() const { return value; }
+  
   void PrintIR(std::ostream &s) {
   // s << "storeinstruction print\n";
     s << "store " << type << " " << value->GetFullName() << ", ptr " << pointer->GetFullName() << "\n";
@@ -307,6 +319,14 @@ public:
     this->result = result;
     this->type = type;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetOp1() const { return op1; }
+  Operand GetOp2() const { return op2; }
+  Operand GetOp3() const { return op3; }
+  Operand GetResult() const { return result; }
+  
   void PrintIR(std::ostream &s) {
     // s << "arithmeticinstruction print\n";
     if (opcode == LL_ADDMOD) {
@@ -360,6 +380,14 @@ public:
     this->cond = cond;
     this->result = result;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetOp1() const { return op1; }
+  Operand GetOp2() const { return op2; }
+  IcmpCond GetCond() const { return cond; }
+  Operand GetResult() const { return result; }
+  
   void PrintIR(std::ostream &s) {
     // s << "icmpinstruction print\n";
     s << result->GetFullName() << " = icmp " << cond << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
@@ -384,6 +412,14 @@ public:
     this->cond = cond;
     this->result = result;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetOp1() const { return op1; }
+  Operand GetOp2() const { return op2; }
+  FcmpCond GetCond() const { return cond; }
+  Operand GetResult() const { return result; }
+  
   void PrintIR(std::ostream &s) {
   // s << "fcmpinstruction print\n";
     s << result->GetFullName() << " = fcmp " << cond << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
@@ -469,6 +505,12 @@ public:
     this->result = result;
     dims = ArrDims;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetResult() const { return result; }
+  const std::vector<int>& GetDims() const { return dims; }
+  
   void PrintIR(std::ostream &s) {
     // s << "allocainstruction print\n";
     s << result->GetFullName() << " = alloca ";
@@ -494,6 +536,12 @@ public:
     this->trueLabel = trueLabel;
     this->falseLabel = falseLabel;
   }
+  
+  // Getter methods
+  Operand GetCond() const { return cond; }
+  Operand GetTrueLabel() const { return trueLabel; }
+  Operand GetFalseLabel() const { return falseLabel; }
+  
   void PrintIR(std::ostream &s) {
   // s << "brcondinstruction print\n";
     s << "br i1 " << cond->GetFullName() << ", label " << trueLabel->GetFullName() << ", label " << falseLabel->GetFullName()
@@ -509,6 +557,10 @@ public:
     this->opcode = BR_UNCOND;
     this->destLabel = destLabel;
   }
+  
+  // Getter methods
+  Operand GetLabel() const { return destLabel; }
+  
   void PrintIR(std::ostream &s) {
   // s << "bruncondinstruction print\n";
     s << "br label " << destLabel->GetFullName() << "\n";
@@ -519,17 +571,25 @@ long long Float_to_Byte(float f);
 
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
                      size_t dimDph, size_t beginPos, size_t endPos);
-                     class GlobalVarDefineInstruction : public BasicInstruction {
-                      public:
-                          enum LLVMType type;
-                          std::string name;
-                          Operand init_val;
-                          VarAttribute arval;
-                          GlobalVarDefineInstruction(std::string nam, enum LLVMType typ, VarAttribute v)
-                              : type(typ), name(nam), init_val(nullptr), arval(v) {
-                              this->opcode = LLVMIROpcode::GLOBAL_VAR;
-                          }
-                          void PrintIR(std::ostream &s) {
+class GlobalVarDefineInstruction : public BasicInstruction {
+public:
+    enum LLVMType type;
+    std::string name;
+    Operand init_val;
+    VarAttribute arval;
+    
+    GlobalVarDefineInstruction(std::string nam, enum LLVMType typ, VarAttribute v)
+        : type(typ), name(nam), init_val(nullptr), arval(v) {
+        this->opcode = LLVMIROpcode::GLOBAL_VAR;
+    }
+    
+    // Getter methods
+    LLVMType GetType() const { return type; }
+    std::string GetName() const { return name; }
+    Operand GetInitVal() const { return init_val; }
+    const VarAttribute& GetAttr() const { return arval; }
+    
+    void PrintIR(std::ostream &s) {
                               if (arval.dims.empty()) {
                                   if (type == I32 && !arval.IntInitVals.empty()) {
                                       s << "@" << name << " = global i32 " << arval.IntInitVals[0] << "\n";
@@ -558,6 +618,11 @@ public:
       : str_val(strval), str_name(strname) {
     this->opcode = LLVMIROpcode::GLOBAL_STR;
   }
+  
+  // Getter methods
+  std::string GetValue() const { return str_val; }
+  std::string GetName() const { return str_name; }
+  
   void PrintIR(std::ostream &s) {
     // s << "globalstringconstinstruction print\n";
     size_t str_len = str_val.size() + 1;
@@ -633,6 +698,13 @@ public:
       }
     }
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return ret_type; }
+  Operand GetResult() const { return result; }
+  std::string GetFuncName() const { return name; }
+  const std::vector<std::pair<enum LLVMType, Operand>>& GetArgs() const { return args; }
+  
   void PrintIR(std::ostream &s) {
     // s << "callinstruction print\n";
     if (ret_type != LLVMType::VOID_TYPE) {
@@ -659,6 +731,11 @@ public:
       : ret_type(retType), ret_val(res) {
     this->opcode = RET;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return ret_type; }
+  Operand GetRetVal() const { return ret_val; }
+  
   void PrintIR(std::ostream &s) {
     // s << "retinstruction print\n";
     s << "ret " << ret_type;
@@ -692,6 +769,14 @@ public:
       : type(typ), result(res), ptrval(ptr), dims(dim), indexes(index) {
     opcode = GETELEMENTPTR;
   }
+  
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  Operand GetResult() const { return result; }
+  Operand GetPtrVal() const { return ptrval; }
+  const std::vector<int>& GetDims() const { return dims; }
+  const std::vector<Operand>& GetIndexes() const { return indexes; }
+  
   void PrintIR(std::ostream &s) {
     // s << "getelementptrinstruction print\n";
     s << result->GetFullName() << " = getelementptr ";

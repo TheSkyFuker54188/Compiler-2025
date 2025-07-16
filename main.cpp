@@ -2,6 +2,7 @@
 #include "include/astprinter.h"
 #include "include/block.h"
 #include "include/semantic.h"
+#include "include/instruction_selector.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -25,7 +26,8 @@ int cur_col_number = 1;
  */
 bool compileFile(const std::string &filename, bool verbose = true,
                  bool enable_semantic = true, bool print_ast = false,
-                 bool generate_ir = true) {
+                 bool generate_ir = true, bool generate_asm = false,
+                 const std::string &output_file = "") {
   // 重置全局变量
   line_number = 1;
   col_number = 1;
@@ -95,6 +97,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
   }
 
   // 第四阶段：生成中间代码
+  LLVMIR ir;
   if (generate_ir && semantic_success) {
     if (verbose) {
       std::cout << "阶段3: 中间代码生成..." << std::endl;
@@ -102,19 +105,43 @@ bool compileFile(const std::string &filename, bool verbose = true,
 
     IRgenerator irgen;
     root->accept(irgen);
+    ir = irgen.getLLVMIR();
 
     // 输出生成的IR到文件
     std::string ir_filename =
         filename.substr(0, filename.find_last_of('.')) + ".ll";
     std::ofstream ir_file(ir_filename);
     if (ir_file.is_open()) {
-      irgen.getLLVMIR().printIR(ir_file);
+      ir.printIR(ir_file);
       ir_file.close();
       if (verbose) {
         std::cout << "中间代码已生成到 " << ir_filename << std::endl;
       }
     } else {
       std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
+      return false;
+    }
+  }
+
+  // 第五阶段：生成汇编代码（可选）
+  if (generate_asm && semantic_success) {
+    if (verbose) {
+      std::cout << "阶段4: 汇编代码生成..." << std::endl;
+    }
+
+    std::string asm_filename = output_file.empty() ? 
+        filename.substr(0, filename.find_last_of('.')) + ".s" : output_file;
+    
+    std::ofstream asm_file(asm_filename);
+    if (asm_file.is_open()) {
+      riscv::InstructionSelector selector(asm_file);
+      selector.selectInstructions(ir);
+      asm_file.close();
+      if (verbose) {
+        std::cout << "汇编代码已生成到 " << asm_filename << std::endl;
+      }
+    } else {
+      std::cerr << "无法创建汇编文件 " << asm_filename << std::endl;
       return false;
     }
   }
@@ -126,19 +153,21 @@ bool compileFile(const std::string &filename, bool verbose = true,
  * 显示使用帮助
  */
 void showUsage(const char *program_name) {
-  std::cout << "SYS Language Compiler - 语义分析器" << std::endl;
+  std::cout << "SYS Language Compiler" << std::endl;
   std::cout << "Usage: " << program_name << " [options] <file.sy>" << std::endl;
   std::cout << "\nOptions:" << std::endl;
   std::cout << "  -h, --help       显示帮助信息" << std::endl;
   std::cout << "  -q, --quiet      静默模式（只显示错误）" << std::endl;
+  std::cout << "  -S               生成汇编代码" << std::endl;
+  std::cout << "  -o <file>        指定输出文件名" << std::endl;
   std::cout << "  --ast            打印AST结构" << std::endl;
   std::cout << "  --no-semantic    跳过语义分析" << std::endl;
   std::cout << "\nExample:" << std::endl;
   std::cout << "  " << program_name << " program.sy           # 完整编译"
             << std::endl;
-  std::cout << "  " << program_name << " --ast test.sy        # 编译并显示AST"
+  std::cout << "  " << program_name << " -S -o test.s test.sy # 生成汇编代码"
             << std::endl;
-  std::cout << "  " << program_name << " --no-semantic test.sy # 只进行语法分析"
+  std::cout << "  " << program_name << " --ast test.sy        # 编译并显示AST"
             << std::endl;
 }
 
@@ -152,7 +181,9 @@ int main(int argc, char *argv[]) {
   bool enable_semantic = true;
   bool print_ast = false;
   bool generate_ir = true;
+  bool generate_asm = false;
   std::string filename;
+  std::string output_file;
 
   // 解析命令行参数
   for (int i = 1; i < argc; ++i) {
@@ -163,6 +194,15 @@ int main(int argc, char *argv[]) {
       return 0;
     } else if (arg == "-q" || arg == "--quiet") {
       quiet_mode = true;
+    } else if (arg == "-S") {
+      generate_asm = true;
+    } else if (arg == "-o") {
+      if (i + 1 < argc) {
+        output_file = argv[++i];
+      } else {
+        std::cerr << "选项 -o 需要指定输出文件名" << std::endl;
+        return 1;
+      }
     } else if (arg == "--ast") {
       print_ast = true;
     } else if (arg == "--no-semantic") {
@@ -189,7 +229,7 @@ int main(int argc, char *argv[]) {
 
   // 编译文件
   bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast,
-                             generate_ir);
+                             generate_ir, generate_asm, output_file);
 
   return success ? 0 : 1;
 }
