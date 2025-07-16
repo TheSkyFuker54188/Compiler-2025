@@ -42,6 +42,16 @@ public:
     function_block_map[I][max_label] = new BasicBlock(max_label);
     return GetBlock(I, max_label);
   }
+  bool IsBr(Instruction ins) {
+    int opcode = ins->GetOpcode();
+    return opcode == BR_COND || opcode == BR_UNCOND;
+}
+
+bool IsRet(Instruction ins) {
+    int opcode = ins->GetOpcode();
+    return opcode == RET;
+}
+
   void printIR(std::ostream &s) {
     // output lib func decl
     for (Instruction lib_func_decl : function_declare) {
@@ -65,7 +75,7 @@ public:
       for (auto it = block_map.begin(); it != block_map.end(); ++it) {
         LLVMBlock block = it->second;
         // Check if block is empty
-        if (block->Instruction_list.empty()) {
+        if (block->Instruction_list.empty()|| (!IsRet(block->Instruction_list.back()) && !IsBr(block->Instruction_list.back()))) {
           // Find the next block
           auto next_it = std::next(it);
           if (next_it != block_map.end()) {
@@ -115,7 +125,26 @@ class IRgenerator : public ASTVisitor {
      void handleArrayInitializer(InitVal* init, int base_reg, VarAttribute& attr, const std::vector<int>& dims, size_t dim_idx);
       //void handleArrayInitializer(InitVal* init, int base_reg, VarAttribute& attr, const std::vector<int>& dims);
       void flattenConstInit(ConstInitVal* init, std::vector<std::variant<int, float>>& result, BaseType type) ;
-      void visit(CompUnit &node) override;
+      void IRgenGetElementptr(LLVMBlock B, LLVMType type, int result_reg, 
+        Operand ptr, std::vector<int> dims, 
+        std::vector<Operand> indices);
+        int convertToType(LLVMBlock B, int src_reg, LLVMType target_type);
+        void IRgenIcmp(LLVMBlock B, IcmpCond cmp_op, int reg1, int reg2, int result_reg);
+        void IRgenFcmp(LLVMBlock B, FcmpCond cmp_op, int reg1, int reg2, int result_reg);
+        void IRgenIcmpImmRight(LLVMBlock B, IcmpCond cmp_op, int reg1, int val2, int result_reg);
+        void IRgenFcmpImmRight(LLVMBlock B, FcmpCond cmp_op, int reg1, float val2, int result_reg);
+        void IRgenArithmeticI32ImmRight(LLVMBlock B, LLVMIROpcode opcode, int reg1, int val2, int result_reg);
+        void IRgenArithmeticI32(LLVMBlock B, LLVMIROpcode opcode, int reg1, int reg2, int result_reg);
+        void IRgenArithmeticF32(LLVMBlock B, LLVMIROpcode opcode, int reg1, int reg2, int result_reg);
+        void IRgenArithmeticI32ImmLeft(LLVMBlock B, LLVMIROpcode opcode, int val1, int reg2, int result_reg);
+        void IRgenArithmeticF32ImmLeft(LLVMBlock B, LLVMIROpcode opcode, float val1, int reg2, int result_reg);
+        void IRgenStore(LLVMBlock B, LLVMType type, int value_reg, Operand ptr);
+        void IRgenStore(LLVMBlock B, LLVMType type, Operand value, Operand ptr);
+        void IRgenBRUnCond(LLVMBlock B, int dst_label);
+        void IRgenBrCond(LLVMBlock B, int cond_reg, int true_label, int false_label);
+        void IRgenAlloca(LLVMBlock B, LLVMType type, int reg);
+        void IRgenLoad(LLVMBlock B, LLVMType type, int result_reg, Operand ptr);
+        void visit(CompUnit &node) override;
       void visit(ConstDecl &node) override;
       void visit(ConstDef &node) override;
       void visit(VarDecl &node) override;
