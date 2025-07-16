@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <cstring> // 添加 memcpy 支持
+#include <sstream>
 
 // @Instruction types
 enum LLVMIROpcode {
@@ -98,7 +99,7 @@ enum FcmpCond {
   TRUE = 16  //: no comparison, always returns true
 };
 
-
+long long Float_to_Byte(float f);
 class VarAttribute {
 public:
   BaseType type;
@@ -338,6 +339,28 @@ public:
         << ",float " << op2->GetFullName() << ")\n";
       return;
     }
+    // else if (opcode == FADD || opcode == FSUB || opcode == FMUL || opcode == FDIV) {
+    //   // 处理浮点运算指令
+    //   auto format_float_operand = [](Operand op) -> std::string {
+    //       if (auto* imm_op = dynamic_cast<ImmF32Operand*>(op)) {
+    //           // 浮点立即数：转换为十六进制格式
+    //           float float_val = imm_op->GetFloatVal();
+    //           unsigned long long byte_val = Float_to_Byte(float_val);
+              
+    //           // 使用字符串流构建十六进制字符串
+    //           std::ostringstream oss;
+    //           oss << "0x" << std::hex << byte_val << std::dec;
+    //           return oss.str();
+    //       } else {
+    //           // 非立即数或非浮点类型：保持原样
+    //           return op->GetFullName();
+    //       }
+    //   };
+  
+  //     s << result->GetFullName() << " = " << opcode << " " << type << " "
+  //       << format_float_operand(op1) << ", "
+  //       << format_float_operand(op2) << "\n";
+  // }
     s << result->GetFullName() << " = " << opcode << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
       << "\n";
   }
@@ -515,7 +538,7 @@ public:
   }
 };
 
-long long Float_to_Byte(float f);
+
 
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
                      size_t dimDph, size_t beginPos, size_t endPos);

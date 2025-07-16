@@ -16,7 +16,7 @@ failed=0
 for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./sys-compiler "$file"; then
+        if ./sys-compiler --ast "$file"; then
             echo "通过"
             ((passed++))
         else
@@ -32,7 +32,7 @@ done
 for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./sys-compiler "$file"; then
+        if ./sys-compiler --ast "$file"; then
             echo "通过"
             ((passed++))
         else
