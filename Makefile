@@ -48,6 +48,9 @@ IRGENERATE_SRC = $(SRC_DIR)/irgenerate.cpp
 # 寄存器分配模块源文件
 REGALLOC_SRC = $(SRC_DIR)/regalloc.cpp
 
+# 指令选择器模块源文件
+INSTRUCTION_SELECTOR_SRC = $(SRC_DIR)/instruction_selector.cpp
+
 # 目标文件
 MAIN_OBJ = $(BUILD_DIR)/main.o
 ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
@@ -59,8 +62,11 @@ PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 # 寄存器分配模块目标文件
 REGALLOC_OBJ = $(BUILD_DIR)/regalloc.o
 
+# 指令选择器模块目标文件
+INSTRUCTION_SELECTOR_OBJ = $(BUILD_DIR)/instruction_selector.o
+
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(LEX_OBJ) $(PARSER_OBJ) $(REGALLOC_OBJ)
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(LEX_OBJ) $(PARSER_OBJ) $(REGALLOC_OBJ) $(INSTRUCTION_SELECTOR_OBJ)
 
 # 可执行文件
 TARGET = sys-compiler
@@ -117,6 +123,11 @@ $(PARSER_OBJ): $(PARSER_SRC) | $(BUILD_DIR)
 # 寄存器分配模块编译规则
 $(REGALLOC_OBJ): $(REGALLOC_SRC) $(INCLUDE_DIR)/regalloc.h | $(BUILD_DIR)
 	@echo "Compiling regalloc.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# 指令选择器模块编译规则
+$(INSTRUCTION_SELECTOR_OBJ): $(INSTRUCTION_SELECTOR_SRC) $(INCLUDE_DIR)/instruction_selector.h | $(BUILD_DIR)
+	@echo "Compiling instruction_selector.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ===--------------------------------------------------------------------=== #
