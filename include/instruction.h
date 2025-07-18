@@ -287,10 +287,46 @@ public:
   Operand GetPointer() const { return pointer; }
   Operand GetValue() const { return value; }
   
+  // void PrintIR(std::ostream &s) {
+  // // s << "storeinstruction print\n";
+  //   s << "store " << type << " " << value->GetFullName() << ", ptr " << pointer->GetFullName() << "\n";
+  // }
   void PrintIR(std::ostream &s) {
-  // s << "storeinstruction print\n";
-    s << "store " << type << " " << value->GetFullName() << ", ptr " << pointer->GetFullName() << "\n";
-  }
+    // 处理浮点立即数的特殊格式
+    auto format_float_operand = [](Operand op) -> std::string {
+        if (auto* imm_f32 = dynamic_cast<ImmF32Operand*>(op)) {
+            // 浮点立即数：转换为十六进制格式
+            float float_val = imm_f32->GetFloatVal();
+            unsigned long long byte_val = Float_to_Byte(float_val);
+            
+            std::ostringstream oss;
+            oss << "0x" << std::hex << byte_val << std::dec;
+            return oss.str();
+        } else if (auto* imm_i32 = dynamic_cast<ImmI32Operand*>(op)) {
+            // 整数立即数：转换为浮点十六进制格式
+            float float_val = static_cast<float>(imm_i32->GetIntImmVal());
+            unsigned long long byte_val = Float_to_Byte(float_val);
+            
+            std::ostringstream oss;
+            oss << "0x" << std::hex << byte_val << std::dec;
+            return oss.str();
+        } else {
+            // 非立即数类型：保持原样
+            return op->GetFullName();
+        }
+    };
+
+    // 根据类型选择输出格式
+    if (type == FLOAT32) {
+        // 浮点类型：使用特殊格式输出
+        s << "store float " << format_float_operand(value) 
+          << ", ptr " << pointer->GetFullName() << "\n";
+    } else {
+        // 非浮点类型：正常输出
+        s << "store " << type << " " << value->GetFullName() 
+          << ", ptr " << pointer->GetFullName() << "\n";
+    }
+}
 };
 
 class ArithmeticInstruction : public BasicInstruction {
@@ -359,28 +395,29 @@ public:
         << ",float " << op2->GetFullName() << ")\n";
       return;
     }
-    // else if (opcode == FADD || opcode == FSUB || opcode == FMUL || opcode == FDIV) {
-    //   // 处理浮点运算指令
-    //   auto format_float_operand = [](Operand op) -> std::string {
-    //       if (auto* imm_op = dynamic_cast<ImmF32Operand*>(op)) {
-    //           // 浮点立即数：转换为十六进制格式
-    //           float float_val = imm_op->GetFloatVal();
-    //           unsigned long long byte_val = Float_to_Byte(float_val);
+    else if (opcode == FADD || opcode == FSUB || opcode == FMUL || opcode == FDIV) {
+      // 处理浮点运算指令
+      auto format_float_operand = [](Operand op) -> std::string {
+          if (auto* imm_op = dynamic_cast<ImmF32Operand*>(op)) {
+              // 浮点立即数：转换为十六进制格式
+              float float_val = imm_op->GetFloatVal();
+              unsigned long long byte_val = Float_to_Byte(float_val);
               
-    //           // 使用字符串流构建十六进制字符串
-    //           std::ostringstream oss;
-    //           oss << "0x" << std::hex << byte_val << std::dec;
-    //           return oss.str();
-    //       } else {
-    //           // 非立即数或非浮点类型：保持原样
-    //           return op->GetFullName();
-    //       }
-    //   };
+              // 使用字符串流构建十六进制字符串
+              std::ostringstream oss;
+              oss << "0x" << std::hex << byte_val << std::dec;
+              return oss.str();
+          } else {
+              // 非立即数或非浮点类型：保持原样
+              return op->GetFullName();
+          }
+      };
   
-  //     s << result->GetFullName() << " = " << opcode << " " << type << " "
-  //       << format_float_operand(op1) << ", "
-  //       << format_float_operand(op2) << "\n";
-  // }
+      s << result->GetFullName() << " = " << opcode << " " << type << " "
+        << format_float_operand(op1) << ", "
+        << format_float_operand(op2) << "\n";
+        return;
+  }
     s << result->GetFullName() << " = " << opcode << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
       << "\n";
   }
@@ -728,17 +765,68 @@ public:
   std::string GetFuncName() const { return name; }
   const std::vector<std::pair<enum LLVMType, Operand>>& GetArgs() const { return args; }
   
+  // void PrintIR(std::ostream &s) {
+  //   // s << "callinstruction print\n";
+  //   if (ret_type != LLVMType::VOID_TYPE) {
+  //     s << result->GetFullName() << " = ";
+  //   }
+  //   s << "call " << ret_type << " @" << name;
+  //   s << "(";
+  //   for (auto it = args.begin(); it != args.end(); ++it) {
+  //     s << it->first << " " << it->second->GetFullName();
+  //     if (it + 1 != args.end())
+  //       s << ",";
+  //   }
+  //   s << ")\n";
+  // }
   void PrintIR(std::ostream &s) {
-    // s << "callinstruction print\n";
+    // 辅助lambda函数：根据目标类型格式化操作数
+    auto format_operand = [](Operand op, LLVMType target_type) -> std::string {
+        if (target_type == FLOAT32) {
+            float float_val = 0.0f;
+            
+            // 处理浮点立即数
+            if (auto* imm_f32 = dynamic_cast<ImmF32Operand*>(op)) {
+                float_val = imm_f32->GetFloatVal();
+            } 
+            // 处理整数立即数（整数转浮点）
+            else if (auto* imm_i32 = dynamic_cast<ImmI32Operand*>(op)) {
+                float_val = static_cast<float>(imm_i32->GetIntImmVal());
+            }
+            // 其他类型保持原样
+            else {
+                return op->GetFullName();
+            }
+            
+            // 转换为十六进制格式
+            unsigned long long byte_val = Float_to_Byte(float_val);
+            std::ostringstream oss;
+            oss << "0x" << std::hex << byte_val << std::dec;
+            return oss.str();
+        } else {
+            // 非浮点类型：保持原样
+            return op->GetFullName();
+        }
+    };
+  
+    // 输出结果寄存器（如果有）
     if (ret_type != LLVMType::VOID_TYPE) {
-      s << result->GetFullName() << " = ";
+        s << result->GetFullName() << " = ";
     }
-    s << "call " << ret_type << " @" << name;
-    s << "(";
+    
+    // 输出函数调用指令
+    s << "call " << ret_type << " @" << name << "(";
+    
+    // 遍历并输出所有参数
     for (auto it = args.begin(); it != args.end(); ++it) {
-      s << it->first << " " << it->second->GetFullName();
-      if (it + 1 != args.end())
-        s << ",";
+        s << it->first << " ";
+        
+        // 特殊处理浮点类型参数
+        s << format_operand(it->second, it->first);
+        
+        if (it + 1 != args.end()) {
+            s << ", ";
+        }
     }
     s << ")\n";
   }

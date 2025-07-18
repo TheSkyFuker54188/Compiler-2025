@@ -1008,6 +1008,14 @@ int IRgenerator::convertToType(LLVMBlock B, int src_reg, LLVMType target_type)
     {
         IRgenSitofp(B, src_reg, result_reg);
         RegLLVMTypeMap[result_reg] = FLOAT32; // 记录新寄存器类型
+    }else if(src_type == FLOAT32 && target_type == I1){
+        IRgenFcmpImmRight(B, FcmpCond::OEQ, src_reg, 0.0f, result_reg);
+        RegLLVMTypeMap[result_reg] = I1; // 记录新寄存器类型
+    } else if(src_type == I1 && target_type == FLOAT32){
+        int temp_reg = newReg();
+        IRgenZextI1toI32(B, src_reg, temp_reg);
+        IRgenSitofp(B, temp_reg, result_reg);
+        RegLLVMTypeMap[result_reg] = FLOAT32; // 记录新寄存器类型
     }
     else
     {
@@ -1937,6 +1945,12 @@ void IRgenerator::visit(VarDef &node)
                 {
                     value = GetNewRegOperand(init_reg);
                 }
+                if(auto reg_op = dynamic_cast<RegOperand*>(value)) {
+                    int value_reg = reg_op->GetRegNo();
+                    // 确保 value 是正确的类型
+                    int conv_value_reg = convertToType(getCurrentBlock(), value_reg, Type2LLvm.at(attr.type));
+                    value = GetNewRegOperand(conv_value_reg); // 更新 value 为转换后的寄存器
+                }
                 IRgenStore(getCurrentBlock(), Type2LLvm.at(attr.type), value, GetNewRegOperand(reg));
                 // IRgenStore(getCurrentBlock(), Type2LLvm[static_cast<int>(attr.type)], value, GetNewRegOperand(reg));
             }
@@ -2109,6 +2123,12 @@ void IRgenerator::visit(IfStmt &node)
         cond_reg_if = tmp_reg;
         RegLLVMTypeMap[cond_reg_if] = LLVMType::I1;
     }
+    if(RegLLVMTypeMap[cond_reg_if] == LLVMType::FLOAT32){
+        int tmp_reg = newReg();
+        IRgenFcmpImmRight(B_if, FcmpCond::ONE, cond_reg_if, 0.0, tmp_reg);
+        cond_reg_if = tmp_reg;
+        RegLLVMTypeMap[cond_reg_if] = LLVMType::I1;
+    }
 
     // // 创建标签：then块、else块和合并块
     // int then_label = newLabel();
@@ -2242,6 +2262,12 @@ void IRgenerator::visit(WhileStmt &node)
         cond_reg_header = tmp;
         RegLLVMTypeMap[cond_reg_header] = LLVMType::I1;
     }
+    if(RegLLVMTypeMap[cond_reg_header] == LLVMType::FLOAT32) {
+        int tmp = newReg();
+        IRgenFcmpImmRight(B_body, FcmpCond::ONE, cond_reg_header, 0.0, tmp);
+        cond_reg_header = tmp;
+        RegLLVMTypeMap[cond_reg_header] = LLVMType::I1;
+    }
 
     IRgenBrCond(B_body, cond_reg_header, loop_body, loop_end);
     // 如果循环体末尾未结束，则跳回头部
@@ -2333,7 +2359,8 @@ void IRgenerator::visit(AssignStmt &node)
     // +++ 新增：类型检查与转换 +++
     int final_value_reg = -1;
     // if (lvalue_attr.type == BaseType::INT && rvalue_attr.type == BaseType::FLOAT) {
-    if (type == LLVMType::I32 && rvalue_attr.type == BaseType::FLOAT)
+    //if (type == LLVMType::I32 && rvalue_attr.type == BaseType::FLOAT)
+    if (type==LLVMType::I32 && RegLLVMTypeMap[rvalue_reg] == LLVMType::FLOAT32) 
     {
         // 浮点转整数
         final_value_reg = newReg();
@@ -2342,7 +2369,8 @@ void IRgenerator::visit(AssignStmt &node)
         type = LLVMType::I32; // 确保类型正确
     }
     // else if (lvalue_attr.type == BaseType::FLOAT && rvalue_attr.type == BaseType::INT) {
-    else if (type == LLVMType::FLOAT32 && rvalue_attr.type == BaseType::INT)
+    //else if (type == LLVMType::FLOAT32 && rvalue_attr.type == BaseType::INT)
+    else if (type==LLVMType::FLOAT32 && RegLLVMTypeMap[rvalue_reg] == LLVMType::I32) 
     {
         // 整数转浮点
         final_value_reg = newReg();
@@ -2372,9 +2400,25 @@ void IRgenerator::visit(ReturnStmt &node)
 
         if (ret_attr.IntInitVals.size() > 0)
         {
-            if (ret_type == LLVMType::FLOAT32)
-            {
-                IRgenRetImmFloat(getCurrentBlock(), ret_type, 0.0f);
+            if( ret_type==LLVMType::FLOAT32){
+                //IRgenRetImmFloat(getCurrentBlock(), ret_type, 0.0f);
+                // 处理浮点返回类型：将整数常量转换为浮点数
+                int temp_reg = newReg();
+                LLVMBlock B = getCurrentBlock();
+                
+                // 创建临时寄存器存储整数常量
+                B->InsertInstruction(1, 
+                    new ArithmeticInstruction(ADD, LLVMType::I32, 
+                        new ImmI32Operand(0), 
+                        new ImmI32Operand(ret_attr.IntInitVals[0]), 
+                        GetNewRegOperand(temp_reg)));
+                
+                // 将整数转换为浮点数
+                int float_reg = newReg();
+                IRgenSitofp(B, temp_reg, float_reg);
+                
+                // 返回浮点数
+                IRgenRetReg(B, ret_type, float_reg);
             }
             else
             {
@@ -2415,9 +2459,26 @@ void IRgenerator::visit(ReturnStmt &node)
                 IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
             }
         }
-        else
-        {
-            IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
+        else {
+            //IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
+            // 非函数调用、非常量、非左值：检查是否需要类型转换
+            int final_reg = ret_reg;
+            LLVMBlock B = getCurrentBlock();
+            
+            // 如果实际类型是整数但需要返回浮点
+            if (RegLLVMTypeMap[ret_reg] == I32 && ret_type == FLOAT32) {
+                int float_reg = newReg();
+                IRgenSitofp(B, ret_reg, float_reg);
+                final_reg = float_reg;
+            } 
+            // 如果实际类型是浮点但需要返回整数
+            else if (RegLLVMTypeMap[ret_reg] == FLOAT32 && ret_type == I32) {
+                int int_reg = newReg();
+                IRgenFptosi(B, ret_reg, int_reg);
+                final_reg = int_reg;
+            }
+            
+            IRgenRetReg(B, ret_type, final_reg);
         }
     }
     else
@@ -2546,18 +2607,50 @@ void IRgenerator::visit(UnaryExp &node)
         if (operand_attr.IntInitVals.size() > 0)
         {
             // 整数常量取反
+            // int val = operand_attr.IntInitVals[0];
+            // irgen_table.RegTable[result_reg].type = BaseType::INT;
+            // irgen_table.RegTable[result_reg].IntInitVals.push_back(!val);
+            // RegLLVMTypeMap[result_reg] = I1;
             int val = operand_attr.IntInitVals[0];
-            irgen_table.RegTable[result_reg].type = BaseType::INT;
-            irgen_table.RegTable[result_reg].IntInitVals.push_back(!val);
-            RegLLVMTypeMap[result_reg] = I1;
+            int result_val = !val;  // 计算取反结果
+    
+            // 创建新的寄存器并存储结果值
+            int temp_reg = newReg();
+            getCurrentBlock()->InsertInstruction(1, 
+                new ArithmeticInstruction(ADD, I1, 
+                new ImmI32Operand(0), 
+                new ImmI32Operand(result_val), 
+                GetNewRegOperand(temp_reg)));
+    
+            // 设置寄存器属性
+            irgen_table.RegTable[temp_reg].type = BaseType::INT;
+            irgen_table.RegTable[temp_reg].IntInitVals.push_back(result_val);
+            RegLLVMTypeMap[temp_reg] = I1;
+            result_reg=temp_reg;  // 更新当前最大寄存器
         }
         else if (operand_attr.FloatInitVals.size() > 0)
         {
             // 浮点数常量取反
+            // float val = operand_attr.FloatInitVals[0];
+            // irgen_table.RegTable[result_reg].type = BaseType::INT;
+            // irgen_table.RegTable[result_reg].IntInitVals.push_back(val == 0.0f ? 1 : 0);
+            // RegLLVMTypeMap[result_reg] = I1;
             float val = operand_attr.FloatInitVals[0];
-            irgen_table.RegTable[result_reg].type = BaseType::INT;
-            irgen_table.RegTable[result_reg].IntInitVals.push_back(val == 0.0f ? 1 : 0);
-            RegLLVMTypeMap[result_reg] = I1;
+            int result_val = (val == 0.0f) ? 1 : 0;  // 计算取反结果
+    
+            // 创建新的寄存器并存储结果值
+            int temp_reg = newReg();
+            getCurrentBlock()->InsertInstruction(1, 
+                new ArithmeticInstruction(ADD, I1, 
+                new ImmI32Operand(0), 
+                new ImmI32Operand(result_val), 
+                GetNewRegOperand(temp_reg)));
+    
+            // 设置寄存器属性
+            irgen_table.RegTable[temp_reg].type = BaseType::INT;
+            irgen_table.RegTable[temp_reg].IntInitVals.push_back(result_val);
+            RegLLVMTypeMap[temp_reg] = I1;
+            result_reg=temp_reg;  // 更新当前最大寄存器
         }
         else
         {
@@ -2622,7 +2715,6 @@ void IRgenerator::visit(BinaryExp &node)
     if (RegLLVMTypeMap[lhs_reg] == LLVMType::FLOAT32 || RegLLVMTypeMap[rhs_reg] == LLVMType::FLOAT32)
     {
         // 如果一个操作数是浮点类型，另一个是整数类型，将整数转换为浮点类型
-        std::cout << "1" << std::endl;
         RegLLVMTypeMap[result_reg] = LLVMType::FLOAT32;
         type = LLVMType::FLOAT32;
     }
@@ -2673,12 +2765,41 @@ void IRgenerator::visit(BinaryExp &node)
     bool is_lhs_pointer = isPointer(lhs_reg);
     bool is_rhs_pointer = isPointer(rhs_reg);
 
+    // Helper function to handle global constants
+    auto handleGlobalConstant = [&](const std::string& name, LLVMType type) -> Operand {
+        int value_reg = newReg();
+        VarAttribute attr;
+        SymbolInfo* sym = str_table.lookup(name);
+        if (sym) {
+            if (auto* basic_type = dynamic_cast<BasicType*>(sym->type.get())) {
+                attr.type = basic_type->type;
+                // 确保生成加载指令
+                IRgenLoad(getCurrentBlock(), type, value_reg, GetNewGlobalOperand(name));
+                RegLLVMTypeMap[value_reg] = type;
+            }
+        }
+        irgen_table.RegTable[value_reg] = attr;
+        return GetNewRegOperand(value_reg);
+    };
+
     // Handle LHS
     if (is_lhs_constant)
     {
-        if (type == LLVMType::FLOAT32)
-        {
-            lhs_operand = new ImmF32Operand(0.0f);
+        if(type==LLVMType::FLOAT32){
+            //lhs_operand = new ImmF32Operand(0.0f);
+            // 创建临时寄存器存储整数常量
+            int temp_reg = newReg();
+            getCurrentBlock()->InsertInstruction(1, 
+                new ArithmeticInstruction(ADD, LLVMType::I32, 
+                new ImmI32Operand(0), 
+                new ImmI32Operand(lhs_attr.IntInitVals[0]), 
+                GetNewRegOperand(temp_reg)));
+            
+            // 将整数转换为浮点数
+            int float_reg = newReg();
+            IRgenSitofp(getCurrentBlock(), temp_reg, float_reg);
+            lhs_operand = GetNewRegOperand(float_reg);
+            RegLLVMTypeMap[float_reg] = LLVMType::FLOAT32;
         }
         else
         {
@@ -2769,9 +2890,20 @@ void IRgenerator::visit(BinaryExp &node)
     // Handle RHS
     if (is_rhs_constant)
     {
-        if (type == LLVMType::FLOAT32)
-        {
-            rhs_operand = new ImmF32Operand(0.0f);
+        if(type==LLVMType::FLOAT32){
+            //rhs_operand = new ImmF32Operand(0.0f);
+            // 创建临时寄存器存储整数常量
+            int temp_reg = newReg();
+            getCurrentBlock()->InsertInstruction(1, 
+                new ArithmeticInstruction(ADD, LLVMType::I32, 
+                new ImmI32Operand(0), 
+                new ImmI32Operand(rhs_attr.IntInitVals[0]), 
+                GetNewRegOperand(temp_reg)));
+            
+            // 将整数转换为浮点数
+            int float_reg = newReg();
+            IRgenSitofp(getCurrentBlock(), temp_reg, float_reg);
+            rhs_operand = GetNewRegOperand(float_reg);
         }
         else
         {
@@ -3173,6 +3305,8 @@ void IRgenerator::visit(LVal &node)
                 {
                     irgen_table.RegTable[value_reg].FloatInitVals.push_back(*float_val);
                 }
+                RegLLVMTypeMap[value_reg] = Type2LLvm.at(basic_type->type);
+                IRgenLoad(getCurrentBlock(), Type2LLvm.at(basic_type->type), value_reg, GetNewGlobalOperand(node.name));
                 max_reg = value_reg;
             }
             else if (node.indices.empty())
@@ -3337,7 +3471,13 @@ void IRgenerator::visit(FunctionCall &node)
     std::vector<std::pair<enum LLVMType, Operand>> args;
     for (size_t i = 0; i < node.arguments.size(); i++)
     {
-        require_address = false;
+        if(param_types[i]==BaseType::STRING){
+            require_address = true; // 如果是指针类型，设置为需要地址
+        }
+        else{
+            require_address = false;
+        }
+        // require_address = false;
         node.arguments[i]->accept(*this);
         int arg_reg = max_reg;
         VarAttribute arg_attr = irgen_table.RegTable[arg_reg];
@@ -3349,11 +3489,31 @@ void IRgenerator::visit(FunctionCall &node)
         Operand arg_operand;
         if (arg_attr.IntInitVals.size() > 0)
         {
-            arg_operand = new ImmI32Operand(arg_attr.IntInitVals[0]);
+            // arg_operand = new ImmI32Operand(arg_attr.IntInitVals[0]);
+            if( expected_type == BaseType::FLOAT) {
+                // 如果期望类型是浮点数，但实际是整数，则需要转换
+                int float_reg = newReg();
+                IRgenSitofp(getCurrentBlock(), arg_reg, float_reg);
+                arg_operand = GetNewRegOperand(float_reg);
+                RegLLVMTypeMap[float_reg] = FLOAT32; // 更新类型映射
+            } else {
+                arg_operand = new ImmI32Operand(arg_attr.IntInitVals[0]);
+                RegLLVMTypeMap[arg_reg] = I32; // 确保整数类型正确
+            }
         }
         else if (arg_attr.FloatInitVals.size() > 0)
         {
-            arg_operand = new ImmF32Operand(arg_attr.FloatInitVals[0]);
+            // arg_operand = new ImmF32Operand(arg_attr.FloatInitVals[0]);
+            if (expected_type == BaseType::INT) {
+                // 如果期望类型是整数，但实际是浮点数，则需要转换
+                int int_reg = newReg();
+                IRgenFptosi(getCurrentBlock(), arg_reg, int_reg);
+                arg_operand = GetNewRegOperand(int_reg);
+                RegLLVMTypeMap[int_reg] = I32; // 更新类型映射
+            } else {
+                RegLLVMTypeMap[arg_reg] = FLOAT32; // 确保浮点类型正确
+                arg_operand = new ImmF32Operand(arg_attr.FloatInitVals[0]);
+            }
         }
         else if (isPointer(arg_reg))
         {
@@ -3365,6 +3525,10 @@ void IRgenerator::visit(FunctionCall &node)
         {
             arg_operand = GetNewRegOperand(arg_reg);
         }
+        int value_reg = newReg();
+        value_reg = convertToType(getCurrentBlock(), arg_reg, llvm_type);
+        RegLLVMTypeMap[value_reg] = llvm_type; // 更新寄存器类型映射
+        arg_operand = GetNewRegOperand(value_reg);
         args.push_back(std::make_pair(llvm_type, arg_operand));
     }
 
