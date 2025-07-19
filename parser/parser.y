@@ -1,7 +1,3 @@
-%code requires {
-    #include "../include/ast.h"
-}
-
 %{
 #include <cstdio>
 #include <cstdlib>
@@ -131,10 +127,15 @@ std::unique_ptr<T> make_unique_from_ptr(T* ptr) {
 %nonassoc ELSE
 
 %%
+
+// ===--------------------------------------------------------------------=== //
+// 完整语法规则
+// ===--------------------------------------------------------------------=== //
+
 // CompUnit → CompUnit (Decl | FuncDef) | (Decl | FuncDef)
 CompUnit: 
     CompItemList {
-        $$ = new CompUnit(line_number);
+        $$ = new CompUnit({line_number});
         $$->items = std::move(*$1);
         delete $1;
         $1 = nullptr;
@@ -185,7 +186,7 @@ ConstDecl:
         }
         delete $3;
         $3 = nullptr;
-        $$ = new ConstDecl($2, std::move(defs), line_number);
+        $$ = new ConstDecl($2, std::move(defs), {line_number});
     }
     ;
 
@@ -207,13 +208,13 @@ ConstDef:
     IDENT ASSIGN ConstInitVal {
         std::vector<std::unique_ptr<Exp>> dims;
         $$ = new ConstDef(std::string($1), std::move(dims), 
-                         make_unique_from_ptr($3), line_number);
+                         make_unique_from_ptr($3), {line_number});
         free($1);
         $3 = nullptr; 
     }
     | IDENT ArrayDims ASSIGN ConstInitVal {
         $$ = new ConstDef(std::string($1), std::move(*$2), 
-                         make_unique_from_ptr($4), line_number);
+                         make_unique_from_ptr($4), {line_number});
         free($1);
         delete $2;
         $2 = nullptr;
@@ -230,7 +231,7 @@ VarDecl:
         }
         delete $2;
         $2 = nullptr;
-        $$ = new VarDecl($1, std::move(defs), line_number);
+        $$ = new VarDecl($1, std::move(defs), {line_number});
     }
     ;
 
@@ -252,12 +253,12 @@ VarDef:
     IDENT {
         std::vector<std::unique_ptr<Exp>> dims;
         std::optional<std::unique_ptr<InitVal>> init;
-        $$ = new VarDef(std::string($1), std::move(dims), std::move(init), line_number);
+        $$ = new VarDef(std::string($1), std::move(dims), std::move(init), {line_number});
         free($1);
     }
     | IDENT ArrayDims {
         std::optional<std::unique_ptr<InitVal>> init;
-        $$ = new VarDef(std::string($1), std::move(*$2), std::move(init), line_number);
+        $$ = new VarDef(std::string($1), std::move(*$2), std::move(init), {line_number});
         free($1);
         delete $2;
         $2 = nullptr;
@@ -265,13 +266,13 @@ VarDef:
     | IDENT ASSIGN InitVal {
         std::vector<std::unique_ptr<Exp>> dims;
         std::optional<std::unique_ptr<InitVal>> init = make_unique_from_ptr($3);
-        $$ = new VarDef(std::string($1), std::move(dims), std::move(init), line_number);
+        $$ = new VarDef(std::string($1), std::move(dims), std::move(init), {line_number});
         free($1);
         $3 = nullptr; 
     }
     | IDENT ArrayDims ASSIGN InitVal {
         std::optional<std::unique_ptr<InitVal>> init = make_unique_from_ptr($4);
-        $$ = new VarDef(std::string($1), std::move(*$2), std::move(init), line_number);
+        $$ = new VarDef(std::string($1), std::move(*$2), std::move(init), {line_number});
         free($1);
         delete $2;
         $2 = nullptr;
@@ -297,7 +298,7 @@ FuncDef:
     VOID IDENT LPAREN RPAREN Block {
         std::vector<std::unique_ptr<FuncFParam>> params;
         $$ = new FuncDef(BaseType::VOID, std::string($2), std::move(params), 
-                        make_unique_from_ptr($5), line_number);
+                        make_unique_from_ptr($5), {line_number});
         free($2);
         $5 = nullptr; 
     }
@@ -309,14 +310,14 @@ FuncDef:
         delete $4;
         $4 = nullptr;
         $$ = new FuncDef(BaseType::VOID, std::string($2), std::move(params), 
-                        make_unique_from_ptr($6), line_number);
+                        make_unique_from_ptr($6), {line_number});
         free($2);
         $6 = nullptr; 
     }
     | BType IDENT LPAREN RPAREN Block {
         std::vector<std::unique_ptr<FuncFParam>> params;
         $$ = new FuncDef($1, std::string($2), std::move(params), 
-                        make_unique_from_ptr($5), line_number);
+                        make_unique_from_ptr($5), {line_number});
         free($2);
         $5 = nullptr; 
     }
@@ -328,7 +329,7 @@ FuncDef:
         delete $4;
         $4 = nullptr;
         $$ = new FuncDef($1, std::string($2), std::move(params), 
-                        make_unique_from_ptr($6), line_number);
+                        make_unique_from_ptr($6), {line_number});
         free($2);
         $6 = nullptr; 
     }
@@ -351,16 +352,16 @@ FuncFParams:
 FuncFParam:
     BType IDENT {
         std::vector<std::unique_ptr<Exp>> dims;
-        $$ = new FuncFParam($1, std::string($2), std::move(dims), line_number);
+        $$ = new FuncFParam($1, std::string($2), false, std::move(dims), {line_number});
         free($2);
     }
     | BType IDENT LBRACKET RBRACKET {
         std::vector<std::unique_ptr<Exp>> dims;
-        $$ = new FuncFParam($1, std::string($2), std::move(dims), line_number);
+        $$ = new FuncFParam($1, std::string($2), true, std::move(dims), {line_number});
         free($2);
     }
     | BType IDENT LBRACKET RBRACKET ArrayDims {
-        $$ = new FuncFParam($1, std::string($2), std::move(*$5), line_number);
+        $$ = new FuncFParam($1, std::string($2), true, std::move(*$5), {line_number});
         free($2);
         delete $5;
         $5 = nullptr;
@@ -370,10 +371,10 @@ FuncFParam:
 // Block → '{' { BlockItem } '}'
 Block:
     LBRACE RBRACE {
-        $$ = new Block(line_number);
+        $$ = new Block({line_number});
     }
     | LBRACE BlockItemList RBRACE {
-        $$ = new Block(line_number);
+        $$ = new Block({line_number});
         $$->items = std::move(*$2);
         delete $2;
         $2 = nullptr;
@@ -426,7 +427,7 @@ Stmt:
 // LVal '=' Exp ';'
 AssignStmt:
     LVal ASSIGN Exp SEMI {
-        $$ = new AssignStmt(make_unique_from_ptr($1), make_unique_from_ptr($3), line_number);
+        $$ = new AssignStmt(make_unique_from_ptr($1), make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -436,11 +437,11 @@ AssignStmt:
 ExpStmt:
     SEMI {
         std::optional<std::unique_ptr<Exp>> expr;
-        $$ = new ExpStmt(std::move(expr), line_number);
+        $$ = new ExpStmt(std::move(expr), {line_number});
     }
     | Exp SEMI {
         std::optional<std::unique_ptr<Exp>> expr = make_unique_from_ptr($1);
-        $$ = new ExpStmt(std::move(expr), line_number);
+        $$ = new ExpStmt(std::move(expr), {line_number});
         $1 = nullptr; 
     }
     ;
@@ -450,14 +451,14 @@ IfStmt:
     IF LPAREN Cond RPAREN Stmt %prec LOWER_THAN_ELSE {
         std::optional<std::unique_ptr<Stmt>> else_stmt;
         $$ = new IfStmt(make_unique_from_ptr($3), make_unique_from_ptr($5), 
-                       std::move(else_stmt), line_number);
+                       std::move(else_stmt), {line_number});
         $3 = nullptr; 
         $5 = nullptr; 
     }
     | IF LPAREN Cond RPAREN Stmt ELSE Stmt {
         std::optional<std::unique_ptr<Stmt>> else_stmt = make_unique_from_ptr($7);
         $$ = new IfStmt(make_unique_from_ptr($3), make_unique_from_ptr($5), 
-                       std::move(else_stmt), line_number);
+                       std::move(else_stmt), {line_number});
         $3 = nullptr; 
         $5 = nullptr; 
         $7 = nullptr; 
@@ -467,7 +468,7 @@ IfStmt:
 // 'while' '(' Cond ')' Stmt
 WhileStmt:
     WHILE LPAREN Cond RPAREN Stmt {
-        $$ = new WhileStmt(make_unique_from_ptr($3), make_unique_from_ptr($5), line_number);
+        $$ = new WhileStmt(make_unique_from_ptr($3), make_unique_from_ptr($5), {line_number});
         $3 = nullptr;
         $5 = nullptr;  
     }
@@ -476,14 +477,14 @@ WhileStmt:
 // 'break' ';'
 BreakStmt:
     BREAK SEMI {
-        $$ = new BreakStmt(line_number);
+        $$ = new BreakStmt({line_number});
     }
     ;
 
 // 'continue' ';'
 ContinueStmt:
     CONTINUE SEMI {
-        $$ = new ContinueStmt(line_number);
+        $$ = new ContinueStmt({line_number});
     }
     ;
 
@@ -491,11 +492,11 @@ ContinueStmt:
 ReturnStmt:
     RETURN SEMI {
         std::optional<std::unique_ptr<Exp>> expr;
-        $$ = new ReturnStmt(std::move(expr), line_number);
+        $$ = new ReturnStmt(std::move(expr), {line_number});
     }
     | RETURN Exp SEMI {
         std::optional<std::unique_ptr<Exp>> expr = make_unique_from_ptr($2);
-        $$ = new ReturnStmt(std::move(expr), line_number);
+        $$ = new ReturnStmt(std::move(expr), {line_number});
         $2 = nullptr; 
     }
     ;
@@ -515,7 +516,7 @@ LOrExp:
     LAndExp { $$ = $1; }
     | LOrExp OR LAndExp {
         $$ = new BinaryExp(BinaryOp::OR, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -526,7 +527,7 @@ LAndExp:
     EqExp { $$ = $1; }
     | LAndExp AND EqExp {
         $$ = new BinaryExp(BinaryOp::AND, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -537,13 +538,13 @@ EqExp:
     RelExp { $$ = $1; }
     | EqExp EQ RelExp {
         $$ = new BinaryExp(BinaryOp::EQ, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | EqExp NE RelExp {
         $$ = new BinaryExp(BinaryOp::NEQ, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -554,25 +555,25 @@ RelExp:
     AddExp { $$ = $1; }
     | RelExp LT AddExp {
         $$ = new BinaryExp(BinaryOp::LT, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | RelExp GT AddExp {
         $$ = new BinaryExp(BinaryOp::GT, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | RelExp LEQ AddExp {
         $$ = new BinaryExp(BinaryOp::LTE, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | RelExp GEQ AddExp {
         $$ = new BinaryExp(BinaryOp::GTE, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -583,13 +584,13 @@ AddExp:
     MulExp { $$ = $1; }
     | AddExp PLUS MulExp {
         $$ = new BinaryExp(BinaryOp::ADD, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | AddExp MINUS MulExp {
         $$ = new BinaryExp(BinaryOp::SUB, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -600,19 +601,19 @@ MulExp:
     UnaryExp { $$ = $1; }
     | MulExp MUL UnaryExp {
         $$ = new BinaryExp(BinaryOp::MUL, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | MulExp DIV UnaryExp {
         $$ = new BinaryExp(BinaryOp::DIV, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
     | MulExp MOD UnaryExp {
         $$ = new BinaryExp(BinaryOp::MOD, make_unique_from_ptr($1), 
-                          make_unique_from_ptr($3), line_number);
+                          make_unique_from_ptr($3), {line_number});
         $1 = nullptr; 
         $3 = nullptr; 
     }
@@ -622,15 +623,15 @@ MulExp:
 UnaryExp:
     PrimaryExp { $$ = $1; }
     | PLUS UnaryExp %prec UPLUS {
-        $$ = new UnaryExp(UnaryOp::PLUS, make_unique_from_ptr($2), line_number);
+        $$ = new UnaryExp(UnaryOp::PLUS, make_unique_from_ptr($2), {line_number});
         $2 = nullptr; 
     }
     | MINUS UnaryExp %prec UMINUS {
-        $$ = new UnaryExp(UnaryOp::MINUS, make_unique_from_ptr($2), line_number);
+        $$ = new UnaryExp(UnaryOp::MINUS, make_unique_from_ptr($2), {line_number});
         $2 = nullptr; 
     }
     | NOT UnaryExp %prec UNOT {
-        $$ = new UnaryExp(UnaryOp::NOT, make_unique_from_ptr($2), line_number);
+        $$ = new UnaryExp(UnaryOp::NOT, make_unique_from_ptr($2), {line_number});
         $2 = nullptr; 
     }
     ;
@@ -639,7 +640,7 @@ UnaryExp:
 FunctionCall:
     IDENT LPAREN RPAREN {
         std::vector<std::unique_ptr<Exp>> args;
-        $$ = new FunctionCall(std::string($1), std::move(args), line_number);
+        $$ = new FunctionCall(std::string($1), std::move(args), {line_number});
         free($1);
     }
     | IDENT LPAREN FuncRParams RPAREN {
@@ -649,7 +650,7 @@ FunctionCall:
         }
         delete $3; 
         $3 = nullptr;
-        $$ = new FunctionCall(std::string($1), std::move(args), line_number);
+        $$ = new FunctionCall(std::string($1), std::move(args), {line_number});
         free($1);
     }
     ;
@@ -684,11 +685,11 @@ PrimaryExp:
 LVal:
     IDENT {
         std::vector<std::unique_ptr<Exp>> indices;
-        $$ = new LVal(std::string($1), std::move(indices), line_number);
+        $$ = new LVal(std::string($1), std::move(indices), {line_number});
         free($1);
     }
     | IDENT ArrayIndices {
-        $$ = new LVal(std::string($1), std::move(*$2), line_number);
+        $$ = new LVal(std::string($1), std::move(*$2), {line_number});
         free($1);
         delete $2;
         $2 = nullptr; 
@@ -711,10 +712,10 @@ ArrayIndices:
 // Number → IntConst | FloatConst
 Number:
     INT_CONST {
-        $$ = new Number($1, line_number);
+        $$ = new Number($1, {line_number});
     }
     | FLOAT_CONST {
-        $$ = new Number($1, line_number);
+        $$ = new Number($1, {line_number});
     }
     ;
 
@@ -728,19 +729,18 @@ StringLiteral:
 
 // ConstExp → AddExp
 ConstExp:
-    AddExp { $$ = $1;
-             $$->is_const = true;}
+    AddExp { $$ = $1; }
     ;
 
 // InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
 InitVal:
     Exp {
-        $$ = new InitVal(make_unique_from_ptr($1), line_number);
+        $$ = new InitVal(make_unique_from_ptr($1), {line_number});
         $1 = nullptr;
     }
     | LBRACE RBRACE {
         std::vector<std::unique_ptr<InitVal>> inits;
-        $$ = new InitVal(std::move(inits), line_number);
+        $$ = new InitVal(std::move(inits), {line_number});
     }
     | LBRACE InitValList RBRACE {
         std::vector<std::unique_ptr<InitVal>> inits;
@@ -749,7 +749,7 @@ InitVal:
         }
         delete $2;
         $2 = nullptr;
-        $$ = new InitVal(std::move(inits), line_number);
+        $$ = new InitVal(std::move(inits), {line_number});
     }
     ;
 

@@ -1,12 +1,41 @@
 #pragma once
 
-#include "types.h"
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
+
+// ===--------------------------------------------------------------------=== //
+// 辅助定义
+// ===--------------------------------------------------------------------=== //
+
+struct SourceLocation {
+  int line = 0;
+};
+
+enum class BaseType { INT, FLOAT, VOID, STRING };
+enum class UnaryOp { PLUS, MINUS, NOT };
+enum class BinaryOp {
+  ADD,
+  SUB,
+  MUL,
+  DIV,
+  MOD,
+  GT,
+  GTE,
+  LT,
+  LTE,
+  EQ,
+  NEQ,
+  AND,
+  OR
+};
+
+// ===--------------------------------------------------------------------=== //
+// AST节点前向声明 - 按文法命名
+// ===--------------------------------------------------------------------=== //
 
 class ASTVisitor;
 class SyntaxNode;
@@ -38,6 +67,10 @@ class Number;
 class StringLiteral;
 class ConstInitVal;
 
+// ===--------------------------------------------------------------------=== //
+// 访问者模式接口
+// ===--------------------------------------------------------------------=== //
+
 class ASTVisitor {
 public:
   virtual ~ASTVisitor() = default;
@@ -66,10 +99,14 @@ public:
   virtual void visit(ConstInitVal &node) = 0;
 };
 
+// ===--------------------------------------------------------------------=== //
+// AST节点基类
+// ===--------------------------------------------------------------------=== //
+
 class SyntaxNode {
 public:
-  int line;
-  explicit SyntaxNode(int l) : line(l) {}
+  SourceLocation location;
+  explicit SyntaxNode(SourceLocation loc = {}) : location(loc) {}
   virtual ~SyntaxNode() = default;
   virtual void accept(ASTVisitor &visitor) = 0;
 };
@@ -82,23 +119,22 @@ class Stmt : public SyntaxNode {
 };
 class Exp : public SyntaxNode {
   using SyntaxNode::SyntaxNode;
-
-public:
-  std::optional<std::variant<int, float, std::string>> value;
-  std::unique_ptr<Type> type;
-  bool is_const = false;
 };
 class InitValBase : public SyntaxNode {
 public:
   using SyntaxNode::SyntaxNode;
 };
 
+// ===--------------------------------------------------------------------=== //
+// 具体AST节点定义
+// ===--------------------------------------------------------------------=== //
+
 // CompUnit → CompUnit (Decl | FuncDef) | (Decl | FuncDef)
 class CompUnit : public SyntaxNode {
 public:
   std::vector<std::variant<std::unique_ptr<Decl>, std::unique_ptr<FuncDef>>>
       items;
-  explicit CompUnit(int loc) : SyntaxNode(loc) {}
+  explicit CompUnit(SourceLocation loc = {}) : SyntaxNode(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -107,7 +143,8 @@ class ConstDecl : public Decl {
 public:
   BaseType type;
   std::vector<std::unique_ptr<ConstDef>> definitions;
-  ConstDecl(BaseType type, std::vector<std::unique_ptr<ConstDef>> defs, int loc)
+  ConstDecl(BaseType type, std::vector<std::unique_ptr<ConstDef>> defs,
+            SourceLocation loc = {})
       : Decl(loc), type(type), definitions(std::move(defs)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -116,12 +153,12 @@ public:
 class ConstDef : public SyntaxNode {
 public:
   std::string name;
-  std::vector<std::unique_ptr<Exp>> dimensions;
+  std::vector<std::unique_ptr<Exp>> array_dimensions;
   std::unique_ptr<ConstInitVal> initializer;
   ConstDef(std::string name, std::vector<std::unique_ptr<Exp>> dims,
-           std::unique_ptr<ConstInitVal> init, int loc)
-      : SyntaxNode(loc), name(std::move(name)), dimensions(std::move(dims)),
-        initializer(std::move(init)) {}
+           std::unique_ptr<ConstInitVal> init, SourceLocation loc = {})
+      : SyntaxNode(loc), name(std::move(name)),
+        array_dimensions(std::move(dims)), initializer(std::move(init)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -130,7 +167,8 @@ class VarDecl : public Decl {
 public:
   BaseType type;
   std::vector<std::unique_ptr<VarDef>> definitions;
-  VarDecl(BaseType type, std::vector<std::unique_ptr<VarDef>> defs, int loc)
+  VarDecl(BaseType type, std::vector<std::unique_ptr<VarDef>> defs,
+          SourceLocation loc = {})
       : Decl(loc), type(type), definitions(std::move(defs)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -142,7 +180,7 @@ public:
   std::vector<std::unique_ptr<Exp>> array_dimensions;
   std::optional<std::unique_ptr<InitVal>> initializer;
   VarDef(std::string name, std::vector<std::unique_ptr<Exp>> dims,
-         std::optional<std::unique_ptr<InitVal>> init, int loc)
+         std::optional<std::unique_ptr<InitVal>> init, SourceLocation loc = {})
       : SyntaxNode(loc), name(std::move(name)),
         array_dimensions(std::move(dims)), initializer(std::move(init)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
@@ -157,7 +195,7 @@ public:
   std::unique_ptr<Block> body;
   FuncDef(BaseType ret_type, std::string name,
           std::vector<std::unique_ptr<FuncFParam>> params,
-          std::unique_ptr<Block> body, int loc)
+          std::unique_ptr<Block> body, SourceLocation loc = {})
       : SyntaxNode(loc), return_type(ret_type), name(std::move(name)),
         parameters(std::move(params)), body(std::move(body)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
@@ -168,11 +206,12 @@ class FuncFParam : public SyntaxNode {
 public:
   BaseType type;
   std::string name;
+  bool is_array_pointer;
   std::vector<std::unique_ptr<Exp>> array_dimensions;
-  FuncFParam(BaseType type, std::string name,
-             std::vector<std::unique_ptr<Exp>> dims, int loc)
+  FuncFParam(BaseType type, std::string name, bool is_array_ptr,
+             std::vector<std::unique_ptr<Exp>> dims, SourceLocation loc = {})
       : SyntaxNode(loc), type(type), name(std::move(name)),
-        array_dimensions(std::move(dims)) {}
+        is_array_pointer(is_array_ptr), array_dimensions(std::move(dims)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -181,7 +220,7 @@ public:
 class Block : public Stmt {
 public:
   std::vector<std::variant<std::unique_ptr<Stmt>, std::unique_ptr<Decl>>> items;
-  explicit Block(int loc) : Stmt(loc) {}
+  explicit Block(SourceLocation loc = {}) : Stmt(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -192,7 +231,8 @@ public:
   std::unique_ptr<Stmt> then_statement;
   std::optional<std::unique_ptr<Stmt>> else_statement;
   IfStmt(std::unique_ptr<Exp> cond, std::unique_ptr<Stmt> then_stmt,
-         std::optional<std::unique_ptr<Stmt>> else_stmt, int loc)
+         std::optional<std::unique_ptr<Stmt>> else_stmt,
+         SourceLocation loc = {})
       : Stmt(loc), condition(std::move(cond)),
         then_statement(std::move(then_stmt)),
         else_statement(std::move(else_stmt)) {}
@@ -204,7 +244,8 @@ class WhileStmt : public Stmt {
 public:
   std::unique_ptr<Exp> condition;
   std::unique_ptr<Stmt> body;
-  WhileStmt(std::unique_ptr<Exp> cond, std::unique_ptr<Stmt> body, int loc)
+  WhileStmt(std::unique_ptr<Exp> cond, std::unique_ptr<Stmt> body,
+            SourceLocation loc = {})
       : Stmt(loc), condition(std::move(cond)), body(std::move(body)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -213,7 +254,8 @@ public:
 class ExpStmt : public Stmt {
 public:
   std::optional<std::unique_ptr<Exp>> expression;
-  explicit ExpStmt(std::optional<std::unique_ptr<Exp>> expr, int loc)
+  explicit ExpStmt(std::optional<std::unique_ptr<Exp>> expr,
+                   SourceLocation loc = {})
       : Stmt(loc), expression(std::move(expr)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -224,7 +266,8 @@ public:
   std::unique_ptr<LVal> lvalue;
   std::unique_ptr<Exp> rvalue;
 
-  AssignStmt(std::unique_ptr<LVal> lval, std::unique_ptr<Exp> rval, int loc)
+  AssignStmt(std::unique_ptr<LVal> lval, std::unique_ptr<Exp> rval,
+             SourceLocation loc = {})
       : Stmt(loc), lvalue(std::move(lval)), rvalue(std::move(rval)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -233,7 +276,8 @@ public:
 class ReturnStmt : public Stmt {
 public:
   std::optional<std::unique_ptr<Exp>> expression;
-  explicit ReturnStmt(std::optional<std::unique_ptr<Exp>> expr, int loc)
+  explicit ReturnStmt(std::optional<std::unique_ptr<Exp>> expr,
+                      SourceLocation loc = {})
       : Stmt(loc), expression(std::move(expr)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -241,14 +285,14 @@ public:
 // 'break' ';'
 class BreakStmt : public Stmt {
 public:
-  explicit BreakStmt(int loc) : Stmt(loc) {}
+  explicit BreakStmt(SourceLocation loc = {}) : Stmt(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 // 'continue' ';'
 class ContinueStmt : public Stmt {
 public:
-  explicit ContinueStmt(int loc) : Stmt(loc) {}
+  explicit ContinueStmt(SourceLocation loc = {}) : Stmt(loc) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -257,7 +301,7 @@ class UnaryExp : public Exp {
 public:
   UnaryOp op;
   std::unique_ptr<Exp> operand;
-  UnaryExp(UnaryOp op, std::unique_ptr<Exp> operand, int loc)
+  UnaryExp(UnaryOp op, std::unique_ptr<Exp> operand, SourceLocation loc = {})
       : Exp(loc), op(op), operand(std::move(operand)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -269,7 +313,7 @@ public:
   std::unique_ptr<Exp> lhs;
   std::unique_ptr<Exp> rhs;
   BinaryExp(BinaryOp op, std::unique_ptr<Exp> lhs, std::unique_ptr<Exp> rhs,
-            int loc)
+            SourceLocation loc = {})
       : Exp(loc), op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -279,7 +323,8 @@ class LVal : public Exp {
 public:
   std::string name;
   std::vector<std::unique_ptr<Exp>> indices;
-  LVal(std::string name, std::vector<std::unique_ptr<Exp>> indices, int loc)
+  LVal(std::string name, std::vector<std::unique_ptr<Exp>> indices = {},
+       SourceLocation loc = {})
       : Exp(loc), name(std::move(name)), indices(std::move(indices)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -290,7 +335,7 @@ public:
   std::string function_name;
   std::vector<std::unique_ptr<Exp>> arguments;
   FunctionCall(std::string name, std::vector<std::unique_ptr<Exp>> args,
-               int loc)
+               SourceLocation loc = {})
       : Exp(loc), function_name(std::move(name)), arguments(std::move(args)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -298,18 +343,18 @@ public:
 // Number → IntConst | floatConst
 class Number : public Exp {
 public:
-  std::variant<int, float> v;
-  explicit Number(int val, int loc) : Exp(loc), v(val) {}
-  explicit Number(float val, int loc) : Exp(loc), v(val) {}
+  std::variant<int, float> value;
+  explicit Number(int val, SourceLocation loc = {}) : Exp(loc), value(val) {}
+  explicit Number(float val, SourceLocation loc = {}) : Exp(loc), value(val) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
 // StringLiteral → StringConst
 class StringLiteral : public Exp {
 public:
-  std::string v;
-  explicit StringLiteral(std::string val, int loc)
-      : Exp(loc), v(std::move(val)) {}
+  std::string value;
+  explicit StringLiteral(std::string val, SourceLocation loc = {})
+      : Exp(loc), value(std::move(val)) {}
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -319,12 +364,16 @@ public:
   // 单个表达式或初始化列表
   std::variant<std::unique_ptr<Exp>, std::vector<std::unique_ptr<ConstInitVal>>>
       value;
-  std::vector<std::variant<int, float, std::string>> v;
-  explicit ConstInitVal(std::unique_ptr<Exp> expr, int loc)
+
+  // 单个表达式构造
+  explicit ConstInitVal(std::unique_ptr<Exp> expr, SourceLocation loc = {})
       : InitValBase(loc), value(std::move(expr)) {}
+
+  // 初始化列表构造
   explicit ConstInitVal(std::vector<std::unique_ptr<ConstInitVal>> inits,
-                        int loc)
+                        SourceLocation loc = {})
       : InitValBase(loc), value(std::move(inits)) {}
+
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -334,9 +383,83 @@ public:
   // 单个表达式或初始化列表
   std::variant<std::unique_ptr<Exp>, std::vector<std::unique_ptr<InitVal>>>
       value;
-  explicit InitVal(std::unique_ptr<Exp> expr, int loc)
+
+  // 单个表达式构造
+  explicit InitVal(std::unique_ptr<Exp> expr, SourceLocation loc = {})
       : InitValBase(loc), value(std::move(expr)) {}
-  explicit InitVal(std::vector<std::unique_ptr<InitVal>> inits, int loc)
+
+  // 初始化列表构造
+  explicit InitVal(std::vector<std::unique_ptr<InitVal>> inits,
+                   SourceLocation loc = {})
       : InitValBase(loc), value(std::move(inits)) {}
+
   void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
+
+// ===--------------------------------------------------------------------=== //
+// 通用工具函数 - 减少代码重复
+// ===--------------------------------------------------------------------=== //
+
+// 枚举到字符串转换函数 - 统一在此处定义，避免重复
+namespace AST {
+inline std::string baseTypeToString(BaseType type) {
+  switch (type) {
+  case BaseType::INT:
+    return "int";
+  case BaseType::FLOAT:
+    return "float";
+  case BaseType::VOID:
+    return "void";
+  case BaseType::STRING:
+    return "string";
+  default:
+    return "unknown";
+  }
+}
+
+inline std::string unaryOpToString(UnaryOp op) {
+  switch (op) {
+  case UnaryOp::PLUS:
+    return "+";
+  case UnaryOp::MINUS:
+    return "-";
+  case UnaryOp::NOT:
+    return "!";
+  default:
+    return "?";
+  }
+}
+
+inline std::string binaryOpToString(BinaryOp op) {
+  switch (op) {
+  case BinaryOp::ADD:
+    return "+";
+  case BinaryOp::SUB:
+    return "-";
+  case BinaryOp::MUL:
+    return "*";
+  case BinaryOp::DIV:
+    return "/";
+  case BinaryOp::MOD:
+    return "%";
+  case BinaryOp::GT:
+    return ">";
+  case BinaryOp::GTE:
+    return ">=";
+  case BinaryOp::LT:
+    return "<";
+  case BinaryOp::LTE:
+    return "<=";
+  case BinaryOp::EQ:
+    return "==";
+  case BinaryOp::NEQ:
+    return "!=";
+  case BinaryOp::AND:
+    return "&&";
+  case BinaryOp::OR:
+    return "||";
+  default:
+    return "?";
+  }
+}
+} // namespace AST

@@ -1,16 +1,36 @@
-#include "../include/astprinter.h"
+#include "astprinter.h"
 #include <iomanip>
 #include <variant>
 
 ASTPrinter::ASTPrinter(std::ostream &output) : out(output) {}
 
+void ASTPrinter::setShowTypes(bool show) { show_types = show; }
+
+void ASTPrinter::setShowLocations(bool show) { show_locations = show; }
+
 void ASTPrinter::print_indent() {
-  for (int i = 0; i < indent_level; ++i)
+  for (int i = 0; i < indent_level; ++i) {
     out << "  ";
+  }
 }
 
 void ASTPrinter::print_location(const SyntaxNode &node) {
-  out << " @L" << node.line;
+  if (show_locations && node.location.line > 0) {
+    out << " @L" << node.location.line;
+  }
+}
+
+// 使用AST命名空间中的通用函数，减少代码重复
+std::string ASTPrinter::type_to_string(BaseType type) {
+  return AST::baseTypeToString(type);
+}
+
+std::string ASTPrinter::unary_op_to_string(UnaryOp op) {
+  return AST::unaryOpToString(op);
+}
+
+std::string ASTPrinter::binary_op_to_string(BinaryOp op) {
+  return AST::binaryOpToString(op);
 }
 
 void ASTPrinter::visit(CompUnit &node) {
@@ -22,6 +42,7 @@ void ASTPrinter::visit(CompUnit &node) {
 
   for (size_t i = 0; i < node.items.size(); ++i) {
     print_indent();
+    out << "[" << i << "] ";
     std::visit([this](auto &ptr) { ptr->accept(*this); }, node.items[i]);
   }
 
@@ -32,13 +53,16 @@ void ASTPrinter::visit(CompUnit &node) {
 
 void ASTPrinter::visit(ConstDecl &node) {
   out << "ConstDecl";
-  out << "<" << baseTypeToString(node.type) << ">";
+  if (show_types) {
+    out << "<" << type_to_string(node.type) << ">";
+  }
   print_location(node);
   out << " {" << std::endl;
   indent_level++;
 
   for (size_t i = 0; i < node.definitions.size(); ++i) {
     print_indent();
+    out << "[" << i << "] ";
     node.definitions[i]->accept(*this);
   }
 
@@ -50,9 +74,10 @@ void ASTPrinter::visit(ConstDecl &node) {
 void ASTPrinter::visit(ConstDef &node) {
   out << "ConstDef(\"" << node.name << "\")";
 
-  if (!node.dimensions.empty()) {
+  // 显示数组维度信息
+  if (!node.array_dimensions.empty()) {
     out << "[";
-    for (size_t i = 0; i < node.dimensions.size(); ++i) {
+    for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
       if (i > 0)
         out << ",";
       out << "dim" << i;
@@ -65,13 +90,14 @@ void ASTPrinter::visit(ConstDef &node) {
   indent_level++;
 
   // 打印数组维度详细信息
-  if (!node.dimensions.empty()) {
+  if (!node.array_dimensions.empty()) {
     print_indent();
     out << "dimensions: [" << std::endl;
     indent_level++;
-    for (size_t i = 0; i < node.dimensions.size(); ++i) {
+    for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
       print_indent();
-      node.dimensions[i]->accept(*this);
+      out << "[" << i << "] ";
+      node.array_dimensions[i]->accept(*this);
     }
     indent_level--;
     print_indent();
@@ -91,13 +117,16 @@ void ASTPrinter::visit(ConstDef &node) {
 
 void ASTPrinter::visit(VarDecl &node) {
   out << "VarDecl";
-  out << "<" << baseTypeToString(node.type) << ">";
+  if (show_types) {
+    out << "<" << type_to_string(node.type) << ">";
+  }
   print_location(node);
   out << " {" << std::endl;
   indent_level++;
 
   for (size_t i = 0; i < node.definitions.size(); ++i) {
     print_indent();
+    out << "[" << i << "] ";
     node.definitions[i]->accept(*this);
   }
 
@@ -109,6 +138,7 @@ void ASTPrinter::visit(VarDecl &node) {
 void ASTPrinter::visit(VarDef &node) {
   out << "VarDef(\"" << node.name << "\")";
 
+  // 显示数组维度信息
   if (!node.array_dimensions.empty()) {
     out << "[";
     for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
@@ -123,12 +153,14 @@ void ASTPrinter::visit(VarDef &node) {
   out << " {" << std::endl;
   indent_level++;
 
+  // 打印数组维度详细信息
   if (!node.array_dimensions.empty()) {
     print_indent();
     out << "dimensions: [" << std::endl;
     indent_level++;
     for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
       print_indent();
+      out << "[" << i << "] ";
       node.array_dimensions[i]->accept(*this);
     }
     indent_level--;
@@ -149,7 +181,9 @@ void ASTPrinter::visit(VarDef &node) {
 
 void ASTPrinter::visit(FuncDef &node) {
   out << "FuncDef(\"" << node.name << "\")";
-  out << "<" << baseTypeToString(node.return_type) << ">";
+  if (show_types) {
+    out << "<" << type_to_string(node.return_type) << ">";
+  }
   print_location(node);
   out << " {" << std::endl;
   indent_level++;
@@ -160,6 +194,7 @@ void ASTPrinter::visit(FuncDef &node) {
     indent_level++;
     for (size_t i = 0; i < node.parameters.size(); ++i) {
       print_indent();
+      out << "[" << i << "] ";
       node.parameters[i]->accept(*this);
     }
     indent_level--;
@@ -180,16 +215,22 @@ void ASTPrinter::visit(FuncDef &node) {
 
 void ASTPrinter::visit(FuncFParam &node) {
   out << "FuncFParam(\"" << node.name << "\")";
-  out << "<" << baseTypeToString(node.type) << ">";
+  if (show_types) {
+    out << "<" << type_to_string(node.type) << ">";
+  }
 
-  if (!node.array_dimensions.empty()) {
-    out << "[";
-    for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
-      if (i > 0)
-        out << ",";
-      out << "dim" << i;
+  // 显示数组信息
+  if (node.is_array_pointer) {
+    out << " array_ptr";
+    if (!node.array_dimensions.empty()) {
+      out << "[";
+      for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
+        if (i > 0)
+          out << ",";
+        out << "dim" << i;
+      }
+      out << "]";
     }
-    out << "]";
   }
 
   print_location(node);
@@ -203,6 +244,7 @@ void ASTPrinter::visit(FuncFParam &node) {
     indent_level++;
     for (size_t i = 0; i < node.array_dimensions.size(); ++i) {
       print_indent();
+      out << "[" << i << "] ";
       node.array_dimensions[i]->accept(*this);
     }
     indent_level--;
@@ -224,6 +266,7 @@ void ASTPrinter::visit(Block &node) {
 
   for (size_t i = 0; i < node.items.size(); ++i) {
     print_indent();
+    out << "[" << i << "] ";
     std::visit([this](auto &ptr) { ptr->accept(*this); }, node.items[i]);
   }
 
@@ -354,7 +397,7 @@ void ASTPrinter::visit(ContinueStmt &node) {
 }
 
 void ASTPrinter::visit(UnaryExp &node) {
-  out << "UnaryExp(" << unaryOpToString(node.op) << ")";
+  out << "UnaryExp(" << unary_op_to_string(node.op) << ")";
   print_location(node);
   if (node.operand) {
     out << " {" << std::endl;
@@ -369,7 +412,7 @@ void ASTPrinter::visit(UnaryExp &node) {
 }
 
 void ASTPrinter::visit(BinaryExp &node) {
-  out << "BinaryExp(" << binaryOpToString(node.op) << ")";
+  out << "BinaryExp(" << binary_op_to_string(node.op) << ")";
   print_location(node);
   out << " {" << std::endl;
   indent_level++;
@@ -394,6 +437,7 @@ void ASTPrinter::visit(BinaryExp &node) {
 void ASTPrinter::visit(LVal &node) {
   out << "LVal(\"" << node.name << "\")";
 
+  // 显示数组索引信息
   if (!node.indices.empty()) {
     out << "[";
     for (size_t i = 0; i < node.indices.size(); ++i) {
@@ -415,6 +459,7 @@ void ASTPrinter::visit(LVal &node) {
     indent_level++;
     for (size_t i = 0; i < node.indices.size(); ++i) {
       print_indent();
+      out << "[" << i << "] ";
       node.indices[i]->accept(*this);
     }
     indent_level--;
@@ -440,6 +485,7 @@ void ASTPrinter::visit(FunctionCall &node) {
     indent_level++;
     for (size_t i = 0; i < node.arguments.size(); ++i) {
       print_indent();
+      out << "[" << i << "] ";
       node.arguments[i]->accept(*this);
     }
     indent_level--;
@@ -455,14 +501,14 @@ void ASTPrinter::visit(FunctionCall &node) {
 
 void ASTPrinter::visit(Number &node) {
   out << "Number(";
-  std::visit([this](auto &&arg) { out << arg; }, node.v);
+  std::visit([this](auto &&arg) { out << arg; }, node.value);
   out << ")";
   print_location(node);
   out << std::endl;
 }
 
 void ASTPrinter::visit(StringLiteral &node) {
-  out << "StringLiteral(\"" << node.v << "\")";
+  out << "StringLiteral(\"" << node.value << "\")";
   print_location(node);
   out << std::endl;
 }
@@ -486,6 +532,7 @@ void ASTPrinter::visit(InitVal &node) {
           indent_level++;
           for (size_t i = 0; i < val.size(); ++i) {
             print_indent();
+            out << "[" << i << "] ";
             val[i]->accept(*this);
           }
           indent_level--;
@@ -519,6 +566,7 @@ void ASTPrinter::visit(ConstInitVal &node) {
           indent_level++;
           for (size_t i = 0; i < val.size(); ++i) {
             print_indent();
+            out << "[" << i << "] ";
             val[i]->accept(*this);
           }
           indent_level--;

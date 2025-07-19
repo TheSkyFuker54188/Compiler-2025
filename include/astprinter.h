@@ -5,16 +5,28 @@
 #include <memory>
 #include <string>
 
+/**
+ * AST打印器类 - 支持多种输出格式的AST可视化工具
+ */
 class ASTPrinter : public ASTVisitor {
 private:
   std::ostream &out;
   int indent_level = 0;
+  bool show_types = true;
+  bool show_locations = false;
 
   void print_indent();
   void print_location(const SyntaxNode &node);
+  std::string type_to_string(BaseType type);
+  std::string unary_op_to_string(UnaryOp op);
+  std::string binary_op_to_string(BinaryOp op);
 
 public:
   explicit ASTPrinter(std::ostream &output = std::cout);
+
+  // 配置选项
+  void setShowTypes(bool show);
+  void setShowLocations(bool show);
 
   // 访问者模式接口实现
   void visit(CompUnit &node) override;
