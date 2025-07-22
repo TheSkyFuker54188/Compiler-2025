@@ -132,6 +132,13 @@ public:
   int current_reg_counter = -1;
   int max_label = 1;
   int now_label = 1;
+  int before_label = 1;
+  int cond_label = 1;
+  int body_label = 1;
+  int end_label = 1;
+  // std::vector<std::vector<std::pair<std::string, int>>> scope_restore_list;
+  //   std::vector<std::map<std::string, int>> scope_name_to_reg_stack;
+  
 
 private:
   bool require_address = false; // Flag to indicate if address is needed
@@ -167,7 +174,7 @@ public:
   void IRgenStore(LLVMBlock B, LLVMType type, Operand value, Operand ptr);
   void IRgenBRUnCond(LLVMBlock B, int dst_label);
   void IRgenBrCond(LLVMBlock B, int cond_reg, int true_label, int false_label);
-  void IRgenAlloca(LLVMBlock B, LLVMType type, int reg);
+  void IRgenAlloca(LLVMType type, int reg);
   void IRgenLoad(LLVMBlock B, LLVMType type, int result_reg, Operand ptr);
   void visit(CompUnit &node) override;
   void visit(ConstDecl &node) override;
