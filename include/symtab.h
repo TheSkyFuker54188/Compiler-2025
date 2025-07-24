@@ -159,7 +159,7 @@ public:
     }
   }
 
-private:
+public:
   // 作用域栈，每个作用域是一个符号表
   std::vector<Scope> scopes;
 
