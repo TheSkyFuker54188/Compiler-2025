@@ -150,6 +150,7 @@ public:
   int newLabel();
   bool isGlobalScope();
   bool isPointer(int reg);
+  void flattenInitVal(InitVal* init, std::vector<std::variant<int, float>>& result, BaseType type);
   std::optional<int> evaluateConstExpression(Exp *expr);
   std::optional<float> evaluateConstExpressionFloat(Exp *expr);
   std::optional<double> evaluateGlobalInitializer(InitVal *init);
