@@ -45,6 +45,15 @@ ASTPRINTER_SRC = $(SRC_DIR)/astprinter.cpp
 SEMANTIC_SRC = $(SRC_DIR)/semantic.cpp
 IRGENERATE_SRC = $(SRC_DIR)/irgenerate.cpp
 
+# 机器码IR模块源文件
+MACHINE_IR_SRC = $(SRC_DIR)/machine_ir.cpp
+
+# GlobalISel指令选择器模块源文件
+GLOBAL_ISEL_SRC = $(SRC_DIR)/global_isel.cpp
+
+# 线性扫描寄存器分配器模块源文件
+LINEAR_SCAN_SRC = $(SRC_DIR)/linear_scan_allocator.cpp
+
 # 寄存器分配模块源文件
 REGALLOC_SRC = $(SRC_DIR)/regalloc.cpp
 
@@ -56,20 +65,17 @@ MAIN_OBJ = $(BUILD_DIR)/main.o
 ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
 SEMANTIC_OBJ = $(BUILD_DIR)/semantic.o
 IRGENERATE_OBJ = $(BUILD_DIR)/irgenerate.o
+MACHINE_IR_OBJ = $(BUILD_DIR)/machine_ir.o
+GLOBAL_ISEL_OBJ = $(BUILD_DIR)/global_isel.o
+LINEAR_SCAN_OBJ = $(BUILD_DIR)/linear_scan_allocator.o
 LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
-# 寄存器分配模块目标文件
-REGALLOC_OBJ = $(BUILD_DIR)/regalloc.o
-
-# 指令选择器模块目标文件
-INSTRUCTION_SELECTOR_OBJ = $(BUILD_DIR)/instruction_selector.o
-
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(LEX_OBJ) $(PARSER_OBJ) $(REGALLOC_OBJ) $(INSTRUCTION_SELECTOR_OBJ)
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(MACHINE_IR_OBJ) $(GLOBAL_ISEL_OBJ) $(LINEAR_SCAN_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
 
 # 可执行文件
-TARGET = sys-compiler
+TARGET = compiler
 
 # ===--------------------------------------------------------------------=== #
 # 主要目标
@@ -110,6 +116,21 @@ $(IRGENERATE_OBJ): $(IRGENERATE_SRC) $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/ast.h
 	@echo "Compiling irgenerate.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+# 机器码IR编译
+$(MACHINE_IR_OBJ): $(MACHINE_IR_SRC) $(INCLUDE_DIR)/machine_ir.h | $(BUILD_DIR)
+	@echo "Compiling machine_ir.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# GlobalISel指令选择器编译
+$(GLOBAL_ISEL_OBJ): $(GLOBAL_ISEL_SRC) $(INCLUDE_DIR)/global_isel.h $(INCLUDE_DIR)/machine_ir.h $(INCLUDE_DIR)/instruction.h $(INCLUDE_DIR)/block.h | $(BUILD_DIR)
+	@echo "Compiling global_isel.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# 线性扫描寄存器分配器编译
+$(LINEAR_SCAN_OBJ): $(LINEAR_SCAN_SRC) $(INCLUDE_DIR)/linear_scan_allocator.h $(INCLUDE_DIR)/machine_ir.h | $(BUILD_DIR)
+	@echo "Compiling linear_scan_allocator.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 # 词法分析器编译
 $(LEX_OBJ): $(LEX_SRC) $(PARSER_HDR) | $(BUILD_DIR)
 	@echo "Compiling lexer..."
@@ -118,16 +139,6 @@ $(LEX_OBJ): $(LEX_SRC) $(PARSER_HDR) | $(BUILD_DIR)
 # 语法分析器编译
 $(PARSER_OBJ): $(PARSER_SRC) | $(BUILD_DIR)
 	@echo "Compiling parser..."
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# 寄存器分配模块编译规则
-$(REGALLOC_OBJ): $(REGALLOC_SRC) $(INCLUDE_DIR)/regalloc.h | $(BUILD_DIR)
-	@echo "Compiling regalloc.cpp..."
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# 指令选择器模块编译规则
-$(INSTRUCTION_SELECTOR_OBJ): $(INSTRUCTION_SELECTOR_SRC) $(INCLUDE_DIR)/instruction_selector.h | $(BUILD_DIR)
-	@echo "Compiling instruction_selector.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ===--------------------------------------------------------------------=== #
@@ -190,8 +201,13 @@ clean:
 	rm -f $(TARGET)
 	rm -f tests/h_functional/*.ll
 	rm -f tests/functional/*.ll
-	rm -f tests/h_functional/*.c
-	rm -f tests/functional/*.c
+	rm -f tests/h_functional/*.ast
+	rm -f tests/functional/*.ast
+	rm -f tests/h_functional/*.mir
+	rm -f tests/functional/*.mir
+	rm -f tests/h_functional/*.s
+	rm -f tests/functional/*.s
+	rm -rf test_logs/
 
 # 深度清理（包括生成的词法分析器和语法分析器）
 distclean: clean

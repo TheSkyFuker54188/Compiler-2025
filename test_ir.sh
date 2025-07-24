@@ -16,7 +16,7 @@ failed=0
 for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./sys-compiler --ast "$file"; then
+        if ./compiler --ast "$file"; then
             echo "通过"
             ((passed++))
         else
@@ -32,7 +32,7 @@ done
 for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./sys-compiler --ast "$file"; then
+        if ./compiler --ast "$file"; then
             echo "通过"
             ((passed++))
         else
@@ -60,7 +60,7 @@ for file in tests/h_functional/*.ll; do
     echo "验证 $file ... " >> test_logs/ir_validation.log
     
     # 运行验证并将输出重定向到日志文件
-    if opt -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    if opt -p=verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
         echo "测试 $file 通过" | tee -a test_logs/ir_validation.log
         ((true++))
     else
@@ -82,7 +82,7 @@ for file in tests/functional/*.ll; do
     echo "验证 $file ... " >> test_logs/ir_validation.log
     
     # 运行验证并将输出重定向到日志文件
-    if opt -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    if opt -p=verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
         echo "测试 $file 通过" | tee -a test_logs/ir_validation.log
         ((true++))
     else

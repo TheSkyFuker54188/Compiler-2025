@@ -1,10 +1,4 @@
-#include "semantic.h"
-#include <iostream>
-#include <sstream>
-
-// ===--------------------------------------------------------------------=== //
-// 主要分析接口
-// ===--------------------------------------------------------------------=== //
+#include "include/semantic.h"
 
 bool SemanticAnalyzer::analyze(CompUnit &root) {
   // 清空之前的分析结果

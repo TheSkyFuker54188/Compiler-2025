@@ -3,7 +3,7 @@ build/
 .vscode/
 
 # 编译器生成的可执行文件
-sys-compiler
+compiler
 
 # 自动生成的语法分析器和词法分析器文件
 parser/parser.tab.c
@@ -15,3 +15,11 @@ tests/h_functional/*.ll
 
 tests/functional/*.ast
 tests/h_functional/*.ast
+
+tests/functional/*.mir
+tests/h_functional/*.mir
+
+tests/functional/*.s
+tests/h_functional/*.s
+
+test_logs/

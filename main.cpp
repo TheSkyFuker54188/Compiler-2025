@@ -2,13 +2,13 @@
 #include "include/astprinter.h"
 #include "include/block.h"
 #include "include/semantic.h"
-#include "include/instruction_selector.h"
+#include "include/global_isel.h"
+#include "include/machine_ir.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
-// #include "include/instruction.h"
 
 // 外部变量声明
 extern std::unique_ptr<CompUnit> root;
@@ -123,19 +123,35 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
   }
 
-  // 第五阶段：生成汇编代码（可选）
+  // 第五阶段：生成汇编代码
   if (generate_asm && semantic_success) {
     if (verbose) {
       std::cout << "阶段4: 汇编代码生成..." << std::endl;
     }
 
-    std::string asm_filename = output_file.empty() ? 
-        filename.substr(0, filename.find_last_of('.')) + ".s" : output_file;
-    
+    // 如果还没有生成IR，先生成IR
+    if (!generate_ir) {
+      IRgenerator irgen;
+      root->accept(irgen);
+      ir = irgen.getLLVMIR();
+    }
+
+    // 使用GlobalISel将LLVM IR转换为机器码IR
+    GlobalISel globalISel(ir);
+    MachineModule& machineModule = globalISel.selectInstructions();
+
+    // 确定输出文件名
+    std::string asm_filename;
+    if (!output_file.empty()) {
+      asm_filename = output_file;
+    } else {
+      asm_filename = filename.substr(0, filename.find_last_of('.')) + ".s";
+    }
+
+    // 输出汇编代码
     std::ofstream asm_file(asm_filename);
     if (asm_file.is_open()) {
-      riscv::InstructionSelector selector(asm_file);
-      selector.selectInstructions(ir);
+      machineModule.print(asm_file);
       asm_file.close();
       if (verbose) {
         std::cout << "汇编代码已生成到 " << asm_filename << std::endl;
@@ -162,13 +178,6 @@ void showUsage(const char *program_name) {
   std::cout << "  -o <file>        指定输出文件名" << std::endl;
   std::cout << "  --ast            打印AST结构" << std::endl;
   std::cout << "  --no-semantic    跳过语义分析" << std::endl;
-  std::cout << "\nExample:" << std::endl;
-  std::cout << "  " << program_name << " program.sy           # 完整编译"
-            << std::endl;
-  std::cout << "  " << program_name << " -S -o test.s test.sy # 生成汇编代码"
-            << std::endl;
-  std::cout << "  " << program_name << " --ast test.sy        # 编译并显示AST"
-            << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -177,11 +186,11 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  bool quiet_mode = false;
+  bool quiet_mode = true;
   bool enable_semantic = true;
   bool print_ast = false;
   bool generate_ir = true;
-  bool generate_asm = false;
+  bool generate_asm = true;
   std::string filename;
   std::string output_file;
 
