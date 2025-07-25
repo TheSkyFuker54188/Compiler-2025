@@ -30,7 +30,7 @@ int cur_col_number = 1;
 bool compileFile(const std::string &filename, bool verbose = true,
                  bool enable_semantic = true, bool print_ast = false,
                  bool generate_ir = true, bool generate_asm = false,
-                 const std::string &output_file = "") {
+                 bool optimize = false, const std::string &output_file = "") {
   // 重置全局变量
   line_number = 1;
   col_number = 1;
@@ -111,24 +111,24 @@ bool compileFile(const std::string &filename, bool verbose = true,
     ir = irgen.getLLVMIR();
 
     // 输出原始IR到文件
-    std::string ir_filename =
-        filename.substr(0, filename.find_last_of('.')) + ".ll";
-    std::ofstream ir_file(ir_filename);
-    if (ir_file.is_open()) {
-      ir.printIR(ir_file);
-      ir_file.close();
-      if (verbose) {
-        std::cout << "中间代码已生成到 " << ir_filename << std::endl;
-      }
-    } else {
-      std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
-      return false;
-    }
+    // std::string ir_filename =
+    //     filename.substr(0, filename.find_last_of('.')) + ".ll";
+    // std::ofstream ir_file(ir_filename);
+    // if (ir_file.is_open()) {
+    //   ir.printIR(ir_file);
+    //   ir_file.close();
+    //   if (verbose) {
+    //     std::cout << "中间代码已生成到 " << ir_filename << std::endl;
+    //   }
+    // } else {
+    //   std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
+    //   return false;
+    // }
   }
 
   // 第五阶段：SSA变换和优化
   LLVMIR optimized_ir = ir;
-  if (semantic_success && !ir.function_block_map.empty()) {
+  if (semantic_success && !ir.function_block_map.empty() && optimize) {
     if (verbose) {
       std::cout << "阶段4: SSA变换和优化..." << std::endl;
     }
@@ -142,16 +142,16 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
 
     // 输出SSA形式的IR到文件（可选）
-    std::string ssa_ir_filename =
-        filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
-    std::ofstream ssa_ir_file(ssa_ir_filename);
-    if (ssa_ir_file.is_open()) {
-      ssa_ir.printIR(ssa_ir_file);
-      ssa_ir_file.close();
-      if (verbose) {
-        std::cout << "SSA中间代码已生成到 " << ssa_ir_filename << std::endl;
-      }
-    }
+    // std::string ssa_ir_filename =
+    //     filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
+    // std::ofstream ssa_ir_file(ssa_ir_filename);
+    // if (ssa_ir_file.is_open()) {
+    //   ssa_ir.printIR(ssa_ir_file);
+    //   ssa_ir_file.close();
+    //   if (verbose) {
+    //     std::cout << "SSA中间代码已生成到 " << ssa_ir_filename << std::endl;
+    //   }
+    // }
 
     // SSA优化
     SSAOptimizer ssa_optimizer;
@@ -170,17 +170,17 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
 
     // 输出优化后的IR到文件
-    std::string opt_ir_filename =
-        filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
-    std::ofstream opt_ir_file(opt_ir_filename);
-    if (opt_ir_file.is_open()) {
-      optimized_ir.printIR(opt_ir_file);
-      opt_ir_file.close();
-      if (verbose) {
-        std::cout << "优化后的中间代码已生成到 " << opt_ir_filename
-                  << std::endl;
-      }
-    }
+    // std::string opt_ir_filename =
+    //     filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
+    // std::ofstream opt_ir_file(opt_ir_filename);
+    // if (opt_ir_file.is_open()) {
+    //   optimized_ir.printIR(opt_ir_file);
+    //   opt_ir_file.close();
+    //   if (verbose) {
+    //     std::cout << "优化后的中间代码已生成到 " << opt_ir_filename
+    //               << std::endl;
+    //   }
+    // }
   }
 
   // 第五阶段：汇编代码生成
@@ -199,18 +199,18 @@ bool compileFile(const std::string &filename, bool verbose = true,
       
       if (isel_success) {
         // 输出生成的MIR到文件（InstructionSelect阶段的状态）
-        std::string mir_filename =
-            filename.substr(0, filename.find_last_of('.')) + ".mir";
-        std::ofstream mir_file(mir_filename);
-        if (mir_file.is_open()) {
-          mir_module.printMIR(mir_file);  // 使用MIR专用格式
-          mir_file.close();
-          if (verbose) {
-            std::cout << "机器中间代码已生成到 " << mir_filename << std::endl;
-          }
-        } else {
-          std::cerr << "无法创建MIR文件 " << mir_filename << std::endl;
-        }
+        // std::string mir_filename =
+        //     filename.substr(0, filename.find_last_of('.')) + ".mir";
+        // std::ofstream mir_file(mir_filename);
+        // if (mir_file.is_open()) {
+        //   mir_module.printMIR(mir_file);  // 使用MIR专用格式
+        //   mir_file.close();
+        //   if (verbose) {
+        //     std::cout << "机器中间代码已生成到 " << mir_filename << std::endl;
+        //   }
+        // } else {
+        //   std::cerr << "无法创建MIR文件 " << mir_filename << std::endl;
+        // }
         
         // 第二步：运行完整流程用于生成汇编文件
         bool full_success = global_isel.runGlobalISel(ir, asm_module);
@@ -221,6 +221,8 @@ bool compileFile(const std::string &filename, bool verbose = true,
           }
           
           // 输出生成的RISC-V汇编代码到文件（使用代码发射器）
+          // std::string asm_filename =
+          //   filename.substr(0, filename.find_last_of('.')) + ".s";
           std::ofstream asm_file(output_file);
           if (asm_file.is_open()) {
             RISCVCodeEmitter emitter(asm_file);  // 使用专门的代码发射器
@@ -262,6 +264,7 @@ void showUsage(const char *program_name) {
   std::cout << "  -o <file>        指定输出文件名" << std::endl;
   std::cout << "  --ast            打印AST结构" << std::endl;
   std::cout << "  --no-semantic    跳过语义分析" << std::endl;
+  std::cout << "  --O1             优化" << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -275,6 +278,7 @@ int main(int argc, char *argv[]) {
   bool print_ast = false;
   bool generate_ir = true;
   bool generate_asm = true;
+  bool optimize = false;
   std::string filename;
   std::string output_file;
 
@@ -300,6 +304,8 @@ int main(int argc, char *argv[]) {
       print_ast = true;
     } else if (arg == "--no-semantic") {
       enable_semantic = false;
+    } else if (arg == "--O1") {
+      optimize = true;
     } else if (arg[0] == '-') {
       std::cerr << "未知选项: " << arg << std::endl;
       showUsage(argv[0]);
@@ -322,7 +328,7 @@ int main(int argc, char *argv[]) {
 
   // 编译文件
   bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast,
-                             generate_ir, generate_asm, output_file);
+                             generate_ir, generate_asm, optimize, output_file);
 
   return success ? 0 : 1;
 }
