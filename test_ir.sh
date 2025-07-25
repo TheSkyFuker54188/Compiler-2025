@@ -136,7 +136,7 @@ process_dir() {
         
         # 在日志文件中记录结果
         echo "实际退出代码: $actual_exit_code" >> test_logs/execution_test.log
-        //echo "期望退出代码: $expected_exit_code" >> test_logs/execution_test.log
+        #echo "期望退出代码: $expected_exit_code" >> test_logs/execution_test.log
         
         # 比较结果
         if [ "$actual_exit_code" -eq "$expected_exit_code" ]; then

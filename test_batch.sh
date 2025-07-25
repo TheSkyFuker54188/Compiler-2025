@@ -9,7 +9,8 @@ failed=0
 for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./compiler "$file"; then
+        # 添加30秒超时
+        if timeout 30s ./compiler "$file" > /dev/null 2>&1; then
             echo "$file 通过"
             ((passed++))
         else

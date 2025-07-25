@@ -24,7 +24,7 @@ TEST_FILES=(
     "tests/functional/11_add2.sy"
     "tests/functional/21_if_test2.sy"
     "tests/functional/25_while_if.sy"
-    "tests/functional/test_ssa_optimization.sy"
+    "tests/functional/100_test_ssa_optimization.sy"
 )
 
 # 创建测试结果目录
@@ -66,13 +66,13 @@ for test_file in "${TEST_FILES[@]}"; do
         
         # 统计原始IR指令数
         if [ -f "${test_file%.sy}.ll" ]; then
-            original_count=$(grep -c "^\s*%" "${test_file%.sy}.ll" 2>/dev/null || echo "0")
+            original_count=$(grep -c "^\s*%" "${test_file%.sy}.ll" 2>/dev/null | tr -d '\n' || echo "0")
             echo "    原始IR指令数: $original_count"
         fi
         
         # 统计SSA形式IR指令数
         if [ -f "${test_file%.sy}_ssa.ll" ]; then
-            ssa_count=$(grep -c "^\s*%" "${test_file%.sy}_ssa.ll" 2>/dev/null || echo "0")
+            ssa_count=$(grep -c "^\s*%" "${test_file%.sy}_ssa.ll" 2>/dev/null | tr -d '\n' || echo "0")
             echo "    SSA形式IR指令数: $ssa_count"
             echo "    ✓ SSA形式IR文件已生成"
         else
@@ -81,7 +81,7 @@ for test_file in "${TEST_FILES[@]}"; do
         
         # 统计优化后IR指令数
         if [ -f "${test_file%.sy}_opt.ll" ]; then
-            opt_count=$(grep -c "^\s*%" "${test_file%.sy}_opt.ll" 2>/dev/null || echo "0")
+            opt_count=$(grep -c "^\s*%" "${test_file%.sy}_opt.ll" 2>/dev/null | tr -d '\n' || echo "0")
             echo "    优化后IR指令数: $opt_count"
             echo "    ✓ 优化后IR文件已生成"
             

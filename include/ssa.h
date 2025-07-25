@@ -32,11 +32,30 @@ private:
     std::unordered_map<int, int> idom;                             // 直接支配者
   };
 
+  // 控制流图
+  struct ControlFlowGraph {
+    std::unordered_map<int, std::vector<int>> predecessors; // 前驱
+    std::unordered_map<int, std::vector<int>> successors;   // 后继
+  };
+
   // 变量重命名信息
   struct RenameInfo {
     std::unordered_map<std::string, std::vector<int>> var_stack; // 变量版本栈
     std::unordered_map<std::string, int> var_counter; // 变量版本计数器
   };
+
+  /**
+   * 构建控制流图
+   */
+  ControlFlowGraph
+  buildControlFlowGraph(const std::map<int, LLVMBlock> &blocks);
+
+  /**
+   * 基于控制流图计算支配信息
+   */
+  DominanceInfo
+  computeDominanceInfoFromCFG(const std::map<int, LLVMBlock> &blocks,
+                              const ControlFlowGraph &cfg);
 
   /**
    * 计算控制流图的支配信息
@@ -60,6 +79,19 @@ private:
    */
   std::unordered_set<std::string>
   collectDefinedVariables(const std::map<int, LLVMBlock> &blocks);
+
+  /**
+   * 计算直接支配者
+   */
+  void computeImmediateDominators(DominanceInfo &info,
+                                  const std::map<int, LLVMBlock> &blocks);
+
+  /**
+   * 计算支配边界
+   */
+  void computeDominanceFrontier(DominanceInfo &info,
+                                const std::map<int, LLVMBlock> &blocks,
+                                const ControlFlowGraph &cfg);
 
   /**
    * 获取基本块的前驱

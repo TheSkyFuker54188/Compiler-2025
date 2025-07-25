@@ -1,12 +1,11 @@
 #include "include/ast.h"
 #include "include/astprinter.h"
 #include "include/block.h"
-#include "include/semantic.h"
-#include "include/ssa.h"
-#include "include/semantic.h"
+#include "include/code_emitter.h"
 #include "include/globalisel.h"
 #include "include/riscv_mir.h"
-#include "include/code_emitter.h"
+#include "include/semantic.h"
+#include "include/ssa.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -111,19 +110,19 @@ bool compileFile(const std::string &filename, bool verbose = true,
     ir = irgen.getLLVMIR();
 
     // 输出原始IR到文件
-    // std::string ir_filename =
-    //     filename.substr(0, filename.find_last_of('.')) + ".ll";
-    // std::ofstream ir_file(ir_filename);
-    // if (ir_file.is_open()) {
-    //   ir.printIR(ir_file);
-    //   ir_file.close();
-    //   if (verbose) {
-    //     std::cout << "中间代码已生成到 " << ir_filename << std::endl;
-    //   }
-    // } else {
-    //   std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
-    //   return false;
-    // }
+    std::string ir_filename =
+        filename.substr(0, filename.find_last_of('.')) + ".ll";
+    std::ofstream ir_file(ir_filename);
+    if (ir_file.is_open()) {
+      ir.printIR(ir_file);
+      ir_file.close();
+      if (verbose) {
+        std::cout << "中间代码已生成到 " << ir_filename << std::endl;
+      }
+    } else {
+      std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
+      return false;
+    }
   }
 
   // 第五阶段：SSA变换和优化
@@ -142,16 +141,16 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
 
     // 输出SSA形式的IR到文件（可选）
-    // std::string ssa_ir_filename =
-    //     filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
-    // std::ofstream ssa_ir_file(ssa_ir_filename);
-    // if (ssa_ir_file.is_open()) {
-    //   ssa_ir.printIR(ssa_ir_file);
-    //   ssa_ir_file.close();
-    //   if (verbose) {
-    //     std::cout << "SSA中间代码已生成到 " << ssa_ir_filename << std::endl;
-    //   }
-    // }
+    std::string ssa_ir_filename =
+        filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
+    std::ofstream ssa_ir_file(ssa_ir_filename);
+    if (ssa_ir_file.is_open()) {
+      ssa_ir.printIR(ssa_ir_file);
+      ssa_ir_file.close();
+      if (verbose) {
+        std::cout << "SSA中间代码已生成到 " << ssa_ir_filename << std::endl;
+      }
+    }
 
     // SSA优化
     SSAOptimizer ssa_optimizer;
@@ -170,17 +169,17 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
 
     // 输出优化后的IR到文件
-    // std::string opt_ir_filename =
-    //     filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
-    // std::ofstream opt_ir_file(opt_ir_filename);
-    // if (opt_ir_file.is_open()) {
-    //   optimized_ir.printIR(opt_ir_file);
-    //   opt_ir_file.close();
-    //   if (verbose) {
-    //     std::cout << "优化后的中间代码已生成到 " << opt_ir_filename
-    //               << std::endl;
-    //   }
-    // }
+    std::string opt_ir_filename =
+        filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
+    std::ofstream opt_ir_file(opt_ir_filename);
+    if (opt_ir_file.is_open()) {
+      optimized_ir.printIR(opt_ir_file);
+      opt_ir_file.close();
+      if (verbose) {
+        std::cout << "优化后的中间代码已生成到 " << opt_ir_filename
+                  << std::endl;
+      }
+    }
   }
 
   // 第五阶段：汇编代码生成
@@ -191,12 +190,13 @@ bool compileFile(const std::string &filename, bool verbose = true,
 
     try {
       MachineModule mir_module;
-      MachineModule asm_module;  // 用于汇编生成的模块
+      MachineModule asm_module; // 用于汇编生成的模块
       RISCVGlobalISel global_isel;
-      
+
       // 第一步：运行到InstructionSelect阶段，用于生成MIR文件
-      bool isel_success = global_isel.runGlobalISelToInstructionSelect(optimized_ir, mir_module);
-      
+      bool isel_success = global_isel.runGlobalISelToInstructionSelect(
+          optimized_ir, mir_module);
+
       if (isel_success) {
         // 输出生成的MIR到文件（InstructionSelect阶段的状态）
         // std::string mir_filename =
@@ -206,33 +206,37 @@ bool compileFile(const std::string &filename, bool verbose = true,
         //   mir_module.printMIR(mir_file);  // 使用MIR专用格式
         //   mir_file.close();
         //   if (verbose) {
-        //     std::cout << "机器中间代码已生成到 " << mir_filename << std::endl;
+        //     std::cout << "机器中间代码已生成到 " << mir_filename <<
+        //     std::endl;
         //   }
         // } else {
         //   std::cerr << "无法创建MIR文件 " << mir_filename << std::endl;
         // }
-        
+
         // 第二步：运行完整流程用于生成汇编文件
         bool full_success = global_isel.runGlobalISel(ir, asm_module);
-        
+
         if (full_success) {
           if (verbose) {
             std::cout << "GlobalISel指令选择成功!" << std::endl;
           }
-          
+
           // 输出生成的RISC-V汇编代码到文件（使用代码发射器）
-          // std::string asm_filename =
-          //   filename.substr(0, filename.find_last_of('.')) + ".s";
-          std::ofstream asm_file(output_file);
+          std::string asm_filename =
+              output_file.empty()
+                  ? filename.substr(0, filename.find_last_of('.')) + ".s"
+                  : output_file;
+          std::ofstream asm_file(asm_filename);
           if (asm_file.is_open()) {
-            RISCVCodeEmitter emitter(asm_file);  // 使用专门的代码发射器
+            RISCVCodeEmitter emitter(asm_file); // 使用专门的代码发射器
             emitter.emitModule(asm_module);
             asm_file.close();
             if (verbose) {
-              std::cout << "RISC-V汇编代码已生成" << std::endl;
+              std::cout << "RISC-V汇编代码已生成到 " << asm_filename
+                        << std::endl;
             }
           } else {
-            std::cerr << "无法创建汇编文件 " << std::endl;
+            std::cerr << "无法创建汇编文件 " << asm_filename << std::endl;
           }
         } else {
           std::cerr << "GlobalISel完整流程执行失败!" << std::endl;
@@ -242,7 +246,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
         std::cerr << "GlobalISel指令选择失败!" << std::endl;
         return false;
       }
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       std::cerr << "GlobalISel执行出错: " << e.what() << std::endl;
       return false;
     }
@@ -278,7 +282,7 @@ int main(int argc, char *argv[]) {
   bool print_ast = false;
   bool generate_ir = true;
   bool generate_asm = true;
-  bool optimize = false;
+  bool optimize = true; // 默认启用优化
   std::string filename;
   std::string output_file;
 
