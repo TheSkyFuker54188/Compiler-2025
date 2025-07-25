@@ -1,4 +1,4 @@
-#include "include/semantic.h"
+#include "../include/semantic.h"
 
 bool SemanticAnalyzer::analyze(CompUnit &root) {
   // 清空之前的分析结果
