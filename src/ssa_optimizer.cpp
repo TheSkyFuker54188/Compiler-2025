@@ -86,7 +86,7 @@ void SSAOptimizer::eliminateDeadCode(LLVMIR &ir) {
       work_list.pop();
 
       // 标记该指令的所有操作数定义为有用
-      std::vector<Operand *> operands = getInstructionOperands(inst);
+      std::vector<Operand> operands = getInstructionOperands(inst);
       for (const auto &operand : operands) {
         if (isRegisterOperand(operand)) {
           markOperandDefAsUseful(operand, blocks);
@@ -436,6 +436,7 @@ bool SSAOptimizer::isCriticalInstruction(const Instruction &inst) {
   case STORE:     // 存储（可能有副作用）
   case BR_COND:   // 条件分支
   case BR_UNCOND: // 无条件分支
+  case ALLOCA:    // 内存分配（绝对不能删除）
     return true;
 
   // 某些内在函数可能有副作用
@@ -459,15 +460,12 @@ size_t SSAOptimizer::countInstructions(const LLVMIR &ir) {
   return count;
 }
 
-std::vector<Operand *>
+std::vector<Operand>
 SSAOptimizer::getInstructionOperands(const Instruction &inst) {
-  std::vector<Operand *> operands;
+  std::vector<Operand> operands;
 
   if (!inst)
     return operands;
-
-  // 这里需要根据具体的指令格式来提取操作数
-  // 由于当前的指令系统比较复杂，我们使用简化的方法
 
   // 根据指令类型提取操作数
   int opcode = inst->GetOpcode();
@@ -488,22 +486,110 @@ SSAOptimizer::getInstructionOperands(const Instruction &inst) {
   case BITXOR:
   case SHL: {
     // 二元运算指令通常有两个操作数
-    // 需要根据具体指令类转换并提取
+    ArithmeticInstruction *arith_inst =
+        dynamic_cast<ArithmeticInstruction *>(inst);
+    if (arith_inst) {
+      Operand op1 = arith_inst->GetOp1();
+      Operand op2 = arith_inst->GetOp2();
+      Operand op3 = arith_inst->GetOp3();
+      if (op1)
+        operands.push_back(op1);
+      if (op2)
+        operands.push_back(op2);
+      if (op3)
+        operands.push_back(op3);
+    }
     break;
   }
 
   case LOAD: {
     // load指令有一个地址操作数
+    LoadInstruction *load_inst = dynamic_cast<LoadInstruction *>(inst);
+    if (load_inst) {
+      Operand ptr = load_inst->GetPointer();
+      if (ptr)
+        operands.push_back(ptr);
+    }
     break;
   }
 
   case STORE: {
     // store指令有值和地址两个操作数
+    StoreInstruction *store_inst = dynamic_cast<StoreInstruction *>(inst);
+    if (store_inst) {
+      Operand value = store_inst->GetValue();
+      Operand ptr = store_inst->GetPointer();
+      if (value)
+        operands.push_back(value);
+      if (ptr)
+        operands.push_back(ptr);
+    }
     break;
   }
 
   case PHI: {
     // φ函数有多个值-标签对操作数
+    PhiInstruction *phi_inst = dynamic_cast<PhiInstruction *>(inst);
+    if (phi_inst) {
+      auto &phi_list = phi_inst->phi_list;
+      for (const auto &phi_pair : phi_list) {
+        if (phi_pair.first)
+          operands.push_back(phi_pair.first);
+      }
+    }
+    break;
+  }
+
+  case RET: {
+    // return指令可能有一个返回值操作数
+    RetInstruction *ret_inst = dynamic_cast<RetInstruction *>(inst);
+    if (ret_inst) {
+      Operand ret_val = ret_inst->GetRetVal();
+      if (ret_val)
+        operands.push_back(ret_val);
+    }
+    break;
+  }
+
+  case BR_COND: {
+    // 条件分支指令有一个条件操作数
+    BrCondInstruction *br_inst = dynamic_cast<BrCondInstruction *>(inst);
+    if (br_inst) {
+      Operand cond = br_inst->GetCond();
+      if (cond)
+        operands.push_back(cond);
+    }
+    break;
+  }
+
+  case CALL: {
+    // 函数调用指令有多个参数操作数
+    CallInstruction *call_inst = dynamic_cast<CallInstruction *>(inst);
+    if (call_inst) {
+      auto &args = call_inst->GetArgs();
+      for (const auto &arg : args) {
+        if (arg.second)
+          operands.push_back(arg.second);
+      }
+    }
+    break;
+  }
+
+  case GETELEMENTPTR: {
+    // getelementptr指令有基础指针和索引操作数
+    GetElementptrInstruction *gep_inst =
+        dynamic_cast<GetElementptrInstruction *>(inst);
+    if (gep_inst) {
+      Operand ptr = gep_inst->GetPtrVal();
+      if (ptr)
+        operands.push_back(ptr);
+
+      const auto &indexes = gep_inst->GetIndexes();
+      for (const auto &index : indexes) {
+        if (index)
+          operands.push_back(index);
+      }
+    }
     break;
   }
 
@@ -514,18 +600,16 @@ SSAOptimizer::getInstructionOperands(const Instruction &inst) {
   return operands;
 }
 
-bool SSAOptimizer::isRegisterOperand(const Operand *operand) {
+bool SSAOptimizer::isRegisterOperand(const Operand operand) {
   if (!operand)
     return false;
 
-  // 检查操作数类型
-  // 这里需要根据具体的操作数类型来判断
-  // 简化实现：假设所有非立即数操作数都是寄存器
-  return true; // 暂时返回true
+  // 检查操作数类型是否为寄存器
+  return operand->GetOperandType() == BasicOperand::REG;
 }
 
 Instruction
-SSAOptimizer::findDefiningInstruction(const Operand *operand,
+SSAOptimizer::findDefiningInstruction(const Operand operand,
                                       const std::map<int, LLVMBlock> &blocks) {
   if (!operand || !isRegisterOperand(operand)) {
     return nullptr;
@@ -558,7 +642,7 @@ bool SSAOptimizer::canPropagateConstants(const Instruction &inst) {
     return false;
 
   // 检查指令的所有操作数是否都是常量
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   for (const auto &operand : operands) {
     if (isRegisterOperand(operand)) {
@@ -577,7 +661,7 @@ void SSAOptimizer::propagateConstantsInInstruction(Instruction &inst) {
   if (!inst)
     return;
 
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   // 将所有寄存器操作数替换为对应的常量
   for (auto &operand : operands) {
@@ -662,7 +746,7 @@ bool SSAOptimizer::canFoldConstants(const Instruction &inst) {
     return false;
 
   // 检查指令是否可以进行常量折叠
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   if (operands.empty())
     return false;
@@ -683,10 +767,10 @@ void SSAOptimizer::foldConstantsInInstruction(Instruction &inst) {
     return;
 
   int opcode = inst->GetOpcode();
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   if (operands.size() < 2)
-    return; // 需要至少两个操作数
+    return; // 需要至least两个操作数
 
   ConstantValue left = getConstantFromOperand(operands[0]);
   ConstantValue right = getConstantFromOperand(operands[1]);
@@ -767,7 +851,7 @@ bool SSAOptimizer::extractCopyRegisters(const Instruction &inst, int &dest_reg,
   }
 
   case BITCAST: {
-    std::vector<Operand *> operands = getInstructionOperands(inst);
+    std::vector<Operand> operands = getInstructionOperands(inst);
     if (!operands.empty() && isRegisterOperand(operands[0])) {
       src_reg = getRegisterFromOperand(operands[0]);
       return src_reg != -1 && src_reg != dest_reg;
@@ -786,7 +870,7 @@ bool SSAOptimizer::replaceCopyUsages(
     return false;
 
   bool changed = false;
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   for (auto &operand : operands) {
     if (isRegisterOperand(operand)) {
@@ -810,7 +894,7 @@ void SSAOptimizer::markInstructionAsUseful(const Instruction &inst) {
 }
 
 void SSAOptimizer::markOperandDefAsUseful(
-    const Operand *operand, const std::map<int, LLVMBlock> &blocks) {
+    const Operand operand, const std::map<int, LLVMBlock> &blocks) {
   if (!operand || !isRegisterOperand(operand))
     return;
 
@@ -824,18 +908,22 @@ void SSAOptimizer::markOperandDefAsUseful(
 // 新增的具体实现函数
 // ============================================================================
 
-int SSAOptimizer::getRegisterFromOperand(const Operand *operand) {
+int SSAOptimizer::getRegisterFromOperand(const Operand operand) {
   if (!operand)
     return -1;
 
-  // 这里需要根据具体的操作数类型来提取寄存器编号
-  // 简化实现：假设操作数中包含寄存器编号信息
+  // 检查操作数是否为寄存器类型
+  if (operand->GetOperandType() == BasicOperand::REG) {
+    RegOperand *reg_operand = dynamic_cast<RegOperand *>(operand);
+    if (reg_operand) {
+      return reg_operand->GetRegNo();
+    }
+  }
 
-  // 需要根据实际的Operand类结构来实现
-  return -1; // 暂时返回-1
+  return -1; // 不是寄存器操作数
 }
 
-ConstantValue SSAOptimizer::getConstantFromOperand(const Operand *operand) {
+ConstantValue SSAOptimizer::getConstantFromOperand(const Operand operand) {
   if (!operand)
     return ConstantValue();
 
@@ -857,7 +945,7 @@ ConstantValue SSAOptimizer::getConstantFromOperand(const Operand *operand) {
   return ConstantValue(); // 返回未定义常量
 }
 
-void SSAOptimizer::replaceOperandWithConstant(Operand *&operand,
+void SSAOptimizer::replaceOperandWithConstant(Operand &operand,
                                               const ConstantValue &constant) {
   if (!operand || !constant.isConstant())
     return;
@@ -1002,11 +1090,85 @@ int SSAOptimizer::getInstructionResultRegister(const Instruction &inst) {
   if (!inst)
     return -1;
 
-  // 这里需要根据具体的指令格式来提取结果寄存器
-  // 简化实现：假设指令中包含结果寄存器信息
+  // 根据指令类型获取结果寄存器
+  int opcode = inst->GetOpcode();
 
-  // 需要根据实际的Instruction类结构来实现
-  return -1; // 暂时返回-1
+  switch (opcode) {
+  case ADD:
+  case SUB:
+  case MUL_OP:
+  case DIV_OP:
+  case MOD_OP:
+  case FADD:
+  case FSUB:
+  case FMUL:
+  case FDIV:
+  case BITAND:
+  case BITOR:
+  case BITXOR:
+  case SHL: {
+    ArithmeticInstruction *arith_inst =
+        dynamic_cast<ArithmeticInstruction *>(inst);
+    if (arith_inst) {
+      Operand result = arith_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
+    break;
+  }
+
+  case LOAD: {
+    LoadInstruction *load_inst = dynamic_cast<LoadInstruction *>(inst);
+    if (load_inst) {
+      Operand result = load_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
+    break;
+  }
+
+  case ICMP:
+  case FCMP: {
+    IcmpInstruction *icmp_inst = dynamic_cast<IcmpInstruction *>(inst);
+    if (icmp_inst) {
+      Operand result = icmp_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
+    break;
+  }
+
+  case PHI: {
+    PhiInstruction *phi_inst = dynamic_cast<PhiInstruction *>(inst);
+    if (phi_inst) {
+      Operand result = phi_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
+    break;
+  }
+
+  case CALL: {
+    CallInstruction *call_inst = dynamic_cast<CallInstruction *>(inst);
+    if (call_inst) {
+      Operand result = call_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
+    break;
+  }
+
+  case GETELEMENTPTR: {
+    GetElementptrInstruction *gep_inst =
+        dynamic_cast<GetElementptrInstruction *>(inst);
+    if (gep_inst) {
+      Operand result = gep_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
+    break;
+  }
+
+  default:
+    // 其他指令类型可能没有结果寄存器
+    break;
+  }
+
+  return -1; // 没有结果寄存器
 }
 
 // ============================================================================
@@ -1026,7 +1188,7 @@ void SSAOptimizer::addUsersToWorkList(
       if (!inst)
         continue;
 
-      std::vector<Operand *> operands = getInstructionOperands(inst);
+      std::vector<Operand> operands = getInstructionOperands(inst);
       for (const auto &operand : operands) {
         if (isRegisterOperand(operand) &&
             getRegisterFromOperand(operand) == reg_num) {
@@ -1043,7 +1205,7 @@ bool SSAOptimizer::isPhiCopyCandidate(const Instruction &inst) {
     return false;
 
   // φ函数如果所有输入都是同一个值，则为复制候选
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   if (operands.empty())
     return false;
@@ -1077,7 +1239,7 @@ int SSAOptimizer::getPhiSingleSource(const Instruction &inst) {
   if (!inst || inst->GetOpcode() != PHI)
     return -1;
 
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
 
   for (const auto &operand : operands) {
     if (isRegisterOperand(operand)) {
@@ -1130,7 +1292,7 @@ bool SSAOptimizer::hasOtherUsers(int reg_num,
       if (!inst || inst == excluding_inst)
         continue;
 
-      std::vector<Operand *> operands = getInstructionOperands(inst);
+      std::vector<Operand> operands = getInstructionOperands(inst);
       for (const auto &operand : operands) {
         if (isRegisterOperand(operand) &&
             getRegisterFromOperand(operand) == reg_num) {
@@ -1170,7 +1332,7 @@ ConstantValue SSAOptimizer::computeArithmeticResult(const Instruction &inst) {
   if (!inst)
     return ConstantValue();
 
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
   if (operands.size() < 2)
     return ConstantValue();
 
@@ -1185,7 +1347,7 @@ ConstantValue SSAOptimizer::computeComparisonResult(const Instruction &inst) {
   if (!inst)
     return ConstantValue();
 
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
   if (operands.size() < 2)
     return ConstantValue();
 
@@ -1200,7 +1362,7 @@ ConstantValue SSAOptimizer::computePhiResult(const Instruction &inst) {
   if (!inst || inst->GetOpcode() != PHI)
     return ConstantValue();
 
-  std::vector<Operand *> operands = getInstructionOperands(inst);
+  std::vector<Operand> operands = getInstructionOperands(inst);
   if (operands.empty())
     return ConstantValue();
 
@@ -1248,7 +1410,7 @@ void SSAOptimizer::replaceInstructionWithConstant(
   // 3. 更新所有引用
 }
 
-void SSAOptimizer::replaceOperandRegister(Operand *&operand, int new_reg) {
+void SSAOptimizer::replaceOperandRegister(Operand &operand, int new_reg) {
   // 替换操作数中的寄存器编号
   // 这里需要根据具体的操作数类系统来实现
 

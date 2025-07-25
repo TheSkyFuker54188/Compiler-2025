@@ -188,9 +188,9 @@ private:
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
   size_t countInstructions(const LLVMIR &ir);
-  std::vector<Operand *> getInstructionOperands(const Instruction &inst);
-  bool isRegisterOperand(const Operand *operand);
-  Instruction findDefiningInstruction(const Operand *operand,
+  std::vector<Operand> getInstructionOperands(const Instruction &inst);
+  bool isRegisterOperand(const Operand operand);
+  Instruction findDefiningInstruction(const Operand operand,
                                       const std::map<int, LLVMBlock> &blocks);
   bool canPropagateConstants(const Instruction &inst);
   void propagateConstantsInInstruction(Instruction &inst);
@@ -207,9 +207,9 @@ private:
   int getInstructionResultRegister(const Instruction &inst);
 
   // 新增的具体实现函数
-  int getRegisterFromOperand(const Operand *operand);
-  ConstantValue getConstantFromOperand(const Operand *operand);
-  void replaceOperandWithConstant(Operand *&operand,
+  int getRegisterFromOperand(const Operand operand);
+  ConstantValue getConstantFromOperand(const Operand operand);
+  void replaceOperandWithConstant(Operand &operand,
                                   const ConstantValue &constant);
   ConstantValue evaluateArithmeticOp(LLVMIROpcode op, const ConstantValue &left,
                                      const ConstantValue &right);
@@ -218,7 +218,7 @@ private:
   bool isArithmeticInstruction(const Instruction &inst);
   bool isComparisonInstruction(const Instruction &inst);
   void markInstructionAsUseful(const Instruction &inst);
-  void markOperandDefAsUseful(const Operand *operand,
+  void markOperandDefAsUseful(const Operand operand,
                               const std::map<int, LLVMBlock> &blocks);
 
   // 新增的辅助函数声明
@@ -238,7 +238,7 @@ private:
   ConstantValue computePhiResult(const Instruction &inst);
   void replaceInstructionWithConstant(Instruction &inst,
                                       const ConstantValue &constant);
-  void replaceOperandRegister(Operand *&operand, int new_reg);
+  void replaceOperandRegister(Operand &operand, int new_reg);
 };
 
 /**

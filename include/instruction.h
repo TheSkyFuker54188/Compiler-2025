@@ -3,12 +3,12 @@
 
 #include "ast.h"
 #include "symtab.h"
+#include <cstring> // 添加 memcpy 支持
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <cstring> // 添加 memcpy 支持
-#include <sstream>
 
 // @Instruction types
 enum LLVMIROpcode {
@@ -257,15 +257,16 @@ public:
     this->result = result;
     this->pointer = pointer;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetPointer() const { return pointer; }
   Operand GetResult() const { return result; }
-  
+
   void PrintIR(std::ostream &s) {
     // s<<"loadinstruction print\n";
-    s << result->GetFullName() << " = load " << type << ", ptr " << pointer->GetFullName() << "\n";
+    s << result->GetFullName() << " = load " << type << ", ptr "
+      << pointer->GetFullName() << "\n";
   }
 };
 
@@ -281,52 +282,53 @@ public:
     this->pointer = pointer;
     this->value = value;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetPointer() const { return pointer; }
   Operand GetValue() const { return value; }
-  
+
   // void PrintIR(std::ostream &s) {
   // // s << "storeinstruction print\n";
-  //   s << "store " << type << " " << value->GetFullName() << ", ptr " << pointer->GetFullName() << "\n";
+  //   s << "store " << type << " " << value->GetFullName() << ", ptr " <<
+  //   pointer->GetFullName() << "\n";
   // }
   void PrintIR(std::ostream &s) {
     // 处理浮点立即数的特殊格式
     auto format_float_operand = [](Operand op) -> std::string {
-        if (auto* imm_f32 = dynamic_cast<ImmF32Operand*>(op)) {
-            // 浮点立即数：转换为十六进制格式
-            float float_val = imm_f32->GetFloatVal();
-            unsigned long long byte_val = Float_to_Byte(float_val);
-            
-            std::ostringstream oss;
-            oss << "0x" << std::hex << byte_val << std::dec;
-            return oss.str();
-        } else if (auto* imm_i32 = dynamic_cast<ImmI32Operand*>(op)) {
-            // 整数立即数：转换为浮点十六进制格式
-            float float_val = static_cast<float>(imm_i32->GetIntImmVal());
-            unsigned long long byte_val = Float_to_Byte(float_val);
-            
-            std::ostringstream oss;
-            oss << "0x" << std::hex << byte_val << std::dec;
-            return oss.str();
-        } else {
-            // 非立即数类型：保持原样
-            return op->GetFullName();
-        }
+      if (auto *imm_f32 = dynamic_cast<ImmF32Operand *>(op)) {
+        // 浮点立即数：转换为十六进制格式
+        float float_val = imm_f32->GetFloatVal();
+        unsigned long long byte_val = Float_to_Byte(float_val);
+
+        std::ostringstream oss;
+        oss << "0x" << std::hex << byte_val << std::dec;
+        return oss.str();
+      } else if (auto *imm_i32 = dynamic_cast<ImmI32Operand *>(op)) {
+        // 整数立即数：转换为浮点十六进制格式
+        float float_val = static_cast<float>(imm_i32->GetIntImmVal());
+        unsigned long long byte_val = Float_to_Byte(float_val);
+
+        std::ostringstream oss;
+        oss << "0x" << std::hex << byte_val << std::dec;
+        return oss.str();
+      } else {
+        // 非立即数类型：保持原样
+        return op->GetFullName();
+      }
     };
 
     // 根据类型选择输出格式
     if (type == FLOAT32) {
-        // 浮点类型：使用特殊格式输出
-        s << "store float " << format_float_operand(value) 
-          << ", ptr " << pointer->GetFullName() << "\n";
+      // 浮点类型：使用特殊格式输出
+      s << "store float " << format_float_operand(value) << ", ptr "
+        << pointer->GetFullName() << "\n";
     } else {
-        // 非浮点类型：正常输出
-        s << "store " << type << " " << value->GetFullName() 
-          << ", ptr " << pointer->GetFullName() << "\n";
+      // 非浮点类型：正常输出
+      s << "store " << type << " " << value->GetFullName() << ", ptr "
+        << pointer->GetFullName() << "\n";
     }
-}
+  }
 };
 
 class ArithmeticInstruction : public BasicInstruction {
@@ -356,70 +358,71 @@ public:
     this->result = result;
     this->type = type;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetOp1() const { return op1; }
   Operand GetOp2() const { return op2; }
   Operand GetOp3() const { return op3; }
   Operand GetResult() const { return result; }
-  
+
   void PrintIR(std::ostream &s) {
     // s << "arithmeticinstruction print\n";
     if (opcode == LL_ADDMOD) {
-      s << result->GetFullName() << " = call i32 @___llvm_ll_add_mod(i32 " << op1->GetFullName() << ",i32 "
-        << op2->GetFullName() << ",i32 " << op3->GetFullName() << ")\n";
+      s << result->GetFullName() << " = call i32 @___llvm_ll_add_mod(i32 "
+        << op1->GetFullName() << ",i32 " << op2->GetFullName() << ",i32 "
+        << op3->GetFullName() << ")\n";
       return;
     } else if (opcode == UMIN_I32) {
-      s << result->GetFullName() << " = call i32 @llvm.umin.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
-        << ")\n";
+      s << result->GetFullName() << " = call i32 @llvm.umin.i32(i32 "
+        << op1->GetFullName() << ",i32 " << op2->GetFullName() << ")\n";
       return;
     } else if (opcode == UMAX_I32) {
-      s << result->GetFullName() << " = call i32 @llvm.umax.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
-        << ")\n";
+      s << result->GetFullName() << " = call i32 @llvm.umax.i32(i32 "
+        << op1->GetFullName() << ",i32 " << op2->GetFullName() << ")\n";
       return;
     } else if (opcode == SMIN_I32) {
-      s << result->GetFullName() << " = call i32 @llvm.smin.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
-        << ")\n";
+      s << result->GetFullName() << " = call i32 @llvm.smin.i32(i32 "
+        << op1->GetFullName() << ",i32 " << op2->GetFullName() << ")\n";
       return;
     } else if (opcode == SMAX_I32) {
-      s << result->GetFullName() << " = call i32 @llvm.smax.i32(i32 " << op1->GetFullName() << ",i32 " << op2->GetFullName()
-        << ")\n";
+      s << result->GetFullName() << " = call i32 @llvm.smax.i32(i32 "
+        << op1->GetFullName() << ",i32 " << op2->GetFullName() << ")\n";
       return;
     } else if (opcode == FMIN_F32) {
-      s << result->GetFullName() << " = call float @___llvm_fmin_f32(float " << op1->GetFullName()
-        << ",float " << op2->GetFullName() << ")\n";
+      s << result->GetFullName() << " = call float @___llvm_fmin_f32(float "
+        << op1->GetFullName() << ",float " << op2->GetFullName() << ")\n";
       return;
     } else if (opcode == FMAX_F32) {
-      s << result->GetFullName() << " = call float @___llvm_fmax_f32(float " << op1->GetFullName()
-        << ",float " << op2->GetFullName() << ")\n";
+      s << result->GetFullName() << " = call float @___llvm_fmax_f32(float "
+        << op1->GetFullName() << ",float " << op2->GetFullName() << ")\n";
       return;
-    }
-    else if (opcode == FADD || opcode == FSUB || opcode == FMUL || opcode == FDIV) {
+    } else if (opcode == FADD || opcode == FSUB || opcode == FMUL ||
+               opcode == FDIV) {
       // 处理浮点运算指令
       auto format_float_operand = [](Operand op) -> std::string {
-          if (auto* imm_op = dynamic_cast<ImmF32Operand*>(op)) {
-              // 浮点立即数：转换为十六进制格式
-              float float_val = imm_op->GetFloatVal();
-              unsigned long long byte_val = Float_to_Byte(float_val);
-              
-              // 使用字符串流构建十六进制字符串
-              std::ostringstream oss;
-              oss << "0x" << std::hex << byte_val << std::dec;
-              return oss.str();
-          } else {
-              // 非立即数或非浮点类型：保持原样
-              return op->GetFullName();
-          }
+        if (auto *imm_op = dynamic_cast<ImmF32Operand *>(op)) {
+          // 浮点立即数：转换为十六进制格式
+          float float_val = imm_op->GetFloatVal();
+          unsigned long long byte_val = Float_to_Byte(float_val);
+
+          // 使用字符串流构建十六进制字符串
+          std::ostringstream oss;
+          oss << "0x" << std::hex << byte_val << std::dec;
+          return oss.str();
+        } else {
+          // 非立即数或非浮点类型：保持原样
+          return op->GetFullName();
+        }
       };
-  
+
       s << result->GetFullName() << " = " << opcode << " " << type << " "
-        << format_float_operand(op1) << ", "
-        << format_float_operand(op2) << "\n";
-        return;
-  }
-    s << result->GetFullName() << " = " << opcode << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
-      << "\n";
+        << format_float_operand(op1) << ", " << format_float_operand(op2)
+        << "\n";
+      return;
+    }
+    s << result->GetFullName() << " = " << opcode << " " << type << " "
+      << op1->GetFullName() << "," << op2->GetFullName() << "\n";
   }
 };
 
@@ -440,18 +443,18 @@ public:
     this->cond = cond;
     this->result = result;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetOp1() const { return op1; }
   Operand GetOp2() const { return op2; }
   IcmpCond GetCond() const { return cond; }
   Operand GetResult() const { return result; }
-  
+
   void PrintIR(std::ostream &s) {
     // s << "icmpinstruction print\n";
-    s << result->GetFullName() << " = icmp " << cond << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
-      << "\n";
+    s << result->GetFullName() << " = icmp " << cond << " " << type << " "
+      << op1->GetFullName() << "," << op2->GetFullName() << "\n";
   }
 };
 
@@ -472,18 +475,18 @@ public:
     this->cond = cond;
     this->result = result;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetOp1() const { return op1; }
   Operand GetOp2() const { return op2; }
   FcmpCond GetCond() const { return cond; }
   Operand GetResult() const { return result; }
-  
+
   void PrintIR(std::ostream &s) {
-  // s << "fcmpinstruction print\n";
-    s << result->GetFullName() << " = fcmp " << cond << " " << type << " " << op1->GetFullName() << "," << op2->GetFullName()
-      << "\n";
+    // s << "fcmpinstruction print\n";
+    s << result->GetFullName() << " = fcmp " << cond << " " << type << " "
+      << op1->GetFullName() << "," << op2->GetFullName() << "\n";
   }
 };
 
@@ -534,11 +537,16 @@ public:
     this->type = type;
     this->result = result;
   }
+
+  // Getter methods
+  Operand GetResult() const { return result; }
+
   void PrintIR(std::ostream &s) {
     // s << "phiinstruction print\n";
     s << result->GetFullName() << " = phi " << type << " ";
     for (auto it = phi_list.begin(); it != phi_list.end(); ++it) {
-      s << "[" << it->second->GetFullName() << "," << it->first->GetFullName() << "]";
+      s << "[" << it->second->GetFullName() << "," << it->first->GetFullName()
+        << "]";
       auto jt = it;
       if ((++jt) != phi_list.end())
         s << ",";
@@ -565,12 +573,12 @@ public:
     this->result = result;
     dims = ArrDims;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetResult() const { return result; }
-  const std::vector<int>& GetDims() const { return dims; }
-  
+  const std::vector<int> &GetDims() const { return dims; }
+
   void PrintIR(std::ostream &s) {
     // s << "allocainstruction print\n";
     s << result->GetFullName() << " = alloca ";
@@ -596,15 +604,16 @@ public:
     this->trueLabel = trueLabel;
     this->falseLabel = falseLabel;
   }
-  
+
   // Getter methods
   Operand GetCond() const { return cond; }
   Operand GetTrueLabel() const { return trueLabel; }
   Operand GetFalseLabel() const { return falseLabel; }
-  
+
   void PrintIR(std::ostream &s) {
-  // s << "brcondinstruction print\n";
-    s << "br i1 " << cond->GetFullName() << ", label " << trueLabel->GetFullName() << ", label " << falseLabel->GetFullName()
+    // s << "brcondinstruction print\n";
+    s << "br i1 " << cond->GetFullName() << ", label "
+      << trueLabel->GetFullName() << ", label " << falseLabel->GetFullName()
       << "\n";
   }
 };
@@ -617,58 +626,57 @@ public:
     this->opcode = BR_UNCOND;
     this->destLabel = destLabel;
   }
-  
+
   // Getter methods
   Operand GetLabel() const { return destLabel; }
-  
+
   void PrintIR(std::ostream &s) {
-  // s << "bruncondinstruction print\n";
+    // s << "bruncondinstruction print\n";
     s << "br label " << destLabel->GetFullName() << "\n";
   }
 };
-
-
 
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
                      size_t dimDph, size_t beginPos, size_t endPos);
 class GlobalVarDefineInstruction : public BasicInstruction {
 public:
-    enum LLVMType type;
-    std::string name;
-    Operand init_val;
-    VarAttribute arval;
-    
-    GlobalVarDefineInstruction(std::string nam, enum LLVMType typ, VarAttribute v)
-        : type(typ), name(nam), init_val(nullptr), arval(v) {
-        this->opcode = LLVMIROpcode::GLOBAL_VAR;
+  enum LLVMType type;
+  std::string name;
+  Operand init_val;
+  VarAttribute arval;
+
+  GlobalVarDefineInstruction(std::string nam, enum LLVMType typ, VarAttribute v)
+      : type(typ), name(nam), init_val(nullptr), arval(v) {
+    this->opcode = LLVMIROpcode::GLOBAL_VAR;
+  }
+
+  // Getter methods
+  LLVMType GetType() const { return type; }
+  std::string GetName() const { return name; }
+  Operand GetInitVal() const { return init_val; }
+  const VarAttribute &GetAttr() const { return arval; }
+
+  void PrintIR(std::ostream &s) {
+    if (arval.dims.empty()) {
+      if (type == I32 && !arval.IntInitVals.empty()) {
+        s << "@" << name << " = global i32 " << arval.IntInitVals[0] << "\n";
+      } else if (type == FLOAT32 && !arval.FloatInitVals.empty()) {
+        s << "@" << name << " = global float 0x" << std::hex
+          << Float_to_Byte(arval.FloatInitVals[0]) << std::dec << "\n";
+      } else {
+        s << "@" << name << " = global " << type << " zeroinitializer\n";
+      }
+      return;
     }
-    
-    // Getter methods
-    LLVMType GetType() const { return type; }
-    std::string GetName() const { return name; }
-    Operand GetInitVal() const { return init_val; }
-    const VarAttribute& GetAttr() const { return arval; }
-    
-    void PrintIR(std::ostream &s) {
-                              if (arval.dims.empty()) {
-                                  if (type == I32 && !arval.IntInitVals.empty()) {
-                                      s << "@" << name << " = global i32 " << arval.IntInitVals[0] << "\n";
-                                  } else if (type == FLOAT32 && !arval.FloatInitVals.empty()) {
-                                      s << "@" << name << " = global float 0x" << std::hex << Float_to_Byte(arval.FloatInitVals[0])<<std::dec  << "\n";
-                                  } else {
-                                      s << "@" << name << " = global " << type << " zeroinitializer\n";
-                                  }
-                                  return;
-                              }
-                              s << "@" << name << " = global ";
-                              size_t step = 1;
-                              for (size_t i = 0; i < arval.dims.size(); i++) {
-                                  step *= arval.dims[i];
-                              }
-                              recursive_print(s, type, arval, 0, 0, step - 1);
-                              s << "\n";
-                          }
-                      };
+    s << "@" << name << " = global ";
+    size_t step = 1;
+    for (size_t i = 0; i < arval.dims.size(); i++) {
+      step *= arval.dims[i];
+    }
+    recursive_print(s, type, arval, 0, 0, step - 1);
+    s << "\n";
+  }
+};
 
 class GlobalStringConstInstruction : public BasicInstruction {
 public:
@@ -678,11 +686,11 @@ public:
       : str_val(strval), str_name(strname) {
     this->opcode = LLVMIROpcode::GLOBAL_STR;
   }
-  
+
   // Getter methods
   std::string GetValue() const { return str_val; }
   std::string GetName() const { return str_name; }
-  
+
   void PrintIR(std::ostream &s) {
     // s << "globalstringconstinstruction print\n";
     size_t str_len = str_val.size() + 1;
@@ -758,13 +766,15 @@ public:
       }
     }
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return ret_type; }
   Operand GetResult() const { return result; }
   std::string GetFuncName() const { return name; }
-  const std::vector<std::pair<enum LLVMType, Operand>>& GetArgs() const { return args; }
-  
+  const std::vector<std::pair<enum LLVMType, Operand>> &GetArgs() const {
+    return args;
+  }
+
   // void PrintIR(std::ostream &s) {
   //   // s << "callinstruction print\n";
   //   if (ret_type != LLVMType::VOID_TYPE) {
@@ -782,51 +792,51 @@ public:
   void PrintIR(std::ostream &s) {
     // 辅助lambda函数：根据目标类型格式化操作数
     auto format_operand = [](Operand op, LLVMType target_type) -> std::string {
-        if (target_type == FLOAT32) {
-            float float_val = 0.0f;
-            
-            // 处理浮点立即数
-            if (auto* imm_f32 = dynamic_cast<ImmF32Operand*>(op)) {
-                float_val = imm_f32->GetFloatVal();
-            } 
-            // 处理整数立即数（整数转浮点）
-            else if (auto* imm_i32 = dynamic_cast<ImmI32Operand*>(op)) {
-                float_val = static_cast<float>(imm_i32->GetIntImmVal());
-            }
-            // 其他类型保持原样
-            else {
-                return op->GetFullName();
-            }
-            
-            // 转换为十六进制格式
-            unsigned long long byte_val = Float_to_Byte(float_val);
-            std::ostringstream oss;
-            oss << "0x" << std::hex << byte_val << std::dec;
-            return oss.str();
-        } else {
-            // 非浮点类型：保持原样
-            return op->GetFullName();
+      if (target_type == FLOAT32) {
+        float float_val = 0.0f;
+
+        // 处理浮点立即数
+        if (auto *imm_f32 = dynamic_cast<ImmF32Operand *>(op)) {
+          float_val = imm_f32->GetFloatVal();
         }
+        // 处理整数立即数（整数转浮点）
+        else if (auto *imm_i32 = dynamic_cast<ImmI32Operand *>(op)) {
+          float_val = static_cast<float>(imm_i32->GetIntImmVal());
+        }
+        // 其他类型保持原样
+        else {
+          return op->GetFullName();
+        }
+
+        // 转换为十六进制格式
+        unsigned long long byte_val = Float_to_Byte(float_val);
+        std::ostringstream oss;
+        oss << "0x" << std::hex << byte_val << std::dec;
+        return oss.str();
+      } else {
+        // 非浮点类型：保持原样
+        return op->GetFullName();
+      }
     };
-  
+
     // 输出结果寄存器（如果有）
     if (ret_type != LLVMType::VOID_TYPE) {
-        s << result->GetFullName() << " = ";
+      s << result->GetFullName() << " = ";
     }
-    
+
     // 输出函数调用指令
     s << "call " << ret_type << " @" << name << "(";
-    
+
     // 遍历并输出所有参数
     for (auto it = args.begin(); it != args.end(); ++it) {
-        s << it->first << " ";
-        
-        // 特殊处理浮点类型参数
-        s << format_operand(it->second, it->first);
-        
-        if (it + 1 != args.end()) {
-            s << ", ";
-        }
+      s << it->first << " ";
+
+      // 特殊处理浮点类型参数
+      s << format_operand(it->second, it->first);
+
+      if (it + 1 != args.end()) {
+        s << ", ";
+      }
     }
     s << ")\n";
   }
@@ -842,11 +852,11 @@ public:
       : ret_type(retType), ret_val(res) {
     this->opcode = RET;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return ret_type; }
   Operand GetRetVal() const { return ret_val; }
-  
+
   void PrintIR(std::ostream &s) {
     // s << "retinstruction print\n";
     s << "ret " << ret_type;
@@ -880,14 +890,14 @@ public:
       : type(typ), result(res), ptrval(ptr), dims(dim), indexes(index) {
     opcode = GETELEMENTPTR;
   }
-  
+
   // Getter methods
   LLVMType GetType() const { return type; }
   Operand GetResult() const { return result; }
   Operand GetPtrVal() const { return ptrval; }
-  const std::vector<int>& GetDims() const { return dims; }
-  const std::vector<Operand>& GetIndexes() const { return indexes; }
-  
+  const std::vector<int> &GetDims() const { return dims; }
+  const std::vector<Operand> &GetIndexes() const { return indexes; }
+
   void PrintIR(std::ostream &s) {
     // s << "getelementptrinstruction print\n";
     s << result->GetFullName() << " = getelementptr ";
@@ -919,12 +929,12 @@ public:
     return_type = t;
     Func_name = n;
   }
-  void InsertFormal(enum LLVMType t){
+  void InsertFormal(enum LLVMType t) {
     formals.push_back(t);
     formals_reg.push_back(GetNewRegOperand(formals_reg.size()));
   }
   void PrintIR(std::ostream &s) {
-  // s << "functiondefineinstruction print\n";
+    // s << "functiondefineinstruction print\n";
     s << "define " << return_type << " @" << Func_name;
     s << "(";
     for (uint32_t i = 0; i < formals.size(); ++i) {
@@ -999,7 +1009,7 @@ public:
     this->opcode = FPEXT;
   }
   void PrintIR(std::ostream &s) {
-  // s << "fpextinstruction print\n";
+    // s << "fpextinstruction print\n";
     s << result->GetFullName() << " = fpext float"
       << " " << value->GetFullName() << " to "
       << "double"
@@ -1021,9 +1031,9 @@ public:
     this->opcode = BITCAST;
   }
   void PrintIR(std::ostream &s) {
-  // s << "bitcastinstruction print\n";
-    s << dst->GetFullName() << " = bitcast " << src_type << " " << src->GetFullName() << " to " << dst_type
-      << "\n";
+    // s << "bitcastinstruction print\n";
+    s << dst->GetFullName() << " = bitcast " << src_type << " "
+      << src->GetFullName() << " to " << dst_type << "\n";
   }
 };
 
@@ -1038,7 +1048,7 @@ public:
     this->opcode = SITOFP;
   }
   void PrintIR(std::ostream &s) {
-  // s << "sitofpinstruction print\n";
+    // s << "sitofpinstruction print\n";
     s << result->GetFullName() << " = sitofp i32"
       << " " << value->GetFullName() << " to "
       << "float"
@@ -1056,15 +1066,15 @@ public:
 public:
   ZextInstruction(LLVMType to_type, Operand result_receiver, LLVMType from_type,
                   Operand value_for_cast)
-      : from_type(from_type), to_type(to_type), result(result_receiver), value(value_for_cast) {
+      : from_type(from_type), to_type(to_type), result(result_receiver),
+        value(value_for_cast) {
     this->opcode = ZEXT;
   }
   void PrintIR(std::ostream &s) {
-  // s << "zextinstruction print\n";
-    s << result->GetFullName() << " = zext " << from_type << " " << value->GetFullName() << " to " << to_type
-      << "\n";
+    // s << "zextinstruction print\n";
+    s << result->GetFullName() << " = zext " << from_type << " "
+      << value->GetFullName() << " to " << to_type << "\n";
   }
 };
-
 
 #endif
