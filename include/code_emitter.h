@@ -41,6 +41,7 @@ public:
   void emitTextSection();
   void emitDataSection();
   void emitGlobalDirective(const std::string& symbol);
+  void emitGlobalVariable(const MachineModule::GlobalVariable& global_var);
   void emitComment(const std::string& comment);
   
 private:

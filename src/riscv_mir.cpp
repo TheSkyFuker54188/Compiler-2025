@@ -269,6 +269,14 @@ MachineFunction* MachineModule::createFunction(const std::string& name) {
   return ptr;
 }
 
+void MachineModule::addGlobalVariable(const std::string& name, int64_t value) {
+  global_variables.emplace_back(name, value);
+}
+
+void MachineModule::addGlobalVariable(const std::string& name, float value) {
+  global_variables.emplace_back(name, value);
+}
+
 void MachineModule::print(std::ostream& os) const {
   for (const auto& func : functions) {
     func->print(os);

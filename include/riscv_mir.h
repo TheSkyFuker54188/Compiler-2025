@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <iostream>
+#include <cstring>
 
 // RISC-V Machine IR 基础定义
 
@@ -247,7 +248,24 @@ public:
   std::vector<std::unique_ptr<MachineFunction>> functions;
   std::map<std::string, MachineFunction*> function_map;
   
+  // 全局变量存储
+  struct GlobalVariable {
+    std::string name;
+    int64_t value;  // 支持整数初始化值
+    enum { INT, FLOAT } type;
+    
+    GlobalVariable(const std::string& n, int64_t v) : name(n), value(v), type(INT) {}
+    GlobalVariable(const std::string& n, float v) : name(n), type(FLOAT) {
+      // 将float转换为int64_t存储（位级别转换）
+      memcpy(&value, &v, sizeof(float));
+    }
+  };
+  
+  std::vector<GlobalVariable> global_variables;
+  
   MachineFunction* createFunction(const std::string& name);
+  void addGlobalVariable(const std::string& name, int64_t value);
+  void addGlobalVariable(const std::string& name, float value);
   void print(std::ostream& os) const;
   void printMIR(std::ostream& os) const;  // MIR专用打印
 };

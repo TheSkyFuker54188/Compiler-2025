@@ -1,6 +1,7 @@
 #include "../include/code_emitter.h"
 #include <iomanip>
 #include <sstream>
+#include <cstring>
 
 // ===--------------------------------------------------------------------=== //
 // RISC-V 代码发射器实现
@@ -8,6 +9,16 @@
 
 void RISCVCodeEmitter::emitModule(const MachineModule& module) {
   emitHeader();
+  
+  // 输出全局变量定义
+  if (!module.global_variables.empty()) {
+    emitDataSection();
+    for (const auto& global_var : module.global_variables) {
+      emitGlobalVariable(global_var);
+    }
+    *output_stream << "\n";
+  }
+  
   emitTextSection();
   
   for (const auto& func : module.functions) {
@@ -333,6 +344,21 @@ void RISCVCodeEmitter::emitDataSection() {
 
 void RISCVCodeEmitter::emitGlobalDirective(const std::string& symbol) {
   *output_stream << ".globl " << symbol << "\n";
+}
+
+void RISCVCodeEmitter::emitGlobalVariable(const MachineModule::GlobalVariable& global_var) {
+  // 输出全局变量定义
+  *output_stream << global_var.name << ":\n";
+  
+  if (global_var.type == MachineModule::GlobalVariable::INT) {
+    // 整数类型
+    *output_stream << "    .word " << global_var.value << "\n";
+  } else if (global_var.type == MachineModule::GlobalVariable::FLOAT) {
+    // 浮点类型 - 需要从int64_t还原float值
+    float float_val;
+    memcpy(&float_val, &global_var.value, sizeof(float));
+    *output_stream << "    .float " << float_val << "\n";
+  }
 }
 
 void RISCVCodeEmitter::emitComment(const std::string& comment) {

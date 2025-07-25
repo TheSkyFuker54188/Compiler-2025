@@ -69,6 +69,9 @@ private:
   bool translateFunction(const FuncDefInstruction& func, 
                         const std::map<int, LLVMBlock>& blocks);
   
+  // 翻译全局变量
+  bool translateGlobalVariable(const Instruction& global_inst);
+  
   // 翻译基本块
   bool translateBasicBlock(LLVMBlock llvm_block);
   

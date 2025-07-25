@@ -10,6 +10,13 @@
 bool IRTranslator::translateModule(const LLVMIR& llvm_ir, MachineModule& mir_module) {
   machine_module = &mir_module;
   
+  // 首先翻译全局变量定义
+  for (const auto& global_inst : llvm_ir.global_def) {
+    if (!translateGlobalVariable(global_inst)) {
+      return false;
+    }
+  }
+  
   // 遍历所有函数并翻译
   for (const auto& func_block_pair : llvm_ir.function_block_map) {
     const FuncDefInstruction& func = func_block_pair.first;
@@ -19,6 +26,46 @@ bool IRTranslator::translateModule(const LLVMIR& llvm_ir, MachineModule& mir_mod
       return false;
     }
   }
+  
+  return true;
+}
+
+bool IRTranslator::translateGlobalVariable(const Instruction& global_inst) {
+  // 将指令转换为GlobalVarDefineInstruction
+  const GlobalVarDefineInstruction* global_def = 
+    dynamic_cast<const GlobalVarDefineInstruction*>(global_inst);
+  
+  if (!global_def) {
+    return false;  // 不是全局变量定义指令
+  }
+  
+  std::string name = global_def->GetName();
+  LLVMType type = global_def->GetType();
+  const VarAttribute& attr = global_def->GetAttr();
+  
+  // 根据类型和属性获取初始化值
+  if (type == I32) {
+    // 整数类型全局变量
+    int64_t init_value = 0;  // 默认初始化为0
+    
+    // 如果有初始化值，获取它
+    if (!attr.IntInitVals.empty()) {
+      init_value = attr.IntInitVals[0];
+    }
+    
+    machine_module->addGlobalVariable(name, init_value);
+  } else if (type == FLOAT32) {
+    // 浮点类型全局变量
+    float init_value = 0.0f;  // 默认初始化为0.0
+    
+    // 如果有初始化值，获取它
+    if (!attr.FloatInitVals.empty()) {
+      init_value = attr.FloatInitVals[0];
+    }
+    
+    machine_module->addGlobalVariable(name, init_value);
+  }
+  // 暂时只支持基本类型，数组等复杂类型可以后续添加
   
   return true;
 }
