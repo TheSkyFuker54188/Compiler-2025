@@ -5,11 +5,6 @@ build/
 # 编译器生成的可执行文件
 compiler
 
-# 自动生成的语法分析器和词法分析器文件
-parser/parser.tab.c
-parser/parser.tab.h
-lexer/lex.yy.c
-
 tests/functional/*.ll
 tests/h_functional/*.ll
 
