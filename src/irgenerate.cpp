@@ -1117,103 +1117,334 @@ void IRgenerator ::AddLibFunctionDeclare() {
 void IRgenerator::handleArrayInitializer(InitVal *init, int base_reg,
                                          VarAttribute &attr,
                                          const std::vector<int> &dims,
-                                         size_t dim_idx) {
-  if (!init)
+                                         size_t dim_idx,
+                                         size_t &current_index) // 当前索引位置
+{
+  if (!init) {
     return;
-
+  }
   LLVMBlock B = getCurrentBlock();
-  // LLVMType type = Type2LLvm[static_cast<int>(attr.type)];
-  LLVMType type = Type2LLvm[attr.type];
+  LLVMType type = Type2LLvm.at(attr.type);
 
+  // 单个值初始化
   if (std::holds_alternative<std::unique_ptr<Exp>>(init->value)) {
-    auto &expr = std::get<std::unique_ptr<Exp>>(init->value);
-    require_address = false; // Ensure expression yields a value
-    expr->accept(*this);
+    require_address = false;
+    std::get<std::unique_ptr<Exp>>(init->value)->accept(*this);
     int init_reg = max_reg;
 
-    // 确保我们获取的是值而不是指针
-    if (isPointer(init_reg)) {
-      int value_reg = newReg();
-      IRgenLoad(B, Type2LLvm.at(attr.type), value_reg,
-                GetNewRegOperand(init_reg));
-      RegLLVMTypeMap[value_reg] = type;
-      init_reg = value_reg;
-    }
-
-    Operand value;
-
-    if (irgen_table.RegTable[init_reg].IntInitVals.size() > 0) {
-      value = new ImmI32Operand(irgen_table.RegTable[init_reg].IntInitVals[0]);
-    } else if (irgen_table.RegTable[init_reg].FloatInitVals.size() > 0) {
-      value =
-          new ImmF32Operand(irgen_table.RegTable[init_reg].FloatInitVals[0]);
-    } else if (isPointer(init_reg)) {
-      // Load the value from the pointer
-      int value_reg = newReg();
-      IRgenLoad(B, type, value_reg, GetNewRegOperand(init_reg));
-      value = GetNewRegOperand(value_reg);
-    } else {
-      value = GetNewRegOperand(init_reg);
-    }
-
+    // 计算当前元素的线性位置
+    size_t pos = current_index;
     std::vector<Operand> indices;
-    indices.push_back(new ImmI32Operand(0));
-    for (size_t i = 0; i < dim_idx; ++i) {
-      indices.push_back(new ImmI32Operand(0));
+    indices.push_back(new ImmI32Operand(0)); // 数组基址
+
+    // 转换为多维索引
+    size_t temp = pos;
+    for (size_t i = 0; i < dims.size(); i++) {
+      size_t stride = 1;
+      for (size_t j = i + 1; j < dims.size(); j++) {
+        stride *= dims[j];
+      }
+      size_t idx = temp / stride;
+      temp %= stride;
+      indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
     }
-    indices.push_back(new ImmI32Operand(0));
+
+    // 生成GEP指令
     int ptr_reg = newReg();
     IRgenGetElementptr(B, type, ptr_reg, GetNewRegOperand(base_reg), dims,
                        indices);
-    IRgenStore(B, type, value, GetNewRegOperand(ptr_reg));
-  } else {
-    auto &init_list =
-        std::get<std::vector<std::unique_ptr<InitVal>>>(init->value);
-    size_t flat_idx = 0;
 
-    for (size_t i = 0;
-         i < init_list.size() && i < static_cast<size_t>(dims[dim_idx]); ++i) {
-      std::vector<Operand> indices;
-      indices.push_back(new ImmI32Operand(0));
-      for (size_t j = 0; j < dim_idx; ++j) {
-        indices.push_back(new ImmI32Operand(0));
-      }
-      indices.push_back(new ImmI32Operand(static_cast<int>(i)));
-
-      if (dim_idx + 1 < dims.size()) {
-        // Nested array
-        int sub_reg = newReg();
-        IRgenGetElementptr(B, type, sub_reg, GetNewRegOperand(base_reg), dims,
-                           indices);
-        std::vector<int> sub_dims(dims.begin() + dim_idx + 1, dims.end());
-        handleArrayInitializer(init_list[i].get(), sub_reg, attr, sub_dims, 0);
+    // 存储值
+    if (attr.type == BaseType::INT) {
+      int value = 0;
+      if (irgen_table.RegTable[init_reg].IntInitVals.size() > 0) {
+        value = irgen_table.RegTable[init_reg].IntInitVals[0];
+        IRgenStore(B, type, new ImmI32Operand(value),
+                   GetNewRegOperand(ptr_reg));
       } else {
-        // Leaf element
-        require_address = false; // Ensure initializer yields a value
-        init_list[i]->accept(*this);
-        int init_reg = max_reg;
-        Operand value;
-        if (irgen_table.RegTable[init_reg].IntInitVals.size() > 0) {
-          value =
-              new ImmI32Operand(irgen_table.RegTable[init_reg].IntInitVals[0]);
-        } else if (irgen_table.RegTable[init_reg].FloatInitVals.size() > 0) {
-          value = new ImmF32Operand(
-              irgen_table.RegTable[init_reg].FloatInitVals[0]);
-        } else if (isPointer(init_reg)) {
-          // Load the value from the pointer
-          int value_reg = newReg();
-          IRgenLoad(B, type, value_reg, GetNewRegOperand(init_reg));
-          value = GetNewRegOperand(value_reg);
-        } else {
-          value = GetNewRegOperand(init_reg);
+        int temp_reg = convertToType(B, init_reg, I32);
+        // 如果没有初始化值，使用寄存器的值
+        init_reg = temp_reg; // 更新 init_reg 为转换后的寄存器
+        IRgenStore(B, type, GetNewRegOperand(init_reg),
+                   GetNewRegOperand(ptr_reg));
+      }
+      // IRgenStore(B, type, new ImmI32Operand(value),
+      // GetNewRegOperand(ptr_reg));
+    } else {
+      float value = 0.0f;
+      if (irgen_table.RegTable[init_reg].FloatInitVals.size() > 0) {
+        value = irgen_table.RegTable[init_reg].FloatInitVals[0];
+        IRgenStore(B, type, new ImmF32Operand(value),
+                   GetNewRegOperand(ptr_reg));
+      } else {
+        int temp_reg = convertToType(B, init_reg, FLOAT32);
+        // 如果没有初始化值，使用寄存器的值
+        init_reg = temp_reg; // 更新 init_reg 为转换后的寄存器
+        IRgenStore(B, type, GetNewRegOperand(init_reg),
+                   GetNewRegOperand(ptr_reg));
+      }
+      // IRgenStore(B, type, new ImmF32Operand(value),
+      // GetNewRegOperand(ptr_reg));
+    }
+    current_index++; // 移动到下一个位置
+  } else {
+    // 处理初始化列表
+    auto &list = std::get<std::vector<std::unique_ptr<InitVal>>>(init->value);
+    if (list.size() == 0 && current_index == 0 && dim_idx == 0) {
+      int whole_size = 1;
+      for (int dim : dims) {
+        whole_size *= dim;
+      }
+      for (int j = 0; j < whole_size; j++) {
+        size_t pos = current_index;
+        std::vector<Operand> indices;
+        indices.push_back(new ImmI32Operand(0));
+
+        // 转换为多维索引
+        size_t temp = pos;
+        for (size_t i = 0; i < dims.size(); i++) {
+          size_t stride = 1;
+          for (size_t j = i + 1; j < dims.size(); j++) {
+            stride *= dims[j];
+          }
+          size_t idx = temp / stride;
+          temp %= stride;
+          indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
         }
-        int elem_ptr_reg = newReg();
-        IRgenGetElementptr(B, type, elem_ptr_reg, GetNewRegOperand(base_reg),
-                           dims, indices);
-        IRgenStore(B, type, value, GetNewRegOperand(elem_ptr_reg));
-        flat_idx++;
+
+        int ptr_reg = newReg();
+        IRgenGetElementptr(B, type, ptr_reg, GetNewRegOperand(base_reg), dims,
+                           indices);
+
+        if (attr.type == BaseType::INT) {
+          IRgenStore(B, type, new ImmI32Operand(0), GetNewRegOperand(ptr_reg));
+        } else {
+          IRgenStore(B, type, new ImmF32Operand(0.0f),
+                     GetNewRegOperand(ptr_reg));
+        }
+        current_index++;
+      }
+      return; // 结束处理
+    }
+
+    // if (dim_idx < dims.size()) {
+    //  当前维度处理
+    // for (size_t i = 0; i < static_cast<size_t>(dims[dim_idx]); i++) {
+    for (size_t i = 0; i < list.size(); i++) {
+      // 递归处理子初始化器
+      handleArrayInitializer(list[i].get(), base_reg, attr, dims, dim_idx + 1,
+                             current_index);
+      //}
+      // else {
+      if (!std::holds_alternative<std::unique_ptr<Exp>>(list[i].get()->value)) {
+        auto &listtemp = std::get<std::vector<std::unique_ptr<InitVal>>>(
+            list[i].get()->value);
+        int missnum = listtemp.size() % dims[dims.size() - 1];
+        if (missnum == 0) {
+          continue;
+        }
+        for (int j = 0; j < dims[dims.size() - 1] - missnum; j++) {
+          // 没有足够初始化值，填充0
+          size_t pos = current_index;
+          std::vector<Operand> indices;
+          indices.push_back(new ImmI32Operand(0));
+
+          // 转换为多维索引
+          size_t temp = pos;
+          for (size_t j = 0; j < dims.size(); j++) {
+            size_t stride = 1;
+            for (size_t k = j + 1; k < dims.size(); k++) {
+              stride *= dims[k];
+            }
+            size_t idx = temp / stride;
+            temp %= stride;
+            indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
+          }
+
+          int ptr_reg = newReg();
+          IRgenGetElementptr(B, type, ptr_reg, GetNewRegOperand(base_reg), dims,
+                             indices);
+
+          if (attr.type == BaseType::INT) {
+            IRgenStore(B, type, new ImmI32Operand(0),
+                       GetNewRegOperand(ptr_reg));
+          } else {
+            IRgenStore(B, type, new ImmF32Operand(0.0f),
+                       GetNewRegOperand(ptr_reg));
+          }
+          current_index++;
+        }
       }
     }
+    //}
+    //}
+  }
+}
+void IRgenerator::handleArrayInitializer(ConstInitVal *init, int base_reg,
+                                         VarAttribute &attr,
+                                         const std::vector<int> &dims,
+                                         size_t dim_idx,
+                                         size_t &current_index) // 当前索引位置
+{
+  if (!init) {
+    return;
+  }
+  LLVMBlock B = getCurrentBlock();
+  LLVMType type = Type2LLvm.at(attr.type);
+
+  // 单个值初始化
+  if (std::holds_alternative<std::unique_ptr<Exp>>(init->value)) {
+    require_address = false;
+    std::get<std::unique_ptr<Exp>>(init->value)->accept(*this);
+    int init_reg = max_reg;
+
+    // 计算当前元素的线性位置
+    size_t pos = current_index;
+    std::vector<Operand> indices;
+    indices.push_back(new ImmI32Operand(0)); // 数组基址
+
+    // 转换为多维索引
+    size_t temp = pos;
+    for (size_t i = 0; i < dims.size(); i++) {
+      size_t stride = 1;
+      for (size_t j = i + 1; j < dims.size(); j++) {
+        stride *= dims[j];
+      }
+      size_t idx = temp / stride;
+      temp %= stride;
+      indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
+    }
+
+    // 生成GEP指令
+    int ptr_reg = newReg();
+    IRgenGetElementptr(B, type, ptr_reg, GetNewRegOperand(base_reg), dims,
+                       indices);
+
+    // 存储值
+    if (attr.type == BaseType::INT) {
+      int value = 0;
+      if (irgen_table.RegTable[init_reg].IntInitVals.size() > 0) {
+        value = irgen_table.RegTable[init_reg].IntInitVals[0];
+        IRgenStore(B, type, new ImmI32Operand(value),
+                   GetNewRegOperand(ptr_reg));
+      } else {
+        int temp_reg = convertToType(B, init_reg, I32);
+        // 如果没有初始化值，使用寄存器的值
+        init_reg = temp_reg; // 更新 init_reg 为转换后的寄存器
+        IRgenStore(B, type, GetNewRegOperand(init_reg),
+                   GetNewRegOperand(ptr_reg));
+      }
+      // IRgenStore(B, type, new ImmI32Operand(value),
+      // GetNewRegOperand(ptr_reg));
+    } else {
+      float value = 0.0f;
+      if (irgen_table.RegTable[init_reg].FloatInitVals.size() > 0) {
+        value = irgen_table.RegTable[init_reg].FloatInitVals[0];
+        IRgenStore(B, type, new ImmF32Operand(value),
+                   GetNewRegOperand(ptr_reg));
+      } else {
+        int temp_reg = convertToType(B, init_reg, FLOAT32);
+        // 如果没有初始化值，使用寄存器的值
+        init_reg = temp_reg; // 更新 init_reg 为转换后的寄存器
+        IRgenStore(B, type, GetNewRegOperand(init_reg),
+                   GetNewRegOperand(ptr_reg));
+      }
+      // IRgenStore(B, type, new ImmF32Operand(value),
+      // GetNewRegOperand(ptr_reg));
+    }
+    current_index++; // 移动到下一个位置
+  } else {
+    // 处理初始化列表
+    auto &list =
+        std::get<std::vector<std::unique_ptr<ConstInitVal>>>(init->value);
+    if (list.size() == 0 && current_index == 0 && dim_idx == 0) {
+      int whole_size = 1;
+      for (int dim : dims) {
+        whole_size *= dim;
+      }
+      for (int j = 0; j < whole_size; j++) {
+        size_t pos = current_index;
+        std::vector<Operand> indices;
+        indices.push_back(new ImmI32Operand(0));
+
+        // 转换为多维索引
+        size_t temp = pos;
+        for (size_t i = 0; i < dims.size(); i++) {
+          size_t stride = 1;
+          for (size_t j = i + 1; j < dims.size(); j++) {
+            stride *= dims[j];
+          }
+          size_t idx = temp / stride;
+          temp %= stride;
+          indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
+        }
+
+        int ptr_reg = newReg();
+        IRgenGetElementptr(B, type, ptr_reg, GetNewRegOperand(base_reg), dims,
+                           indices);
+
+        if (attr.type == BaseType::INT) {
+          IRgenStore(B, type, new ImmI32Operand(0), GetNewRegOperand(ptr_reg));
+        } else {
+          IRgenStore(B, type, new ImmF32Operand(0.0f),
+                     GetNewRegOperand(ptr_reg));
+        }
+        current_index++;
+      }
+      return; // 结束处理
+    }
+
+    // if (dim_idx < dims.size()) {
+    //  当前维度处理
+    // for (size_t i = 0; i < static_cast<size_t>(dims[dim_idx]); i++) {
+    for (size_t i = 0; i < list.size(); i++) {
+      // 递归处理子初始化器
+      handleArrayInitializer(list[i].get(), base_reg, attr, dims, dim_idx + 1,
+                             current_index);
+      //}
+      // else {
+      if (!std::holds_alternative<std::unique_ptr<Exp>>(list[i].get()->value)) {
+        auto &listtemp = std::get<std::vector<std::unique_ptr<ConstInitVal>>>(
+            list[i].get()->value);
+        int missnum = listtemp.size() % dims[dims.size() - 1];
+        if (missnum == 0) {
+          continue;
+        }
+        for (int j = 0; j < dims[dims.size() - 1] - missnum; j++) {
+          // 没有足够初始化值，填充0
+          size_t pos = current_index;
+          std::vector<Operand> indices;
+          indices.push_back(new ImmI32Operand(0));
+
+          // 转换为多维索引
+          size_t temp = pos;
+          for (size_t j = 0; j < dims.size(); j++) {
+            size_t stride = 1;
+            for (size_t k = j + 1; k < dims.size(); k++) {
+              stride *= dims[k];
+            }
+            size_t idx = temp / stride;
+            temp %= stride;
+            indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
+          }
+
+          int ptr_reg = newReg();
+          IRgenGetElementptr(B, type, ptr_reg, GetNewRegOperand(base_reg), dims,
+                             indices);
+
+          if (attr.type == BaseType::INT) {
+            IRgenStore(B, type, new ImmI32Operand(0),
+                       GetNewRegOperand(ptr_reg));
+          } else {
+            IRgenStore(B, type, new ImmF32Operand(0.0f),
+                       GetNewRegOperand(ptr_reg));
+          }
+          current_index++;
+        }
+      }
+    }
+    //}
+    //}
   }
 }
 
@@ -1455,7 +1686,7 @@ void IRgenerator::flattenConstInit(
 
   if (std::holds_alternative<std::unique_ptr<Exp>>(init->value)) {
     auto &expr = std::get<std::unique_ptr<Exp>>(init->value);
-    auto int_val = evaluateConstExpression(expr.get());        // 移除类名前缀
+    auto int_val = evaluateConstExpression(expr.get()); // 移除类名前缀
     auto float_val = evaluateConstExpressionFloat(expr.get()); // 移除类名前缀
 
     if (int_val && type == BaseType::INT) {
@@ -1590,37 +1821,113 @@ void IRgenerator::visit(ConstDef &node) {
 
     // 处理初始化
     if (node.initializer) {
-      require_address = false;
-      node.initializer->accept(*this);
-      int init_reg = max_reg;
-      VarAttribute init_attr = irgen_table.RegTable[init_reg];
+      // require_address = false;
+      // node.initializer->accept(*this);
+      // int init_reg = max_reg;
+      // VarAttribute init_attr = irgen_table.RegTable[init_reg];
 
-      // 将常量值存储到当前常量的属性中
-      if (init_attr.IntInitVals.size() > 0) {
-        irgen_table.RegTable[reg].IntInitVals = init_attr.IntInitVals;
-      } else if (init_attr.FloatInitVals.size() > 0) {
-        irgen_table.RegTable[reg].FloatInitVals = init_attr.FloatInitVals;
-      }
+      // // 将常量值存储到当前常量的属性中
+      // if (init_attr.IntInitVals.size() > 0)
+      // {
+      //     irgen_table.RegTable[reg].IntInitVals = init_attr.IntInitVals;
+      // }
+      // else if (init_attr.FloatInitVals.size() > 0)
+      // {
+      //     irgen_table.RegTable[reg].FloatInitVals = init_attr.FloatInitVals;
+      // }
 
+      // if (attr.dims.empty())
+      // {
+      //     // 标量初始化
+      //     Operand value;
+      //     if (irgen_table.RegTable[init_reg].IntInitVals.size() > 0)
+      //     {
+      //         value = new
+      //         ImmI32Operand(irgen_table.RegTable[init_reg].IntInitVals[0]);
+      //     }
+      //     else if (irgen_table.RegTable[init_reg].FloatInitVals.size() > 0)
+      //     {
+      //         value = new
+      //         ImmF32Operand(irgen_table.RegTable[init_reg].FloatInitVals[0]);
+      //     }
+      //     else
+      //     {
+      //         value = GetNewRegOperand(init_reg);
+      //     }
+      //     IRgenStore(getCurrentBlock(), Type2LLvm[attr.type], value,
+      //     GetNewRegOperand(reg));
+      // }
+      // else
+      // {
+      //     size_t start_index = 0;  // 从0开始索引
+      //     // 数组初始化
+      //     handleArrayInitializer(dynamic_cast<InitVal
+      //     *>(node.initializer.get()),
+      //                            reg,
+      //                            attr,
+      //                            std::vector<int>(attr.dims.begin(),
+      //                            attr.dims.end()), 0,start_index  );
+      // }
       if (attr.dims.empty()) {
-        // 标量初始化
+        // Scalar variable initialization
+        require_address = false;
+        node.initializer->accept(*this);
+        int init_reg = max_reg;
+        VarAttribute init_attr = irgen_table.RegTable[init_reg];
         Operand value;
-        if (irgen_table.RegTable[init_reg].IntInitVals.size() > 0) {
-          value =
-              new ImmI32Operand(irgen_table.RegTable[init_reg].IntInitVals[0]);
-        } else if (irgen_table.RegTable[init_reg].FloatInitVals.size() > 0) {
-          value = new ImmF32Operand(
-              irgen_table.RegTable[init_reg].FloatInitVals[0]);
+        // +++ 修复：全局变量直接使用全局名称 +++
+        // SymbolInfo* sym = str_table.lookup(node.name);
+        // if (sym && sym->kind == SymbolKind::CONSTANT) {
+        //     // 全局变量 - 直接存储到全局地址
+        //     IRgenStore(getCurrentBlock(), Type2LLvm.at(attr.type),
+        //     GetNewRegOperand(init_reg),
+        //                GetNewGlobalOperand(node.name));
+        // }
+        // else
+        // 将常量值存储到当前常量的属性中
+        if (init_attr.IntInitVals.size() > 0) {
+          irgen_table.RegTable[reg].IntInitVals = init_attr.IntInitVals;
+        } else if (init_attr.FloatInitVals.size() > 0) {
+          irgen_table.RegTable[reg].FloatInitVals = init_attr.FloatInitVals;
+        }
+        if (init_attr.IntInitVals.size() > 0) {
+          value = new ImmI32Operand(init_attr.IntInitVals[0]);
+        } else if (init_attr.FloatInitVals.size() > 0) {
+          value = new ImmF32Operand(init_attr.FloatInitVals[0]);
+        } else if (isPointer(init_reg)) {
+          int value_reg = newReg();
+          // IRgenLoad(getCurrentBlock(),
+          // Type2LLvm[static_cast<int>(attr.type)], value_reg,
+          // GetNewRegOperand(init_reg));
+          IRgenLoad(getCurrentBlock(), Type2LLvm.at(attr.type), value_reg,
+                    GetNewRegOperand(init_reg));
+          value = GetNewRegOperand(value_reg);
         } else {
           value = GetNewRegOperand(init_reg);
         }
-        IRgenStore(getCurrentBlock(), Type2LLvm[attr.type], value,
+        if (auto reg_op = dynamic_cast<RegOperand *>(value)) {
+          int value_reg = reg_op->GetRegNo();
+          // 确保 value 是正确的类型
+          int conv_value_reg = convertToType(getCurrentBlock(), value_reg,
+                                             Type2LLvm.at(attr.type));
+          value =
+              GetNewRegOperand(conv_value_reg); // 更新 value 为转换后的寄存器
+        }
+        IRgenStore(getCurrentBlock(), Type2LLvm.at(attr.type), value,
                    GetNewRegOperand(reg));
+        // IRgenStore(getCurrentBlock(), Type2LLvm[static_cast<int>(attr.type)],
+        // value, GetNewRegOperand(reg));
       } else {
-        // 数组初始化
+        // Array initialization
+        // handleArrayInitializer(node.initializer->get(), reg, attr, dims, 0);
+        // handleArrayInitializer(node.initializer->get(), reg, attr, dims);
+        size_t start_index = 0; // 从0开始索引
         handleArrayInitializer(
-            dynamic_cast<InitVal *>(node.initializer.get()), reg, attr,
-            std::vector<int>(attr.dims.begin(), attr.dims.end()), 0);
+            node.initializer.get(), reg, attr,
+            std::vector<int>(attr.dims.begin(), attr.dims.end()),
+            0,          // 从第一个维度开始
+            start_index // 当前索引位置
+        );
       }
     }
 
@@ -1814,8 +2121,15 @@ void IRgenerator::visit(VarDef &node) {
         // value, GetNewRegOperand(reg));
       } else {
         // Array initialization
-        handleArrayInitializer(node.initializer->get(), reg, attr, dims, 0);
+        // handleArrayInitializer(node.initializer->get(), reg, attr, dims, 0);
         // handleArrayInitializer(node.initializer->get(), reg, attr, dims);
+        size_t start_index = 0; // 从0开始索引
+        handleArrayInitializer(
+            dynamic_cast<InitVal *>(node.initializer.value().get()), reg, attr,
+            dims,
+            0,          // 从第一个维度开始
+            start_index // 当前索引位置
+        );
       }
     }
 
@@ -2915,6 +3229,63 @@ void IRgenerator::visit(LVal &node) {
     // Local variable or parameter
     int reg = it;
     VarAttribute &attr = irgen_table.RegTable[reg];
+    if (!require_address && !node.indices.empty()) {
+      std::vector<Operand> indices;
+      // Only add leading 0 index for non-parameter arrays
+      SymbolInfo *sym = str_table.lookup(node.name);
+      if (!(sym && sym->kind == SymbolKind::PARAMETER)) {
+        indices.push_back(new ImmI32Operand(0));
+      }
+      for (auto &idx : node.indices) {
+        bool old_require = require_address;
+        require_address = false; // Indices need values, not addresses
+        if (auto const_val = evaluateConstExpression(idx.get())) {
+          indices.push_back(new ImmI32Operand(*const_val));
+        } else {
+          idx->accept(*this);
+          int idx_reg = max_reg;
+          // Ensure index is a value, not a pointer
+          if (isPointer(idx_reg)) {
+            int value_reg = newReg();
+            IRgenLoad(getCurrentBlock(), LLVMType::I32, value_reg,
+                      GetNewRegOperand(idx_reg));
+            indices.push_back(GetNewRegOperand(value_reg));
+          } else {
+            indices.push_back(GetNewRegOperand(idx_reg));
+          }
+        }
+        require_address = old_require;
+      }
+      int ptr_reg = newReg();
+      std::vector<int> dims_int;
+      for (auto dim : irgen_table.RegTable[reg].dims) {
+        dims_int.push_back(static_cast<int>(dim));
+      }
+      // Ensure the base is a pointer
+      Operand base = GetNewRegOperand(reg);
+      if (RegLLVMTypeMap[reg] != PTR) {
+        // If not a pointer, load the pointer
+        int temp_reg = newReg();
+        IRgenLoad(getCurrentBlock(), PTR, temp_reg, GetNewRegOperand(reg));
+        base = GetNewRegOperand(temp_reg);
+      }
+      IRgenGetElementptr(getCurrentBlock(), Type2LLvm.at(attr.type), ptr_reg,
+                         base, dims_int, indices);
+      if (!require_address) {
+        // Load the value if a value is required
+        int value_reg = newReg();
+        IRgenLoad(getCurrentBlock(), Type2LLvm.at(attr.type), value_reg,
+                  GetNewRegOperand(ptr_reg));
+        // Set new register attributes
+        VarAttribute new_attr;
+        new_attr.type = attr.type;
+        irgen_table.RegTable[value_reg] = new_attr;
+        max_reg = value_reg;
+      } else {
+        max_reg = ptr_reg;
+      }
+      return;
+    }
 
     // For local variables, always load the value if not requiring address
     if (!require_address) {

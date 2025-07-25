@@ -141,10 +141,16 @@ public:
   std::optional<float> evaluateConstExpressionFloat(Exp *expr);
   std::optional<double> evaluateGlobalInitializer(InitVal *init);
   std::shared_ptr<Type> inferExpressionType(Exp *expression);
+  // void handleArrayInitializer(InitVal *init, int base_reg, VarAttribute
+  // &attr, const std::vector<int> &dims, size_t dim_idx);
+  //  void handleArrayInitializer(InitVal* init, int base_reg, VarAttribute&
+  //  attr, const std::vector<int>& dims);
   void handleArrayInitializer(InitVal *init, int base_reg, VarAttribute &attr,
-                              const std::vector<int> &dims, size_t dim_idx);
-  // void handleArrayInitializer(InitVal* init, int base_reg, VarAttribute&
-  // attr, const std::vector<int>& dims);
+                              const std::vector<int> &dims, size_t dim_idx,
+                              size_t &current_index);
+  void handleArrayInitializer(ConstInitVal *init, int base_reg,
+                              VarAttribute &attr, const std::vector<int> &dims,
+                              size_t dim_idx, size_t &current_index);
   void flattenConstInit(ConstInitVal *init,
                         std::vector<std::variant<int, float>> &result,
                         BaseType type);

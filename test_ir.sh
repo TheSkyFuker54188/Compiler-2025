@@ -61,6 +61,7 @@ for file in tests/h_functional/*.ll; do
     
     # 运行验证并将输出重定向到日志文件
     if opt -p=verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    #if opt -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
         echo "测试 $file 通过" | tee -a test_logs/ir_validation.log
         ((true++))
     else
@@ -83,6 +84,7 @@ for file in tests/functional/*.ll; do
     
     # 运行验证并将输出重定向到日志文件
     if opt -p=verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    #if opt -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
         echo "测试 $file 通过" | tee -a test_logs/ir_validation.log
         ((true++))
     else
