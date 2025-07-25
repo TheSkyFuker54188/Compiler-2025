@@ -1,9 +1,10 @@
 #include "include/ast.h"
 #include "include/astprinter.h"
 #include "include/block.h"
-#include "include/semantic.h"
 #include "include/global_isel.h"
 #include "include/machine_ir.h"
+#include "include/semantic.h"
+#include "include/ssa.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -107,7 +108,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
     root->accept(irgen);
     ir = irgen.getLLVMIR();
 
-    // 输出生成的IR到文件
+    // 输出原始IR到文件
     std::string ir_filename =
         filename.substr(0, filename.find_last_of('.')) + ".ll";
     std::ofstream ir_file(ir_filename);
@@ -123,22 +124,79 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
   }
 
-  // 第五阶段：生成汇编代码
+  // 第五阶段：SSA变换和优化
+  LLVMIR optimized_ir = ir;
+  if (semantic_success && !ir.function_block_map.empty()) {
+    if (verbose) {
+      std::cout << "阶段4: SSA变换和优化..." << std::endl;
+    }
+
+    // SSA变换
+    SSATransformer ssa_transformer;
+    LLVMIR ssa_ir = ssa_transformer.transform(ir);
+
+    if (verbose) {
+      std::cout << "SSA变换完成" << std::endl;
+    }
+
+    // 输出SSA形式的IR到文件（可选）
+    std::string ssa_ir_filename =
+        filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
+    std::ofstream ssa_ir_file(ssa_ir_filename);
+    if (ssa_ir_file.is_open()) {
+      ssa_ir.printIR(ssa_ir_file);
+      ssa_ir_file.close();
+      if (verbose) {
+        std::cout << "SSA中间代码已生成到 " << ssa_ir_filename << std::endl;
+      }
+    }
+
+    // SSA优化
+    SSAOptimizer ssa_optimizer;
+    LLVMIR optimized_ssa_ir = ssa_optimizer.optimize(ssa_ir);
+
+    if (verbose) {
+      std::cout << "SSA优化完成" << std::endl;
+    }
+
+    // SSA销毁
+    SSADestroyer ssa_destroyer;
+    optimized_ir = ssa_destroyer.destroySSA(optimized_ssa_ir);
+
+    if (verbose) {
+      std::cout << "SSA销毁完成，准备后端代码生成" << std::endl;
+    }
+
+    // 输出优化后的IR到文件
+    std::string opt_ir_filename =
+        filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
+    std::ofstream opt_ir_file(opt_ir_filename);
+    if (opt_ir_file.is_open()) {
+      optimized_ir.printIR(opt_ir_file);
+      opt_ir_file.close();
+      if (verbose) {
+        std::cout << "优化后的中间代码已生成到 " << opt_ir_filename
+                  << std::endl;
+      }
+    }
+  }
+
+  // 第六阶段：生成汇编代码
   if (generate_asm && semantic_success) {
     if (verbose) {
       std::cout << "阶段4: 汇编代码生成..." << std::endl;
     }
 
-    // 如果还没有生成IR，先生成IR
+    // 使用优化后的IR生成汇编代码
     if (!generate_ir) {
       IRgenerator irgen;
       root->accept(irgen);
-      ir = irgen.getLLVMIR();
+      optimized_ir = irgen.getLLVMIR();
     }
 
-    // 使用GlobalISel将LLVM IR转换为机器码IR
-    GlobalISel globalISel(ir);
-    MachineModule& machineModule = globalISel.selectInstructions();
+    // 使用GlobalISel将优化后的LLVM IR转换为机器码IR
+    GlobalISel globalISel(optimized_ir);
+    MachineModule &machineModule = globalISel.selectInstructions();
 
     // 确定输出文件名
     std::string asm_filename;

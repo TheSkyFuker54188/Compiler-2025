@@ -48,6 +48,11 @@ IRGENERATE_SRC = $(SRC_DIR)/irgenerate.cpp
 # 机器码IR模块源文件
 MACHINE_IR_SRC = $(SRC_DIR)/machine_ir.cpp
 
+# SSA模块源文件
+SSA_TRANSFORM_SRC = $(SRC_DIR)/ssa_transform.cpp
+SSA_OPTIMIZER_SRC = $(SRC_DIR)/ssa_optimizer.cpp  
+SSA_DESTROYER_SRC = $(SRC_DIR)/ssa_destroyer.cpp
+
 # GlobalISel指令选择器模块源文件
 GLOBAL_ISEL_SRC = $(SRC_DIR)/global_isel.cpp
 
@@ -66,13 +71,16 @@ ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
 SEMANTIC_OBJ = $(BUILD_DIR)/semantic.o
 IRGENERATE_OBJ = $(BUILD_DIR)/irgenerate.o
 MACHINE_IR_OBJ = $(BUILD_DIR)/machine_ir.o
+SSA_TRANSFORM_OBJ = $(BUILD_DIR)/ssa_transform.o
+SSA_OPTIMIZER_OBJ = $(BUILD_DIR)/ssa_optimizer.o
+SSA_DESTROYER_OBJ = $(BUILD_DIR)/ssa_destroyer.o
 GLOBAL_ISEL_OBJ = $(BUILD_DIR)/global_isel.o
 LINEAR_SCAN_OBJ = $(BUILD_DIR)/linear_scan_allocator.o
 LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(MACHINE_IR_OBJ) $(GLOBAL_ISEL_OBJ) $(LINEAR_SCAN_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(MACHINE_IR_OBJ) $(SSA_TRANSFORM_OBJ) $(SSA_OPTIMIZER_OBJ) $(SSA_DESTROYER_OBJ) $(GLOBAL_ISEL_OBJ) $(LINEAR_SCAN_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
 
 # 可执行文件
 TARGET = compiler
@@ -119,6 +127,21 @@ $(IRGENERATE_OBJ): $(IRGENERATE_SRC) $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/ast.h
 # 机器码IR编译
 $(MACHINE_IR_OBJ): $(MACHINE_IR_SRC) $(INCLUDE_DIR)/machine_ir.h | $(BUILD_DIR)
 	@echo "Compiling machine_ir.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# SSA变换器编译
+$(SSA_TRANSFORM_OBJ): $(SSA_TRANSFORM_SRC) $(INCLUDE_DIR)/ssa.h $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/instruction.h | $(BUILD_DIR)
+	@echo "Compiling ssa_transform.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# SSA优化器编译
+$(SSA_OPTIMIZER_OBJ): $(SSA_OPTIMIZER_SRC) $(INCLUDE_DIR)/ssa.h $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/instruction.h | $(BUILD_DIR)
+	@echo "Compiling ssa_optimizer.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# SSA销毁器编译
+$(SSA_DESTROYER_OBJ): $(SSA_DESTROYER_SRC) $(INCLUDE_DIR)/ssa.h $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/instruction.h | $(BUILD_DIR)
+	@echo "Compiling ssa_destroyer.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # GlobalISel指令选择器编译
