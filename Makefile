@@ -1,6 +1,6 @@
 # SYS Language Compiler Makefile
 # Author: SYS Compiler Team
-# Description: Build system for SYS language compiler with AST printer
+# Description: Build system for SYS language compiler
 
 # ===--------------------------------------------------------------------=== #
 # 编译器设置
@@ -44,43 +44,33 @@ MAIN_SRC = main.cpp
 ASTPRINTER_SRC = $(SRC_DIR)/astprinter.cpp
 SEMANTIC_SRC = $(SRC_DIR)/semantic.cpp
 IRGENERATE_SRC = $(SRC_DIR)/irgenerate.cpp
-
-# 机器码IR模块源文件
-MACHINE_IR_SRC = $(SRC_DIR)/machine_ir.cpp
-
 # SSA模块源文件
 SSA_TRANSFORM_SRC = $(SRC_DIR)/ssa_transform.cpp
 SSA_OPTIMIZER_SRC = $(SRC_DIR)/ssa_optimizer.cpp  
 SSA_DESTROYER_SRC = $(SRC_DIR)/ssa_destroyer.cpp
 
-# GlobalISel指令选择器模块源文件
-GLOBAL_ISEL_SRC = $(SRC_DIR)/global_isel.cpp
-
-# 线性扫描寄存器分配器模块源文件
-LINEAR_SCAN_SRC = $(SRC_DIR)/linear_scan_allocator.cpp
-
-# 寄存器分配模块源文件
-REGALLOC_SRC = $(SRC_DIR)/regalloc.cpp
-
-# 指令选择器模块源文件
-INSTRUCTION_SELECTOR_SRC = $(SRC_DIR)/instruction_selector.cpp
+RISCV_MIR_SRC = $(SRC_DIR)/riscv_mir.cpp
+GLOBALISEL_SRC = $(SRC_DIR)/globalisel.cpp
+REGISTER_ALLOC_SRC = $(SRC_DIR)/register_alloc.cpp
+CODE_EMITTER_SRC = $(SRC_DIR)/code_emitter.cpp
 
 # 目标文件
 MAIN_OBJ = $(BUILD_DIR)/main.o
 ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
 SEMANTIC_OBJ = $(BUILD_DIR)/semantic.o
 IRGENERATE_OBJ = $(BUILD_DIR)/irgenerate.o
-MACHINE_IR_OBJ = $(BUILD_DIR)/machine_ir.o
 SSA_TRANSFORM_OBJ = $(BUILD_DIR)/ssa_transform.o
 SSA_OPTIMIZER_OBJ = $(BUILD_DIR)/ssa_optimizer.o
 SSA_DESTROYER_OBJ = $(BUILD_DIR)/ssa_destroyer.o
-GLOBAL_ISEL_OBJ = $(BUILD_DIR)/global_isel.o
-LINEAR_SCAN_OBJ = $(BUILD_DIR)/linear_scan_allocator.o
+RISCV_MIR_OBJ = $(BUILD_DIR)/riscv_mir.o
+GLOBALISEL_OBJ = $(BUILD_DIR)/globalisel.o
+REGISTER_ALLOC_OBJ = $(BUILD_DIR)/register_alloc.o
+CODE_EMITTER_OBJ = $(BUILD_DIR)/code_emitter.o
 LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(MACHINE_IR_OBJ) $(SSA_TRANSFORM_OBJ) $(SSA_OPTIMIZER_OBJ) $(SSA_DESTROYER_OBJ) $(GLOBAL_ISEL_OBJ) $(LINEAR_SCAN_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(RISCV_MIR_OBJ) $(GLOBALISEL_OBJ) $(REGISTER_ALLOC_OBJ) $(CODE_EMITTER_OBJ) $(SSA_TRANSFORM_OBJ) $(SSA_OPTIMIZER_OBJ) $(SSA_DESTROYER_OBJ) $(GLOBAL_ISEL_OBJ) $(LINEAR_SCAN_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
 
 # 可执行文件
 TARGET = compiler
@@ -124,9 +114,9 @@ $(IRGENERATE_OBJ): $(IRGENERATE_SRC) $(INCLUDE_DIR)/block.h $(INCLUDE_DIR)/ast.h
 	@echo "Compiling irgenerate.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# 机器码IR编译
-$(MACHINE_IR_OBJ): $(MACHINE_IR_SRC) $(INCLUDE_DIR)/machine_ir.h | $(BUILD_DIR)
-	@echo "Compiling machine_ir.cpp..."
+# RISC-V MIR编译
+$(RISCV_MIR_OBJ): $(RISCV_MIR_SRC) $(INCLUDE_DIR)/riscv_mir.h | $(BUILD_DIR)
+	@echo "Compiling riscv_mir.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # SSA变换器编译
@@ -144,14 +134,19 @@ $(SSA_DESTROYER_OBJ): $(SSA_DESTROYER_SRC) $(INCLUDE_DIR)/ssa.h $(INCLUDE_DIR)/b
 	@echo "Compiling ssa_destroyer.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# GlobalISel指令选择器编译
-$(GLOBAL_ISEL_OBJ): $(GLOBAL_ISEL_SRC) $(INCLUDE_DIR)/global_isel.h $(INCLUDE_DIR)/machine_ir.h $(INCLUDE_DIR)/instruction.h $(INCLUDE_DIR)/block.h | $(BUILD_DIR)
-	@echo "Compiling global_isel.cpp..."
+# GlobalISel编译
+$(GLOBALISEL_OBJ): $(GLOBALISEL_SRC) $(INCLUDE_DIR)/globalisel.h $(INCLUDE_DIR)/riscv_mir.h $(INCLUDE_DIR)/instruction.h $(INCLUDE_DIR)/block.h | $(BUILD_DIR)
+	@echo "Compiling globalisel.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# 线性扫描寄存器分配器编译
-$(LINEAR_SCAN_OBJ): $(LINEAR_SCAN_SRC) $(INCLUDE_DIR)/linear_scan_allocator.h $(INCLUDE_DIR)/machine_ir.h | $(BUILD_DIR)
-	@echo "Compiling linear_scan_allocator.cpp..."
+# 寄存器分配器编译
+$(REGISTER_ALLOC_OBJ): $(REGISTER_ALLOC_SRC) $(INCLUDE_DIR)/register_alloc.h $(INCLUDE_DIR)/riscv_mir.h $(INCLUDE_DIR)/globalisel.h | $(BUILD_DIR)
+	@echo "Compiling register_alloc.cpp..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# 代码发射器编译
+$(CODE_EMITTER_OBJ): $(CODE_EMITTER_SRC) $(INCLUDE_DIR)/code_emitter.h $(INCLUDE_DIR)/riscv_mir.h | $(BUILD_DIR)
+	@echo "Compiling code_emitter.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # 词法分析器编译

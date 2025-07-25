@@ -1,10 +1,12 @@
 #include "include/ast.h"
 #include "include/astprinter.h"
 #include "include/block.h"
-#include "include/global_isel.h"
-#include "include/machine_ir.h"
 #include "include/semantic.h"
 #include "include/ssa.h"
+#include "include/semantic.h"
+#include "include/globalisel.h"
+#include "include/riscv_mir.h"
+#include "include/code_emitter.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -181,41 +183,65 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
   }
 
-  // 第六阶段：生成汇编代码
-  if (generate_asm && semantic_success) {
+  // 第五阶段：汇编代码生成
+  if (generate_asm && semantic_success && generate_ir) {
     if (verbose) {
       std::cout << "阶段4: 汇编代码生成..." << std::endl;
     }
 
-    // 使用优化后的IR生成汇编代码
-    if (!generate_ir) {
-      IRgenerator irgen;
-      root->accept(irgen);
-      optimized_ir = irgen.getLLVMIR();
-    }
-
-    // 使用GlobalISel将优化后的LLVM IR转换为机器码IR
-    GlobalISel globalISel(optimized_ir);
-    MachineModule &machineModule = globalISel.selectInstructions();
-
-    // 确定输出文件名
-    std::string asm_filename;
-    if (!output_file.empty()) {
-      asm_filename = output_file;
-    } else {
-      asm_filename = filename.substr(0, filename.find_last_of('.')) + ".s";
-    }
-
-    // 输出汇编代码
-    std::ofstream asm_file(asm_filename);
-    if (asm_file.is_open()) {
-      machineModule.print(asm_file);
-      asm_file.close();
-      if (verbose) {
-        std::cout << "汇编代码已生成到 " << asm_filename << std::endl;
+    try {
+      MachineModule mir_module;
+      MachineModule asm_module;  // 用于汇编生成的模块
+      RISCVGlobalISel global_isel;
+      
+      // 第一步：运行到InstructionSelect阶段，用于生成MIR文件
+      bool isel_success = global_isel.runGlobalISelToInstructionSelect(optimized_ir, mir_module);
+      
+      if (isel_success) {
+        // 输出生成的MIR到文件（InstructionSelect阶段的状态）
+        std::string mir_filename =
+            filename.substr(0, filename.find_last_of('.')) + ".mir";
+        std::ofstream mir_file(mir_filename);
+        if (mir_file.is_open()) {
+          mir_module.printMIR(mir_file);  // 使用MIR专用格式
+          mir_file.close();
+          if (verbose) {
+            std::cout << "机器中间代码已生成到 " << mir_filename << std::endl;
+          }
+        } else {
+          std::cerr << "无法创建MIR文件 " << mir_filename << std::endl;
+        }
+        
+        // 第二步：运行完整流程用于生成汇编文件
+        bool full_success = global_isel.runGlobalISel(ir, asm_module);
+        
+        if (full_success) {
+          if (verbose) {
+            std::cout << "GlobalISel指令选择成功!" << std::endl;
+          }
+          
+          // 输出生成的RISC-V汇编代码到文件（使用代码发射器）
+          std::ofstream asm_file(output_file);
+          if (asm_file.is_open()) {
+            RISCVCodeEmitter emitter(asm_file);  // 使用专门的代码发射器
+            emitter.emitModule(asm_module);
+            asm_file.close();
+            if (verbose) {
+              std::cout << "RISC-V汇编代码已生成" << std::endl;
+            }
+          } else {
+            std::cerr << "无法创建汇编文件 " << std::endl;
+          }
+        } else {
+          std::cerr << "GlobalISel完整流程执行失败!" << std::endl;
+          return false;
+        }
+      } else {
+        std::cerr << "GlobalISel指令选择失败!" << std::endl;
+        return false;
       }
-    } else {
-      std::cerr << "无法创建汇编文件 " << asm_filename << std::endl;
+    } catch (const std::exception& e) {
+      std::cerr << "GlobalISel执行出错: " << e.what() << std::endl;
       return false;
     }
   }
