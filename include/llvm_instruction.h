@@ -1,5 +1,4 @@
-#ifndef INSTRUCTION_H
-#define INSTRUCTION_H
+#pragma once
 
 #include "ast.h"
 #include "symtab.h"
@@ -1076,5 +1075,3 @@ public:
       << value->GetFullName() << " to " << to_type << "\n";
   }
 };
-
-#endif

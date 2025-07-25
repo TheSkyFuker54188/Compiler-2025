@@ -1,0 +1,98 @@
+#pragma once
+
+#include "irtranslater.h"
+#include "riscv_instruction.h"
+#include <map>
+#include <vector>
+#include <set>
+#include <algorithm>
+
+// 虚拟寄存器的生存期信息
+struct LiveRange {
+  int virtual_reg;
+  int start_pos;    // 第一次定义的位置
+  int end_pos;      // 最后一次使用的位置
+  bool is_spilled;  // 是否被溢出到内存
+  int spill_slot;   // 溢出槽位置（如果被溢出）
+  
+  LiveRange(int reg, int start, int end) 
+    : virtual_reg(reg), start_pos(start), end_pos(end), is_spilled(false), spill_slot(-1) {}
+};
+
+// RISC-V寄存器信息
+struct PhysicalRegister {
+  int reg_no;       // 寄存器编号
+  std::string name; // 寄存器名称
+  bool is_callee_saved; // 是否为被调用方保存寄存器
+  bool is_available;    // 是否可用于分配
+  
+  PhysicalRegister(int no, const std::string& n, bool callee_saved, bool available = true)
+    : reg_no(no), name(n), is_callee_saved(callee_saved), is_available(available) {}
+};
+
+class RegisterAllocator {
+private:
+  // RISC-V物理寄存器定义
+  std::vector<PhysicalRegister> available_registers;
+  
+  // 寄存器分配映射
+  std::map<int, int> virtual_to_physical; // 虚拟寄存器 -> 物理寄存器
+  std::map<int, int> physical_to_virtual; // 物理寄存器 -> 虚拟寄存器（当前占用）
+  
+  // 溢出管理
+  std::set<int> spilled_virtuals;         // 被溢出的虚拟寄存器
+  std::map<int, int> spill_slots;         // 虚拟寄存器 -> 溢出槽偏移
+  int next_spill_slot;                    // 下一个可用的溢出槽
+  
+  // 生存期分析
+  std::vector<LiveRange> live_ranges;
+  std::map<int, LiveRange*> virtual_to_range;
+  
+  // 当前函数的栈帧信息
+  StackFrameInfo* current_frame;
+
+public:
+  RegisterAllocator();
+  
+  // 主要接口
+  void allocateRegistersForFunction(const std::string& func_name, 
+                                   std::map<int, std::unique_ptr<RiscvBlock>>& blocks,
+                                   StackFrameInfo* frame_info);
+  
+  // 寄存器查询
+  int getPhysicalRegister(int virtual_reg);
+  bool isSpilled(int virtual_reg);
+  int getSpillOffset(int virtual_reg);
+  
+  // 生存期分析
+  void analyzeLiveness(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  void computeLiveRanges(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  
+  // 寄存器分配算法
+  void preAllocateSpecialRegisters(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  void performLinearScanAllocation();
+  void insertSpillCode(std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  
+  // 指令重写
+  void rewriteInstructions(std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  
+  // 工具方法
+  void initializePhysicalRegisters();
+  int findFreeRegister();
+  int selectVictimRegister(int current_pos);
+  void spillRegister(int physical_reg, int current_pos);
+  void generateSpillLoad(RiscvBlock* block, int virtual_reg, int physical_reg, int pos);
+  void generateSpillStore(RiscvBlock* block, int virtual_reg, int physical_reg, int pos);
+  std::vector<int> extractVirtualRegisters(RiscvInstruction* inst);
+  void rewriteOperand(std::unique_ptr<RiscvOperand>& operand);
+  
+  // 调试和统计
+  void printAllocationResult();
+  void printLiveRanges();
+};
+
+// 寄存器分配器集成到翻译器的接口
+class RegisterAllocationPass {
+public:
+  static void applyToTranslator(Translator& translator);
+}; 
