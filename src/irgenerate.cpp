@@ -2130,7 +2130,7 @@ void IRgenerator::visit(FuncDef &node) {
   function_returntype = node.return_type;
   llvmIR.NewFunction(function_now);
   now_label = 0;
-  current_reg_counter = 0; // Reset register counter
+  current_reg_counter = -1; // Reset register counter
   max_label = 0;            // 重置标签计数器
   // max_reg = -1;
   // llvmIR.NewBlock(function_now, now_label);
