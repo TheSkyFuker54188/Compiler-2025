@@ -79,7 +79,7 @@ private:
 
   // 物理寄存器创建辅助方法
   std::unique_ptr<RiscvRegOperand> createPhysicalReg(int physical_reg_no);
-  std::unique_ptr<RiscvRegOperand> createVirtualReg(int virtual_reg_no);
+  std::unique_ptr<RiscvRegOperand> createVirtualReg();
   std::unique_ptr<RiscvRegOperand> getZeroReg();
   std::unique_ptr<RiscvRegOperand> getReturnAddressReg();
   std::unique_ptr<RiscvRegOperand> getStackPointerReg();
@@ -88,7 +88,6 @@ private:
   std::unique_ptr<RiscvRegOperand> getFramePointerReg();
 
   // 指令翻译
-  void translateArithmetic(ArithmeticInstruction *inst, RiscvBlock *block);
   void translateLoad(LoadInstruction *inst, RiscvBlock *block);
   void translateStore(StoreInstruction *inst, RiscvBlock *block);
   void translateBranch(Instruction inst, RiscvBlock *block);
@@ -97,9 +96,15 @@ private:
   void translateIcmp(IcmpInstruction *inst, RiscvBlock *block);
   void translateFcmp(FcmpInstruction *inst, RiscvBlock *block);
   void translateAdd(Instruction inst, RiscvBlock *block);
+  void translateSub(Instruction inst, RiscvBlock *block);
+  void translateMul(Instruction inst, RiscvBlock *block);
+  void translateDiv(Instruction inst, RiscvBlock *block);
+  void translateMod(Instruction inst, RiscvBlock *block);
+  void translateFadd(Instruction inst, RiscvBlock *block);
+  void translateFsub(Instruction inst, RiscvBlock *block);
+  void translateFmul(Instruction inst, RiscvBlock *block);
 
   // 工具方法
-  RiscvOpcode llvmToRiscvOpcode(LLVMIROpcode llvm_op, bool is_float = false);
   std::string getLLVMTypeString(LLVMType type);
 
   // 栈帧管理方法

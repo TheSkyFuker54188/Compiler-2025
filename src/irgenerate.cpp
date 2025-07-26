@@ -1686,7 +1686,7 @@ void IRgenerator::flattenConstInit(
 
   if (std::holds_alternative<std::unique_ptr<Exp>>(init->value)) {
     auto &expr = std::get<std::unique_ptr<Exp>>(init->value);
-    auto int_val = evaluateConstExpression(expr.get()); // 移除类名前缀
+    auto int_val = evaluateConstExpression(expr.get());        // 移除类名前缀
     auto float_val = evaluateConstExpressionFloat(expr.get()); // 移除类名前缀
 
     if (int_val && type == BaseType::INT) {
@@ -2156,8 +2156,8 @@ void IRgenerator::visit(FuncDef &node) {
   function_returntype = node.return_type;
   llvmIR.NewFunction(function_now);
   now_label = 0;
-  current_reg_counter = -1; // Reset register counter
-  max_label = 0;            // 重置标签计数器
+  current_reg_counter = 0; // Reset register counter
+  max_label = 0;           // 重置标签计数器
   // max_reg = -1;
   // llvmIR.NewBlock(function_now, now_label);
   llvmIR.NewBlock(function_now, max_label);

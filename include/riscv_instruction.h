@@ -9,10 +9,17 @@
 enum class RiscvOpcode {
   ADDI, // 立即数加法
   ADD,  // 寄存器加法
+  SUB,
+  MUL,
+  DIV,
+  MOD,
+  FMV,
   SD,
   LI,
-  GLOBAL_VAR,
+  LD,
   CALL,
+  JR,
+  GLOBAL_VAR,
   GLOBAL_STR,
 };
 
@@ -110,7 +117,12 @@ public:
 
   float GetFloatVal() { return immVal; }
 
-  std::string GetFullName() override { return std::to_string(immVal); }
+  std::string GetFullName() override {
+    unsigned long long byte_val = Float_to_Byte(immVal);
+    std::ostringstream oss;
+    oss << "0x" << std::hex << byte_val << std::dec;
+    return oss.str();
+  }
 
   std::unique_ptr<RiscvOperand> CopyOperand() override {
     return std::make_unique<RiscvImmF32Operand>(immVal);
@@ -220,6 +232,88 @@ public:
   }
 };
 
+class RiscvSubInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd, rs1, rs2;
+  RiscvSubInstruction(std::unique_ptr<RiscvOperand> rd,
+                      std::unique_ptr<RiscvOperand> rs1,
+                      std::unique_ptr<RiscvOperand> rs2) {
+    opcode = RiscvOpcode::SUB; // 使用SUB伪指令
+    this->rd = std::move(rd);
+    this->rs1 = std::move(rs1);
+    this->rs2 = std::move(rs2);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "sub " << rd->GetFullName() << ", " << rs1->GetFullName() << ", "
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvMulInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd, rs1, rs2;
+  RiscvMulInstruction(std::unique_ptr<RiscvOperand> rd,
+                      std::unique_ptr<RiscvOperand> rs1,
+                      std::unique_ptr<RiscvOperand> rs2) {
+    opcode = RiscvOpcode::MUL; // 使用ADD伪指令
+    this->rd = std::move(rd);
+    this->rs1 = std::move(rs1);
+    this->rs2 = std::move(rs2);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "mul " << rd->GetFullName() << ", " << rs1->GetFullName() << ", "
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvDivInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd, rs1, rs2;
+  RiscvDivInstruction(std::unique_ptr<RiscvOperand> rd,
+                      std::unique_ptr<RiscvOperand> rs1,
+                      std::unique_ptr<RiscvOperand> rs2) {
+    opcode = RiscvOpcode::DIV; // 使用DIV伪指令
+    this->rd = std::move(rd);
+    this->rs1 = std::move(rs1);
+    this->rs2 = std::move(rs2);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "div " << rd->GetFullName() << ", " << rs1->GetFullName() << ", "
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvModInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd, rs1, rs2;
+  RiscvModInstruction(std::unique_ptr<RiscvOperand> rd,
+                      std::unique_ptr<RiscvOperand> rs1,
+                      std::unique_ptr<RiscvOperand> rs2) {
+    opcode = RiscvOpcode::MOD; // 使用MOD伪指令
+    this->rd = std::move(rd);
+    this->rs1 = std::move(rs1);
+    this->rs2 = std::move(rs2);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "rem " << rd->GetFullName() << ", " << rs1->GetFullName() << ", "
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvFmvInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd, rs1;
+  RiscvFmvInstruction(std::unique_ptr<RiscvOperand> rd,
+                      std::unique_ptr<RiscvOperand> rs1) {
+    opcode = RiscvOpcode::FMV; // 使用FMV伪指令
+    this->rd = std::move(rd);
+    this->rs1 = std::move(rs1);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "fmv.w.x " << rd->GetFullName() << ", " << rs1->GetFullName() << "\n";
+  }
+};
+
 class RiscvSdInstruction : public RiscvInstruction {
 public:
   std::unique_ptr<RiscvOperand> reg;
@@ -245,6 +339,33 @@ public:
     opcode = RiscvOpcode::LI; // 使用LI伪指令
     this->rd = std::move(rd);
     this->imm = imm;
+  }
+};
+
+class RiscvLdInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd;
+  std::unique_ptr<RiscvOperand> address;
+  RiscvLdInstruction(std::unique_ptr<RiscvOperand> rd,
+                     std::unique_ptr<RiscvOperand> address) {
+    opcode = RiscvOpcode::LD; // 使用LD伪指令
+    this->rd = std::move(rd);
+    this->address = std::move(address);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "ld " << rd->GetFullName() << ", " << address->GetFullName() << "\n";
+  }
+};
+
+class RiscvJrInstruction : public RiscvInstruction {
+public:
+  std::unique_ptr<RiscvOperand> rd;
+  RiscvJrInstruction(std::unique_ptr<RiscvOperand> rd) {
+    opcode = RiscvOpcode::JR; // 使用JR伪指令
+    this->rd = std::move(rd);
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "jr " << rd->GetFullName() << "\n";
   }
 };
 

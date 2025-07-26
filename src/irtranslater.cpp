@@ -2,6 +2,8 @@
 #include "../include/llvm_instruction.h"
 #include <algorithm>
 
+int next_virtual_reg_no = 0;
+
 void RiscvBlock::InsertInstruction(int pos,
                                    std::unique_ptr<RiscvInstruction> ins) {
   if (pos == 0)
@@ -130,9 +132,8 @@ void Translator::analyzeInstruction(Instruction inst) {
   }
   case LLVMIROpcode::CALL: {
     auto *call_inst = dynamic_cast<CallInstruction *>(inst);
-    if (call_inst) {
+    if (call_inst)
       updateCallArgsSize(call_inst->GetArgs().size());
-    }
     break;
   }
   default:
@@ -161,6 +162,9 @@ void Translator::translateInstruction(Instruction inst,
   case LLVMIROpcode::DIV_OP:
     translateDiv(inst, riscv_block);
     break;
+  case LLVMIROpcode::MOD_OP:
+    translateMod(inst, riscv_block);
+    break;
   case LLVMIROpcode::FADD:
     translateFadd(inst, riscv_block);
     break;
@@ -171,60 +175,35 @@ void Translator::translateInstruction(Instruction inst,
     translateFmul(inst, riscv_block);
     break;
   case LLVMIROpcode::FDIV:
-    translateArithmetic(dynamic_cast<ArithmeticInstruction *>(inst),
-                        riscv_block);
+    translateFdiv(inst, riscv_block);
     break;
   case LLVMIROpcode::LOAD:
     translateLoad(dynamic_cast<LoadInstruction *>(inst), riscv_block);
     break;
-
   case LLVMIROpcode::STORE:
     translateStore(dynamic_cast<StoreInstruction *>(inst), riscv_block);
     break;
-
   case LLVMIROpcode::BR_COND:
   case LLVMIROpcode::BR_UNCOND:
     translateBranch(inst, riscv_block);
     break;
-
   case LLVMIROpcode::CALL:
     translateCall(dynamic_cast<CallInstruction *>(inst), riscv_block);
     break;
-
   case LLVMIROpcode::RET:
     translateReturn(dynamic_cast<RetInstruction *>(inst), riscv_block);
     break;
-
   case LLVMIROpcode::ICMP:
     translateIcmp(dynamic_cast<IcmpInstruction *>(inst), riscv_block);
     break;
-
   case LLVMIROpcode::FCMP:
     translateFcmp(dynamic_cast<FcmpInstruction *>(inst), riscv_block);
     break;
-
   default:
+    std::cerr << "Unsupported instruction opcode: " << inst->GetOpcode()
+              << std::endl;
     break;
   }
-}
-
-void Translator::translateArithmetic(ArithmeticInstruction *inst,
-                                     RiscvBlock *block) {
-  if (!inst)
-    return;
-
-  RiscvOpcode riscv_op =
-      llvmToRiscvOpcode(static_cast<LLVMIROpcode>(inst->GetOpcode()),
-                        inst->GetType() == LLVMType::FLOAT32);
-
-  auto rd = translateOperand(inst->GetResult());
-  auto rs1 = translateOperand(inst->GetOp1());
-  auto rs2 = translateOperand(inst->GetOp2());
-
-  auto riscv_inst = std::make_unique<RiscvArithmeticInstruction>(
-      riscv_op, std::move(rd), std::move(rs1), std::move(rs2));
-
-  block->InsertInstruction(1, std::move(riscv_inst));
 }
 
 void Translator::translateLoad(LoadInstruction *inst, RiscvBlock *block) {
@@ -416,6 +395,15 @@ void Translator::translateAdd(Instruction inst, RiscvBlock *block) {
     auto addi_inst = std::make_unique<RiscvAddiInstruction>(
         std::move(result), std::move(rs1), imm);
     block->InsertInstruction(1, std::move(addi_inst));
+  } else if (add_inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是立即数，使用ADDI指令
+    auto result = translateOperand(add_inst->GetResult());
+    auto rs2 = translateOperand(add_inst->GetOp2());
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(add_inst->GetOp1()).get());
+    auto addi_inst =
+        std::make_unique<RiscvAddiInstruction>(std::move(result), rs2, imm);
+    block->InsertInstruction(1, std::move(addi_inst));
   } else {
     // 否则使用ADD指令
     auto result = translateOperand(add_inst->GetResult());
@@ -427,6 +415,185 @@ void Translator::translateAdd(Instruction inst, RiscvBlock *block) {
   }
 }
 
+void Translator::translateMod(Instruction inst, RiscvBlock *block) {
+  auto *mod_inst = dynamic_cast<ArithmeticInstruction *>(inst);
+  if (!mod_inst)
+    return;
+
+  if (mod_inst->GetOp1()->isIMM() && mod_inst->GetOp2()->isIMM()) {
+    auto result = translateOperand(mod_inst->GetResult());
+    auto op1 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(mod_inst->GetOp1()).get());
+    auto op2 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(mod_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(
+        std::move(result), op1->GetIntImmVal() % op2->GetIntImmVal());
+    block->InsertInstruction(1, std::move(li_inst));
+  } else if (mod_inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数，使用MODI指令
+    auto result = translateOperand(mod_inst->GetResult());
+    auto rs1 = translateOperand(mod_inst->GetOp1());
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(mod_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(std::move(result),
+                                                        imm->GetIntImmVal());
+    auto _mod_inst = std::make_unique<RiscvModInstruction>(
+        std::move(result), std::move(rs1), std::move(result));
+    block->InsertInstruction(1, std::move(li_inst));
+    block->InsertInstruction(1, std::move(_mod_inst));
+  } else {
+    // 否则使用MOD指令
+    auto result = translateOperand(mod_inst->GetResult());
+    auto rs1 = translateOperand(mod_inst->GetOp1());
+    auto rs2 = translateOperand(mod_inst->GetOp2());
+    auto mod_inst = std::make_unique<RiscvModInstruction>(
+        std::move(result), std::move(rs1), std::move(rs2));
+    block->InsertInstruction(1, std::move(mod_inst));
+  }
+}
+
+void Translator::translateSub(Instruction inst, RiscvBlock *block) {
+  auto *sub_inst = dynamic_cast<ArithmeticInstruction *>(inst);
+  if (!sub_inst)
+    return;
+  if (sub_inst->GetOp1()->isIMM() && sub_inst->GetOp2()->isIMM()) {
+    auto result = translateOperand(sub_inst->GetResult());
+    auto op1 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(sub_inst->GetOp1()).get());
+    auto op2 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(sub_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(
+        std::move(result), op1->GetIntImmVal() - op2->GetIntImmVal());
+    block->InsertInstruction(1, std::move(li_inst));
+  } else if (sub_inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数，使用ADDI指令
+    auto result = translateOperand(sub_inst->GetResult());
+    auto rs1 = translateOperand(sub_inst->GetOp1());
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(sub_inst->GetOp2()).get());
+    auto addi_inst = std::make_unique<RiscvAddiInstruction>(
+        std::move(result), std::move(rs1), -imm->GetIntImmVal());
+    block->InsertInstruction(1, std::move(addi_inst));
+  } else {
+    // 否则使用SUB指令
+    auto result = translateOperand(sub_inst->GetResult());
+    auto rs1 = translateOperand(sub_inst->GetOp1());
+    auto rs2 = translateOperand(sub_inst->GetOp2());
+    auto sub_inst = std::make_unique<RiscvSubInstruction>(
+        std::move(result), std::move(rs1), std::move(rs2));
+    block->InsertInstruction(1, std::move(sub_inst));
+  }
+}
+
+void Translator::translateMul(Instruction inst, RiscvBlock *block) {
+  auto *mul_inst = dynamic_cast<ArithmeticInstruction *>(inst);
+  if (!mul_inst)
+    return;
+
+  if (mul_inst->GetOp1()->isIMM() && mul_inst->GetOp2()->isIMM()) {
+    auto result = translateOperand(mul_inst->GetResult());
+    auto op1 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(mul_inst->GetOp1()).get());
+    auto op2 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(mul_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(
+        std::move(result), op1->GetIntImmVal() * op2->GetIntImmVal());
+    block->InsertInstruction(1, std::move(li_inst));
+  } else if (mul_inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数，使用MULI指令
+    auto result = translateOperand(mul_inst->GetResult());
+    auto rs1 = translateOperand(mul_inst->GetOp1());
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(mul_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(std::move(result),
+                                                        imm->GetIntImmVal());
+    auto _mul_inst = std::make_unique<RiscvMulInstruction>(
+        std::move(result), std::move(rs1), std::move(result));
+    block->InsertInstruction(1, std::move(li_inst));
+    block->InsertInstruction(1, std::move(_mul_inst));
+  } else {
+    // 否则使用MUL指令
+    auto result = translateOperand(mul_inst->GetResult());
+    auto rs1 = translateOperand(mul_inst->GetOp1());
+    auto rs2 = translateOperand(mul_inst->GetOp2());
+    auto mul_inst = std::make_unique<RiscvMulInstruction>(
+        std::move(result), std::move(rs1), std::move(rs2));
+    block->InsertInstruction(1, std::move(mul_inst));
+  }
+}
+
+void Translator::translateDiv(Instruction inst, RiscvBlock *block) {
+  auto *div_inst = dynamic_cast<ArithmeticInstruction *>(inst);
+  if (!div_inst)
+    return;
+
+  if (div_inst->GetOp1()->isIMM() && div_inst->GetOp2()->isIMM()) {
+    auto result = translateOperand(div_inst->GetResult());
+    auto op1 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(div_inst->GetOp1()).get());
+    auto op2 = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(div_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(
+        std::move(result), op1->GetIntImmVal() / op2->GetIntImmVal());
+    block->InsertInstruction(1, std::move(li_inst));
+  } else if (div_inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数，使用DIVI指令
+    auto result = translateOperand(div_inst->GetResult());
+    auto rs1 = translateOperand(div_inst->GetOp1());
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(
+        translateOperand(div_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(std::move(result),
+                                                        imm->GetIntImmVal());
+    auto _div_inst = std::make_unique<RiscvDivInstruction>(
+        std::move(result), std::move(rs1), std::move(result));
+    block->InsertInstruction(1, std::move(li_inst));
+    block->InsertInstruction(1, std::move(_div_inst));
+  } else {
+    // 否则使用DIV指令
+    auto result = translateOperand(div_inst->GetResult());
+    auto rs1 = translateOperand(div_inst->GetOp1());
+    auto rs2 = translateOperand(div_inst->GetOp2());
+    auto div_inst = std::make_unique<RiscvDivInstruction>(
+        std::move(result), std::move(rs1), std::move(rs2));
+    block->InsertInstruction(1, std::move(div_inst));
+  }
+}
+
+void Translator::translateFadd(Instruction inst, RiscvBlock *block) {
+  auto *fadd_inst = dynamic_cast<ArithmeticInstruction *>(inst);
+  if (!fadd_inst)
+    return;
+
+  if (fadd_inst->GetOp1()->isIMM() && fadd_inst->GetOp2()->isIMM()) {
+    auto result = translateOperand(fadd_inst->GetResult());
+    auto op1 = dynamic_cast<RiscvImmF32Operand *>(
+        translateOperand(fadd_inst->GetOp1()).get());
+    auto op2 = dynamic_cast<RiscvImmF32Operand *>(
+        translateOperand(fadd_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(
+        std::move(result), op1->GetFloatVal() + op2->GetFloatVal());
+    block->InsertInstruction(1, std::move(li_inst));
+  } else if (fadd_inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数，使用FADDI指令
+    auto result = translateOperand(fadd_inst->GetResult());
+    auto rs1 = translateOperand(fadd_inst->GetOp1());
+    auto imm = dynamic_cast<RiscvImmF32Operand *>(
+        translateOperand(fadd_inst->GetOp2()).get());
+    auto li_inst = std::make_unique<RiscvLiInstruction>(std::move(result),
+                                                        imm->GetFloatVal());
+    auto fmv_inst = std::make_unique<RiscvFmvInstruction>(std::move(result),
+                                                          std::move(rs1));
+  } else {
+    // 否则使用FADD指令
+    auto result = translateOperand(fadd_inst->GetResult());
+    auto rs1 = translateOperand(fadd_inst->GetOp1());
+    auto rs2 = translateOperand(fadd_inst->GetOp2());
+    auto fadd_inst = std::make_unique<RiscvFAddInstruction>(
+        std::move(result), std::move(rs1), std::move(rs2));
+    block->InsertInstruction(1, std::move(fadd_inst));
+  }
+}
+
 // 物理寄存器创建辅助方法
 std::unique_ptr<RiscvRegOperand>
 Translator::createPhysicalReg(int physical_reg_no) {
@@ -434,10 +601,9 @@ Translator::createPhysicalReg(int physical_reg_no) {
       -physical_reg_no); // 负数表示物理寄存器
 }
 
-std::unique_ptr<RiscvRegOperand>
-Translator::createVirtualReg(int virtual_reg_no) {
+std::unique_ptr<RiscvRegOperand> Translator::createVirtualReg() {
   return std::make_unique<RiscvRegOperand>(
-      virtual_reg_no); // 正数表示虚拟寄存器
+      ++next_virtual_reg_no); // 正数表示虚拟寄存器
 }
 
 std::unique_ptr<RiscvRegOperand> Translator::getZeroReg() {
@@ -469,8 +635,7 @@ std::unique_ptr<RiscvRegOperand> Translator::getArgReg(int arg_index) {
 
 std::unique_ptr<RiscvOperand> Translator::translateOperand(Operand op) {
   if (auto *reg_op = dynamic_cast<RegOperand *>(op)) {
-    // 保持虚拟寄存器编号不变
-    return createVirtualReg(reg_op->GetRegNo());
+    return createVirtualReg();
   } else if (auto *imm_i32 = dynamic_cast<ImmI32Operand *>(op)) {
     return std::make_unique<RiscvImmI32Operand>(imm_i32->GetIntImmVal());
   } else if (auto *imm_f32 = dynamic_cast<ImmF32Operand *>(op)) {
@@ -481,30 +646,8 @@ std::unique_ptr<RiscvOperand> Translator::translateOperand(Operand op) {
     return std::make_unique<RiscvLabelOperand>(
         ".L" + std::to_string(label_op->GetLabelNo()));
   }
-
   // 默认返回zero寄存器
   return getZeroReg();
-}
-
-RiscvOpcode Translator::llvmToRiscvOpcode(LLVMIROpcode llvm_op, bool is_float) {
-  switch (llvm_op) {
-  case LLVMIROpcode::ADD:
-    return is_float ? RiscvOpcode::FADD_S : RiscvOpcode::ADD;
-  case LLVMIROpcode::SUB:
-    return is_float ? RiscvOpcode::FSUB_S : RiscvOpcode::SUB;
-  case LLVMIROpcode::MUL_OP:
-    return is_float ? RiscvOpcode::FMUL_S : RiscvOpcode::MUL;
-  case LLVMIROpcode::DIV_OP:
-    return is_float ? RiscvOpcode::FDIV_S : RiscvOpcode::DIV;
-  case LLVMIROpcode::BITAND:
-    return RiscvOpcode::AND;
-  case LLVMIROpcode::BITOR:
-    return RiscvOpcode::OR;
-  case LLVMIROpcode::BITXOR:
-    return RiscvOpcode::XOR;
-  default:
-    return RiscvOpcode::ADD; // 默认
-  }
 }
 
 std::string Translator::getLLVMTypeString(LLVMType type) {
@@ -523,7 +666,6 @@ std::string Translator::getLLVMTypeString(LLVMType type) {
 }
 
 // 栈帧管理方法实现
-
 void Translator::initFunctionStackFrame(const std::string &func_name) {
   function_stack_frames[func_name] = StackFrameInfo();
   current_stack_frame = &function_stack_frames[func_name];
@@ -533,13 +675,9 @@ int Translator::getTypeSize(LLVMType type) {
   switch (type) {
   case LLVMType::I32:
   case LLVMType::FLOAT32:
-  case LLVMType::PTR:
-    return 4; // RISC-V 32位架构，所有基本类型都是4字节
   case LLVMType::I1:
     return 1; // 布尔类型1字节
   case LLVMType::I64:
-  case LLVMType::DOUBLE:
-    return 8; // 64位类型
   default:
     return 4; // 默认4字节
   }
@@ -612,10 +750,18 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
       -current_stack_frame->total_frame_size);
   entry_block->InsertInstruction(0, std::move(alloc_inst));
 
-  auto s0 = getFramePointerReg();
+  auto ra = getReturnAddressReg();
   auto sp_copy = getStackPointerReg();
   auto addr = std::make_unique<RiscvPtrOperand>(
       current_stack_frame->total_frame_size - 8, std::move(sp_copy));
+  auto save_ra =
+      std::make_unique<RiscvSdInstruction>(std::move(ra), std::move(addr));
+  entry_block->InsertInstruction(1, std::move(save_ra));
+
+  auto s0 = getFramePointerReg();
+  auto sp_copy = getStackPointerReg();
+  auto addr = std::make_unique<RiscvPtrOperand>(
+      current_stack_frame->total_frame_size - 16, std::move(sp_copy));
   auto save_fp =
       std::make_unique<RiscvSdInstruction>(std::move(s0), std::move(addr));
   entry_block->InsertInstruction(1, std::move(save_fp));
@@ -631,29 +777,26 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
 void Translator::generateStackFrameEpilog(RiscvBlock *exit_block) {
   if (!current_stack_frame || current_stack_frame->total_frame_size == 0)
     return;
-
-  // 如果保存了ra寄存器，需要恢复
-  if (current_stack_frame->max_call_args > 0) {
-    auto ra = getReturnAddressReg();
-    auto sp_copy = getStackPointerReg();
-    auto addr = std::make_unique<RiscvDramOperand>(
-        current_stack_frame->total_frame_size - 4, std::move(sp_copy));
-
-    auto restore_ra = std::make_unique<RiscvMemoryInstruction>(
-        RiscvOpcode::LW, std::move(ra), std::move(addr));
-
-    exit_block->InsertInstruction(1, std::move(restore_ra));
-  }
+  auto s0 = getFramePointerReg();
+  auto sp_copy = getStackPointerReg();
+  auto addr = std::make_unique<RiscvPtrOperand>(
+      current_stack_frame->total_frame_size - 8, std::move(sp_copy));
+  auto restore_s0 =
+      std::make_unique<RiscvLdInstruction>(std::move(s0), std::move(addr));
+  exit_block->InsertInstruction(1, std::move(restore_s0));
 
   // 生成栈帧释放代码
   // addi sp, sp, frame_size
   auto sp = getStackPointerReg();
 
-  auto dealloc_inst = std::make_unique<RiscvImmediateInstruction>(
-      RiscvOpcode::ADDI, sp->CopyOperand(), sp->CopyOperand(),
+  auto dealloc_inst = std::make_unique<RiscvAddiInstruction>(
+      sp->CopyOperand(), sp->CopyOperand(),
       current_stack_frame->total_frame_size);
-
   exit_block->InsertInstruction(1, std::move(dealloc_inst));
+
+  auto ra = getReturnAddressReg();
+  auto jr_inst = std::make_unique<RiscvJrInstruction>(std::move(ra));
+  exit_block->InsertInstruction(1, std::move(jr_inst));
 }
 
 int Translator::getLocalVariableOffset(int virtual_reg) {
