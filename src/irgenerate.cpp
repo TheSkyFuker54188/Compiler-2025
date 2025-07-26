@@ -1236,7 +1236,7 @@ void IRgenerator::handleArrayInitializer(InitVal *init, int base_reg,
         auto &listtemp = std::get<std::vector<std::unique_ptr<InitVal>>>(
             list[i].get()->value);
         int missnum = listtemp.size() % dims[dims.size() - 1];
-        if (missnum == 0&&listtemp.size()!=0) {
+        if (missnum == 0 && listtemp.size() != 0) {
           continue;
         }
         for (int j = 0; j < dims[dims.size() - 1] - missnum; j++) {
@@ -1403,7 +1403,7 @@ void IRgenerator::handleArrayInitializer(ConstInitVal *init, int base_reg,
         auto &listtemp = std::get<std::vector<std::unique_ptr<ConstInitVal>>>(
             list[i].get()->value);
         int missnum = listtemp.size() % dims[dims.size() - 1];
-        if (missnum == 0&&listtemp.size()!=0) {
+        if (missnum == 0 && listtemp.size() != 0) {
           continue;
         }
         for (int j = 0; j < dims[dims.size() - 1] - missnum; j++) {
@@ -1676,8 +1676,7 @@ void IRgenerator::visit(ConstDecl &node) {
 // 辅助函数：递归展平常量初始化列表
 void IRgenerator::flattenConstInit(
     ConstInitVal *init, std::vector<std::variant<int, float>> &result,
-    BaseType type,const std::vector<int> &dims
-    ) {
+    BaseType type, const std::vector<int> &dims) {
   if (!init)
     return;
 
@@ -1698,16 +1697,18 @@ void IRgenerator::flattenConstInit(
     auto &list =
         std::get<std::vector<std::unique_ptr<ConstInitVal>>>(init->value);
     for (auto &item : list) {
-      flattenConstInit(item.get(), result, type,dims);
-      if(!std::holds_alternative<std::unique_ptr<Exp>>(item.get()->value)){
+      flattenConstInit(item.get(), result, type, dims);
+      if (!std::holds_alternative<std::unique_ptr<Exp>>(item.get()->value)) {
         auto &listtemp = std::get<std::vector<std::unique_ptr<ConstInitVal>>>(
-          item.get()->value);
+            item.get()->value);
         int missnum = listtemp.size() % dims[dims.size() - 1];
         if (missnum == 0 && listtemp.size() != 0) {
           continue; // 如果没有缺失元素，继续处理下一个
         }
         for (int i = 0; i < dims[dims.size() - 1] - missnum; i++) {
-          result.push_back(type == BaseType::INT ? std::variant<int, float>(0) : std::variant<int, float>(0.0f)); // 添加缺失元素
+          result.push_back(type == BaseType::INT ? std::variant<int, float>(0)
+                                                 : std::variant<int, float>(
+                                                       0.0f)); // 添加缺失元素
         }
       }
     }
@@ -1733,7 +1734,7 @@ void IRgenerator::visit(ConstDef &node) {
         // 多维数组初始化
         std::vector<std::variant<int, float>> flat_values;
         flattenConstInit(const_init, flat_values, current_type,
-          std::vector<int>(attr.dims.begin(), attr.dims.end()));
+                         std::vector<int>(attr.dims.begin(), attr.dims.end()));
 
         // 计算总元素数量
         size_t total_elements = 1;
@@ -1927,7 +1928,7 @@ void IRgenerator::visit(VarDecl &node) {
 // 新增函数：展平初始化列表
 void IRgenerator::flattenInitVal(InitVal *init,
                                  std::vector<std::variant<int, float>> &result,
-                                 BaseType type,const std::vector<int> &dims) {
+                                 BaseType type, const std::vector<int> &dims) {
   if (!init)
     return;
 
@@ -1943,16 +1944,18 @@ void IRgenerator::flattenInitVal(InitVal *init,
   } else {
     auto &list = std::get<std::vector<std::unique_ptr<InitVal>>>(init->value);
     for (auto &item : list) {
-      flattenInitVal(item.get(), result, type,dims);
-      if(!std::holds_alternative<std::unique_ptr<Exp>>(item.get()->value)){
-        auto &listtemp = std::get<std::vector<std::unique_ptr<InitVal>>>(
-          item.get()->value);
+      flattenInitVal(item.get(), result, type, dims);
+      if (!std::holds_alternative<std::unique_ptr<Exp>>(item.get()->value)) {
+        auto &listtemp =
+            std::get<std::vector<std::unique_ptr<InitVal>>>(item.get()->value);
         int missnum = listtemp.size() % dims[dims.size() - 1];
         if (missnum == 0 && listtemp.size() != 0) {
           continue; // 如果没有缺失元素，继续处理下一个
         }
         for (int i = 0; i < dims[dims.size() - 1] - missnum; i++) {
-          result.push_back(type == BaseType::INT ? std::variant<int, float>(0) : std::variant<int, float>(0.0f)); // 添加缺失元素
+          result.push_back(type == BaseType::INT ? std::variant<int, float>(0)
+                                                 : std::variant<int, float>(
+                                                       0.0f)); // 添加缺失元素
         }
       }
     }
@@ -1972,7 +1975,7 @@ void IRgenerator::visit(VarDef &node) {
         // 展平初始化列表
         std::vector<std::variant<int, float>> flat_values;
         flattenInitVal(init, flat_values, current_type,
-          std::vector<int>(attr.dims.begin(), attr.dims.end()));
+                       std::vector<int>(attr.dims.begin(), attr.dims.end()));
 
         // 填充初始化值
         size_t total_elements = 1;
@@ -2130,8 +2133,8 @@ void IRgenerator::visit(FuncDef &node) {
   function_returntype = node.return_type;
   llvmIR.NewFunction(function_now);
   now_label = 0;
-  current_reg_counter = -1; // Reset register counter
-  max_label = 0;            // 重置标签计数器
+  current_reg_counter = 0; // Reset register counter
+  max_label = 0;           // 重置标签计数器
   // max_reg = -1;
   // llvmIR.NewBlock(function_now, now_label);
   llvmIR.NewBlock(function_now, max_label);
@@ -2205,7 +2208,7 @@ void IRgenerator::visit(FuncDef &node) {
   while (str_table.scopes.size() > 1) {
     str_table.scopes.pop_back(); // 确保只保留全局作用域
   }
-  function_name_to_maxreg[node.name]=current_reg_counter;
+  function_name_to_maxreg[node.name] = current_reg_counter;
   // str_table.exitScope();
 }
 

@@ -41,19 +41,18 @@ struct StackFrameInfo {
 
 class Riscv {
 public:
+  std::string file_name; // 输出文件名
   std::vector<std::unique_ptr<RiscvInstruction>> global_def;
   std::vector<std::unique_ptr<RiscvInstruction>> function_declare;
   std::map<std::string, std::map<int, std::unique_ptr<RiscvBlock>>>
       function_block_map; //<function,<id,block> >
-
   void print(std::ostream &s);
 };
 
 class Translator {
 public:
-  Translator(std::string file_name) : file_name(std::move(file_name)) {}
+  Translator(std::string file) { riscv.file_name = std::move(file); }
   Riscv riscv;
-  std::string file_name;
   void translate(const LLVMIR &llvmir);
 
 private:
@@ -78,14 +77,8 @@ private:
   std::unique_ptr<RiscvOperand> translateOperand(Operand op);
 
   // 物理寄存器创建辅助方法
-  std::unique_ptr<RiscvRegOperand> createPhysicalReg(int physical_reg_no);
   std::unique_ptr<RiscvRegOperand> createVirtualReg();
-  std::unique_ptr<RiscvRegOperand> getZeroReg();
-  std::unique_ptr<RiscvRegOperand> getReturnAddressReg();
-  std::unique_ptr<RiscvRegOperand> getStackPointerReg();
-  std::unique_ptr<RiscvRegOperand> getReturnValueReg();
-  std::unique_ptr<RiscvRegOperand> getArgReg(int arg_index);
-  std::unique_ptr<RiscvRegOperand> getFramePointerReg();
+  std::unique_ptr<RiscvRegOperand> createVirtualReg(int reg_no);
 
   // 指令翻译
   void translateLoad(LoadInstruction *inst, RiscvBlock *block);
@@ -103,6 +96,7 @@ private:
   void translateFadd(Instruction inst, RiscvBlock *block);
   void translateFsub(Instruction inst, RiscvBlock *block);
   void translateFmul(Instruction inst, RiscvBlock *block);
+  void translateFdiv(Instruction inst, RiscvBlock *block);
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);

@@ -114,16 +114,16 @@ public:
   Operand current_ptr;
   LLVMType current_llvm_type;
   BaseType current_type;
-  int current_reg_counter = -1;
+  int current_reg_counter = 0;
   int max_label = 1;
   int now_label = 1;
   int before_label = 1;
   int cond_label = 1;
   int body_label = 1;
   int end_label = 1;
-  //std::map<std::string, int> function_name_to_maxreg;
-  // std::vector<std::vector<std::pair<std::string, int>>> scope_restore_list;
-  //   std::vector<std::map<std::string, int>> scope_name_to_reg_stack;
+  // std::map<std::string, int> function_name_to_maxreg;
+  //  std::vector<std::vector<std::pair<std::string, int>>> scope_restore_list;
+  //    std::vector<std::map<std::string, int>> scope_name_to_reg_stack;
 
 private:
   bool require_address = false; // Flag to indicate if address is needed
@@ -152,13 +152,12 @@ public:
   void handleArrayInitializer(ConstInitVal *init, int base_reg,
                               VarAttribute &attr, const std::vector<int> &dims,
                               size_t dim_idx, size_t &current_index);
-  void flattenConstInit(
-    ConstInitVal *init, std::vector<std::variant<int, float>> &result,
-    BaseType type,const std::vector<int> &dims
-    );
-    void flattenInitVal(InitVal *init,
-      std::vector<std::variant<int, float>> &result,
-      BaseType type,const std::vector<int> &dims);
+  void flattenConstInit(ConstInitVal *init,
+                        std::vector<std::variant<int, float>> &result,
+                        BaseType type, const std::vector<int> &dims);
+  void flattenInitVal(InitVal *init,
+                      std::vector<std::variant<int, float>> &result,
+                      BaseType type, const std::vector<int> &dims);
   void IRgenGetElementptr(LLVMBlock B, LLVMType type, int result_reg,
                           Operand ptr, std::vector<int> dims,
                           std::vector<Operand> indices);
