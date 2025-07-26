@@ -1,9 +1,9 @@
 #include "include/ast.h"
 #include "include/astprinter.h"
 #include "include/block.h"
-#include "include/semantic.h"
 #include "include/irtranslater.h"
 #include "include/register_allocator.h"
+#include "include/semantic.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -61,7 +61,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
 
   bool semantic_success = true;
   if (enable_semantic) {
-    if (verbose) 
+    if (verbose)
       std::cout << "阶段2: 语义分析..." << std::endl;
     SemanticAnalyzer analyzer;
     semantic_success = analyzer.analyze(*root);
@@ -85,7 +85,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
 
   LLVMIR ir;
   if (generate_ir && semantic_success) {
-    if (verbose) 
+    if (verbose)
       std::cout << "阶段3: 中间代码生成..." << std::endl;
     IRgenerator irgen;
     root->accept(irgen);
@@ -96,7 +96,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
     if (ir_file.is_open()) {
       ir.printIR(ir_file);
       ir_file.close();
-      if (verbose) 
+      if (verbose)
         std::cout << "中间代码已生成到 " << ir_filename << std::endl;
     } else {
       std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
@@ -107,48 +107,43 @@ bool compileFile(const std::string &filename, bool verbose = true,
   LLVMIR optimized_ir = ir;
   // SSA变换暂时禁用
   // if (semantic_success && !ir.function_block_map.empty() && optimize) {
-  //   if (verbose) 
+  //   if (verbose)
   //     std::cout << "阶段4: SSA变换和优化..." << std::endl;
   //   SSATransformer ssa_transformer;
   //   LLVMIR ssa_ir = ssa_transformer.transform(ir);
   //   optimized_ir = ssa_ir;
-  //   if (verbose) 
+  //   if (verbose)
   //     std::cout << "SSA变换完成" << std::endl;
   // }
 
   // 汇编代码生成阶段
   if (semantic_success && generate_asm) {
-    if (verbose) 
+    if (verbose)
       std::cout << "阶段5: RISC-V汇编代码生成..." << std::endl;
-    
+
     // 使用原始IR（SSA优化暂时禁用）
     LLVMIR &final_ir = ir;
-    
-    // 创建RISC-V翻译器
-    std::string asm_filename = output_file.empty() ? 
-        filename.substr(0, filename.find_last_of('.')) + ".s" : 
-        output_file;
-    
-    Translator translator(asm_filename);
-    
+
+    Translator translator(output_file);
+
     // 执行翻译
     translator.translate(final_ir);
-    
-    if (verbose) 
+
+    if (verbose)
       std::cout << "阶段6: 寄存器分配..." << std::endl;
-    
+
     // 执行寄存器分配
-    RegisterAllocationPass::applyToTranslator(translator);
-    
+    // RegisterAllocationPass::applyToTranslator(translator);
+
     // 输出汇编代码到文件
-    std::ofstream asm_file(asm_filename);
+    std::ofstream asm_file(output_file);
     if (asm_file.is_open()) {
       translator.riscv.print(asm_file);
       asm_file.close();
-      if (verbose) 
-        std::cout << "RISC-V汇编代码已生成到 " << asm_filename << std::endl;
+      if (verbose)
+        std::cout << "RISC-V汇编代码已生成到 " << output_file << std::endl;
     } else {
-      std::cerr << "无法创建汇编文件 " << asm_filename << std::endl;
+      std::cerr << "无法创建汇编文件 " << output_file << std::endl;
       return false;
     }
   }
