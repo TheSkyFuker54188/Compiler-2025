@@ -21,6 +21,8 @@ int line_number = 1;
 int col_number = 1;
 int cur_col_number = 1;
 
+std::map<std::string, int> function_name_to_maxreg;
+
 /**
  * 编译单个SYS语言文件：词法分析、语法分析、语义分析
  */

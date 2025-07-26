@@ -276,12 +276,8 @@ int max_reg = -1;
 IRgenTable irgen_table;
 LLVMIR llvmIR;
 
-// extern void (*IRgenSingleNode[6])(SyntaxNode *a, BinaryOp opcode, LLVMBlock
-// B); extern void (*IRgenBinaryNode[6][6])(SyntaxNode *a, SyntaxNode *b,
-// BinaryOp opcode, LLVMBlock B);
+extern std::map<std::string, int> function_name_to_maxreg;
 
-// LLVMType Type2LLvm[6] = {LLVMType::I32, LLVMType::FLOAT32, LLVMType::I1,
-// LLVMType::VOID_TYPE, LLVMType::PTR, LLVMType::DOUBLE};
 std::map<BaseType, LLVMType> Type2LLvm = {{BaseType::INT, LLVMType::I32},
                                           {BaseType::FLOAT, LLVMType::FLOAT32},
                                           {BaseType::VOID, LLVMType::VOID_TYPE},

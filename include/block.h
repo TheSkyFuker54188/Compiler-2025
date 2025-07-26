@@ -121,7 +121,7 @@ public:
   int cond_label = 1;
   int body_label = 1;
   int end_label = 1;
-  std::map<std::string, int> function_name_to_maxreg;
+  //std::map<std::string, int> function_name_to_maxreg;
   // std::vector<std::vector<std::pair<std::string, int>>> scope_restore_list;
   //   std::vector<std::map<std::string, int>> scope_name_to_reg_stack;
 
