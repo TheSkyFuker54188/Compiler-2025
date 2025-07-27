@@ -26,8 +26,8 @@ struct PhysicalRegister {
   bool is_callee_saved; // 是否为被调用方保存寄存器
   bool is_available;    // 是否可用于分配
   
-  PhysicalRegister(int no, const std::string& n, bool callee_saved, bool available = true)
-    : reg_no(no), name(n), is_callee_saved(callee_saved), is_available(available) {}
+  PhysicalRegister(int no, const std::string& n, bool callee_saved)
+    : reg_no(no), name(n), is_callee_saved(callee_saved), is_available(true) {}
 };
 
 class RegisterAllocator {
@@ -65,7 +65,6 @@ public:
   int getSpillOffset(int virtual_reg);
   
   // 生存期分析
-  void analyzeLiveness(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
   void computeLiveRanges(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
   
   // 寄存器分配算法
@@ -81,14 +80,20 @@ public:
   int findFreeRegister();
   int selectVictimRegister(int current_pos);
   void spillRegister(int physical_reg, int current_pos);
-  void generateSpillLoad(RiscvBlock* block, int virtual_reg, int physical_reg, int pos);
-  void generateSpillStore(RiscvBlock* block, int virtual_reg, int physical_reg, int pos);
   std::vector<int> extractVirtualRegisters(RiscvInstruction* inst);
   void rewriteOperand(std::unique_ptr<RiscvOperand>& operand);
+  bool usesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
+  bool definesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   
   // 调试和统计
   void printAllocationResult();
   void printLiveRanges();
+
+  // 调试和状态查询方法
+  int getAvailableRegistersCount() const { return available_registers.size(); }
+  int getVirtualToPhysicalMappingCount() const { return virtual_to_physical.size(); }
+  int getSpilledVirtualsCount() const { return spilled_virtuals.size(); }
+  int getLiveRangesCount() const { return live_ranges.size(); }
 };
 
 // 寄存器分配器集成到翻译器的接口
