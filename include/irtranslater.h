@@ -14,9 +14,9 @@ public:
   std::string comment; // used for debug
   int block_id = 0;
   int stack_size = 0; // Stack size for this block
-  std::deque<std::unique_ptr<RiscvInstruction>> instruction_list;
+  std::deque<RiscvInstruction *> instruction_list;
 
-  void InsertInstruction(int pos, std::unique_ptr<RiscvInstruction> ins);
+  void InsertInstruction(int pos, RiscvInstruction *ins);
   void print(std::ostream &s);
   RiscvBlock(int id) : block_id(id) {}
 };
@@ -42,9 +42,9 @@ struct StackFrameInfo {
 class Riscv {
 public:
   std::string file_name; // 输出文件名
-  std::vector<std::unique_ptr<RiscvInstruction>> global_def;
-  std::vector<std::unique_ptr<RiscvInstruction>> function_declare;
-  std::map<std::string, std::map<int, std::unique_ptr<RiscvBlock>>>
+  std::vector<RiscvInstruction *> global_def;
+  std::vector<RiscvInstruction *> function_declare;
+  std::map<std::string, std::map<int, RiscvBlock *>>
       function_block_map; //<function,<id,block> >
   void print(std::ostream &s);
 };
@@ -74,11 +74,15 @@ private:
   void translateInstruction(Instruction inst, RiscvBlock *riscv_block);
 
   // 操作数翻译
-  std::unique_ptr<RiscvOperand> translateOperand(Operand op);
+  RiscvOperand *translateOperand(Operand op);
 
   // 物理寄存器创建辅助方法
-  std::unique_ptr<RiscvRegOperand> createVirtualReg();
-  std::unique_ptr<RiscvRegOperand> createVirtualReg(int reg_no);
+  RiscvRegOperand *createVirtualReg();
+  RiscvRegOperand *createVirtualReg(int reg_no);
+  RiscvRegOperand *getS0Reg();
+  RiscvRegOperand *getSpReg();
+  RiscvRegOperand *getRaReg();
+  RiscvRegOperand *getA0Reg();
 
   // 指令翻译
   void translateLoad(LoadInstruction *inst, RiscvBlock *block);
@@ -97,6 +101,8 @@ private:
   void translateFsub(Instruction inst, RiscvBlock *block);
   void translateFmul(Instruction inst, RiscvBlock *block);
   void translateFdiv(Instruction inst, RiscvBlock *block);
+  void translateGetElementptr(GetElementptrInstruction *inst,
+                              RiscvBlock *block);
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
