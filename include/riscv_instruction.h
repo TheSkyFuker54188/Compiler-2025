@@ -29,6 +29,8 @@ enum class RiscvOpcode {
   LA,
   CALL,
   JR,
+  BNEZ,
+  SNEZ,
   FCVTSW,
   FCVTWS,
   GLOBAL_VAR,
@@ -372,14 +374,29 @@ public:
 class RiscvLiInstruction : public RiscvInstruction {
 public:
   RiscvOperand *rd;
-  long long imm;
+  int imm;
+  float float_val; // 用于浮点数立即数
+  bool is_float;   // 是否是浮点数
   RiscvLiInstruction(RiscvOperand *rd, int imm) {
     opcode = RiscvOpcode::LI; // 使用LI伪指令
     this->rd = rd;
     this->imm = imm;
+    this->is_float = false;
+  }
+  RiscvLiInstruction(RiscvOperand *rd, float float_val) {
+    opcode = RiscvOpcode::LI; // 使用LI伪指令
+    this->rd = rd;
+    this->float_val = float_val;
+    this->is_float = true;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  li  " << rd->GetFullName() << "," << imm << "\n";
+    s << "  li  " << rd->GetFullName() << ",";
+    if (is_float) {
+      s << Float_to_Byte(float_val) << std::dec;
+    } else {
+      s << imm;
+    }
+    s << "\n";
   }
 };
 
@@ -615,5 +632,33 @@ public:
     s << "  fcvt.w.s  " << rd->GetFullName() << "," << rs1->GetFullName()
       << ",rtz"
       << "\n";
+  }
+};
+
+class RiscvBnezInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rs1;
+  RiscvOperand *label;
+  RiscvBnezInstruction(RiscvOperand *rs1, RiscvOperand *label) {
+    opcode = RiscvOpcode::BNEZ; // 使用BNEZ伪指令
+    this->rs1 = rs1;
+    this->label = label;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  bnez  " << rs1->GetFullName() << "," << label->GetFullName()
+      << "\n";
+  }
+};
+
+class RiscvSnezInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rs1, *rs2;
+  RiscvSnezInstruction(RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SNEZ; // 使用SNEZ伪指令
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  snez  " << rs1->GetFullName() << "," << rs2->GetFullName() << "\n";
   }
 };

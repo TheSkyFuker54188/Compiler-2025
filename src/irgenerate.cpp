@@ -341,41 +341,13 @@ int IRgenerator::newLabel() { return (++max_label); }
 bool IRgenerator::isGlobalScope() { return function_now == nullptr; }
 
 long long Float_to_Byte(float f) {
-  float rawFloat = f;
-  unsigned long long rawFloatByte = *((int *)&rawFloat);
-  unsigned long long signBit = rawFloatByte >> 31;
-  unsigned long long expBits = (rawFloatByte >> 23) & ((1 << 8) - 1);
-  unsigned long long part1 = rawFloatByte & ((1 << 23) - 1);
-
-  unsigned long long out_signBit = signBit << 63;
-  unsigned long long out_sigBits = part1 << 29;
-  unsigned long long expBits_highestBit = (expBits & (1 << 7)) << 3;
-  unsigned long long expBits_lowerBit = (expBits & (1 << 7) - 1);
-  unsigned long long expBits_lowerBit_highestBit = expBits_lowerBit & (1 << 6);
-  unsigned long long expBits_lowerBit_ext =
-      (expBits_lowerBit_highestBit) | (expBits_lowerBit_highestBit << 1) |
-      (expBits_lowerBit_highestBit << 2) | (expBits_lowerBit_highestBit << 3);
-  unsigned long long expBits_full =
-      expBits_highestBit | expBits_lowerBit | expBits_lowerBit_ext;
-  unsigned long long out_expBits = expBits_full << 52;
-  unsigned long long out_rawFloatByte = out_signBit | out_expBits | out_sigBits;
-  /*
-      Example: Float Value 114.514
-
-      llvm Double:
-          0                               ---1 bit    (sign bit)
-          1000 0000 101                   ---11 bits  (exp bits)
-          1100 1010 0000 1110 0101 011    ---23 bits  (part 1)
-          00000000000000000000000000000   ---29 bits  (part 2 All zero)
-
-      IEEE Float:
-          0                               ---1 bit    (sign bit)
-          1    0000 101                   ---8 bits   (exp bits)
-          1100 1010 0000 1110 0101 011    ---23 bits  (part 1)
-
-  */
-
-  return out_rawFloatByte;
+  unsigned int int_representation;
+  // Ensure that float and unsigned int are both 32 bits.
+  static_assert(sizeof(float) == sizeof(unsigned int),
+                "Float and unsigned int must be the same size for this "
+                "conversion to be valid.");
+  memcpy(&int_representation, &f, sizeof(float));
+  return int_representation;
 }
 
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
@@ -2143,7 +2115,7 @@ void IRgenerator::visit(FuncDef &node) {
   llvmIR.NewFunction(function_now);
   now_label = 0;
   current_reg_counter = -1; // Reset register counter
-  max_label = 0;           // 重置标签计数器
+  max_label = 0;            // 重置标签计数器
   // max_reg = -1;
   // llvmIR.NewBlock(function_now, now_label);
   llvmIR.NewBlock(function_now, max_label);
@@ -2449,7 +2421,7 @@ void IRgenerator::visit(WhileStmt &node) {
   LLVMBlock B_end = llvmIR.GetBlock(function_now, end_label_temp);
   end_label_temp = end_label;
 
-  if(end_label!=max_label){
+  if (end_label != max_label) {
     int end_end_label = newLabel();
     int end_end_label_temp = end_end_label;
     llvmIR.NewBlock(function_now, end_end_label_temp);
@@ -2463,7 +2435,6 @@ void IRgenerator::visit(WhileStmt &node) {
   end_label = old_end_label;
   loop_start_label = old_loop_start;
   loop_end_label = old_loop_end;
-
 }
 
 void IRgenerator::visit(ExpStmt &node) {
