@@ -29,7 +29,8 @@ struct StackFrameInfo {
   int total_frame_size = 0;  // 总栈帧大小
 
   // 局部变量信息
-  std::map<int, int> var_offsets; // 虚拟寄存器到栈偏移的映射
+  std::map<int, int> var_offsets;   // 虚拟寄存器到栈偏移的映射
+  std::map<int, int> array_offsets; // 数组虚拟寄存器到栈偏移的映射
 
   void calculateTotalSize() {
     // RISC-V要求栈指针16字节对齐
@@ -103,6 +104,8 @@ private:
   void translateFdiv(Instruction inst, RiscvBlock *block);
   void translateGetElementptr(GetElementptrInstruction *inst,
                               RiscvBlock *block);
+  void translateFptosi(FptosiInstruction *inst, RiscvBlock *block);
+  void translateSitofp(SitofpInstruction *inst, RiscvBlock *block);
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);

@@ -205,6 +205,12 @@ void Translator::translateInstruction(Instruction inst,
     translateGetElementptr(dynamic_cast<GetElementptrInstruction *>(inst),
                            riscv_block);
     break;
+  case LLVMIROpcode::FPTOSI:
+    translateFptosi(dynamic_cast<FptosiInstruction *>(inst), riscv_block);
+    break;
+  case LLVMIROpcode::SITOFP:
+    translateSitofp(dynamic_cast<SitofpInstruction *>(inst), riscv_block);
+    break;
   case LLVMIROpcode::ALLOCA:
     break;
   default:
@@ -228,13 +234,18 @@ void Translator::translateLoad(LoadInstruction *inst, RiscvBlock *block) {
       auto global_op = dynamic_cast<GlobalOperand *>(inst->GetPointer());
       auto global_var = new RiscvGlobalOperand(global_op->GetName());
       s0 = createVirtualReg();
-      auto la_inst =
-          new RiscvLaInstruction(std::move(s0), std::move(global_var));
+      auto la_inst = new RiscvLaInstruction(s0, global_var);
       block->InsertInstruction(1, la_inst);
     } else {
-      s0 = getS0Reg(); // 获取s0寄存器
       auto addr = dynamic_cast<RegOperand *>(inst->GetPointer());
-      offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      if (current_stack_frame->var_offsets.find(addr->GetRegNo()) !=
+          current_stack_frame->var_offsets.end()) {
+        s0 = getS0Reg(); // 获取s0寄存器
+        offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      } else {
+        s0 = createVirtualReg(addr->GetRegNo()); // 如果是数组，创建对应的寄存器
+        offset = current_stack_frame->array_offsets[addr->GetRegNo()];
+      }
     }
     auto riscv_inst = new RiscvPtrOperand(-offset, s0);
     auto riscv_load_inst = new RiscvFlwInstruction(rs, riscv_inst);
@@ -318,6 +329,7 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
 }
 
 void Translator::translateBranch(Instruction inst, RiscvBlock *block) {
+  // TODO: 实现分支指令的翻译
   std::cerr << "Branch instruction translation not implemented yet.\n";
 }
 
@@ -366,10 +378,12 @@ void Translator::translateReturn(RetInstruction *inst, RiscvBlock *block) {
 }
 
 void Translator::translateIcmp(IcmpInstruction *inst, RiscvBlock *block) {
+  // TODO: 实现整数比较指令的翻译
   std::cerr << "Icmp instruction translation not implemented yet.\n";
 }
 
 void Translator::translateFcmp(FcmpInstruction *inst, RiscvBlock *block) {
+  // TODO: 实现浮点数比较指令的翻译
   std::cerr << "Fcmp instruction translation not implemented yet.\n";
 }
 
@@ -508,7 +522,6 @@ void Translator::translateMul(Instruction inst, RiscvBlock *block) {
   auto *mul_inst = dynamic_cast<ArithmeticInstruction *>(inst);
   if (!mul_inst)
     return;
-
   if (mul_inst->GetOp1()->isIMM() && mul_inst->GetOp2()->isIMM()) {
     auto result = translateOperand(mul_inst->GetResult());
     auto op1 = dynamic_cast<RiscvImmI32Operand *>(
@@ -802,20 +815,74 @@ void Translator::translateFdiv(Instruction inst, RiscvBlock *block) {
 
 void Translator::translateGetElementptr(GetElementptrInstruction *inst,
                                         RiscvBlock *block) {
-  std::cerr << "GetElementptr instruction translation not implemented yet.\n";
-  // if (!inst)
-  //   return;
-  // auto type = inst->GetType();
-  // auto offset_reg = createVirtualReg();
-  // auto index = inst->indexes;
-  // if (type == LLVMType::I32) {
-  //   auto result = translateOperand(inst->GetResult());
-  //   std::unique_ptr<RiscvOperand> base_addr = nullptr;
-  //   if (inst->GetPtrVal()->GetOperandType() == BasicOperand::GLOBAL) {
-  //     auto global_op = dynamic_cast<GlobalOperand *>(inst->GetPtrVal());
-  //     base_addr = createVirtualReg();
-  //   }
-  // }
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  RiscvRegOperand *base_addr = nullptr;
+  RiscvRegOperand *offset_reg = createVirtualReg();
+  int offset = 0; // 偏移量初始化为0
+  auto type = inst->GetType();
+  auto indexes = inst->GetIndexes();
+  auto dim = inst->GetDims();
+  for (int i = 1; i < indexes.size(); ++i) {
+    int size = 1;
+    for (int j = i; j < dim.size(); ++j)
+      size *= dim[j];
+    auto index = indexes[i];
+    if (index->GetOperandType() == BasicOperand::IMMI32) {
+      auto imm_op = dynamic_cast<ImmI32Operand *>(index);
+      auto li_inst =
+          new RiscvLiInstruction(offset_reg, imm_op->GetIntImmVal() * size);
+      block->InsertInstruction(1, li_inst);
+    } else if (index->GetOperandType() == BasicOperand::REG) {
+      auto reg_op = dynamic_cast<RegOperand *>(index);
+      auto tmp_reg = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(tmp_reg, size);
+      auto mul_inst =
+          new RiscvMulInstruction(tmp_reg, tmp_reg, translateOperand(index));
+      auto add_inst = new RiscvAddInstruction(offset_reg, offset_reg, tmp_reg);
+      block->InsertInstruction(1, li_inst);
+      block->InsertInstruction(2, mul_inst);
+      block->InsertInstruction(3, add_inst);
+    } else {
+      std::cerr << "Unsupported index type in GetElementptr.\n";
+      return;
+    }
+  }
+  if (inst->GetPtrVal()->GetOperandType() == BasicOperand::GLOBAL) {
+    auto ptrval = dynamic_cast<GlobalOperand *>(inst->GetPtrVal());
+    auto global_op = new RiscvGlobalOperand(ptrval->GetName());
+    base_addr = createVirtualReg();
+    auto la_inst = new RiscvLaInstruction(base_addr, global_op);
+    block->InsertInstruction(1, la_inst);
+  } else {
+    auto ptrval = dynamic_cast<RegOperand *>(inst->GetPtrVal());
+    offset = current_stack_frame->var_offsets[ptrval->GetRegNo()];
+    base_addr = getS0Reg(); // 假设基地址存储在S0寄存器中
+  }
+  auto add_inst =
+      new RiscvAddInstruction(result, base_addr, offset_reg); // 计算最终地址
+  block->InsertInstruction(1, add_inst);
+  int reg_no = dynamic_cast<RiscvRegOperand *>(result)->GetRegNo();
+  current_stack_frame->array_offsets[reg_no] = offset; // 记录数组偏移
+}
+
+void Translator::translateFptosi(FptosiInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->result);
+  auto value = translateOperand(inst->value);
+  auto fcvtws_inst = new RiscvFcvtwsInstruction(result, value);
+  block->InsertInstruction(1, fcvtws_inst);
+}
+
+void Translator::translateSitofp(SitofpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->result);
+  auto value = translateOperand(inst->value);
+  auto fcvtws_inst = new RiscvFcvtwsInstruction(result, value);
+  block->InsertInstruction(1, fcvtws_inst);
 }
 
 RiscvRegOperand *Translator::createVirtualReg() {
@@ -843,17 +910,16 @@ RiscvRegOperand *Translator::getA0Reg() {
 }
 
 RiscvOperand *Translator::translateOperand(Operand op) {
-  if (auto *reg_op = dynamic_cast<RegOperand *>(op)) {
+  if (auto *reg_op = dynamic_cast<RegOperand *>(op))
     return createVirtualReg(reg_op->GetRegNo());
-  } else if (auto *imm_i32 = dynamic_cast<ImmI32Operand *>(op)) {
+  else if (auto *imm_i32 = dynamic_cast<ImmI32Operand *>(op))
     return new RiscvImmI32Operand(imm_i32->GetIntImmVal());
-  } else if (auto *imm_f32 = dynamic_cast<ImmF32Operand *>(op)) {
+  else if (auto *imm_f32 = dynamic_cast<ImmF32Operand *>(op))
     return new RiscvImmF32Operand(imm_f32->GetFloatVal());
-  } else if (auto *global_op = dynamic_cast<GlobalOperand *>(op)) {
+  else if (auto *global_op = dynamic_cast<GlobalOperand *>(op))
     return new RiscvGlobalOperand(global_op->GetName());
-  } else if (auto *label_op = dynamic_cast<LabelOperand *>(op)) {
+  else if (auto *label_op = dynamic_cast<LabelOperand *>(op))
     return new RiscvLabelOperand(".L" + std::to_string(label_op->GetLabelNo()));
-  }
   return createVirtualReg();
 }
 
@@ -929,7 +995,6 @@ void Translator::addLocalArray(int virtual_reg, LLVMType type,
 void Translator::updateCallArgsSize(int num_args) {
   if (!current_stack_frame)
     return;
-
   // RISC-V调用约定：前8个参数通过寄存器传递(a0-a7)，其余通过栈传递
   if (num_args > 8) {
     int stack_args = num_args - 8;
@@ -942,7 +1007,6 @@ void Translator::updateCallArgsSize(int num_args) {
 void Translator::finalizeFunctionStackFrame() {
   if (!current_stack_frame)
     return;
-
   current_stack_frame->calculateTotalSize();
 }
 
@@ -1007,11 +1071,9 @@ void Translator::generateStackFrameEpilog(RiscvBlock *exit_block) {
 int Translator::getLocalVariableOffset(int virtual_reg) {
   if (!current_stack_frame)
     return 0;
-
   auto it = current_stack_frame->var_offsets.find(virtual_reg);
-  if (it != current_stack_frame->var_offsets.end()) {
+  if (it != current_stack_frame->var_offsets.end())
     return it->second;
-  }
   return 0;
 }
 

@@ -29,6 +29,8 @@ enum class RiscvOpcode {
   LA,
   CALL,
   JR,
+  FCVTSW,
+  FCVTWS,
   GLOBAL_VAR,
   GLOBAL_STR,
 };
@@ -82,6 +84,16 @@ public:
         return "s" + std::to_string(physical_reg - 17);
       if (physical_reg >= 29 && physical_reg <= 32)
         return "t" + std::to_string(physical_reg - 26);
+      if (physical_reg >= 33 && physical_reg <= 40)
+        return "ft" + std::to_string(physical_reg - 33);
+      if (physical_reg >= 41 && physical_reg <= 42)
+        return "fs" + std::to_string(physical_reg - 41);
+      if (physical_reg >= 43 && physical_reg <= 50)
+        return "fa" + std::to_string(physical_reg - 43);
+      if (physical_reg >= 51 && physical_reg <= 60)
+        return "fs" + std::to_string(physical_reg - 49);
+      if (physical_reg >= 61 && physical_reg <= 64)
+        return "ft" + std::to_string(physical_reg - 53);
       return "x" + std::to_string(physical_reg);
     } else {
       // 虚拟寄存器使用%r前缀
@@ -574,5 +586,34 @@ public:
   void AddArg(RiscvOperand *arg) { args.push_back(arg); }
   void PrintIR(std::ostream &s) override {
     s << "    call  " << function_name << "\n";
+  }
+};
+
+class RiscvFcvtswInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  RiscvFcvtswInstruction(RiscvOperand *rd, RiscvOperand *rs1) {
+    opcode = RiscvOpcode::FCVTSW; // 使用FCVTSW伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  fcvts.w.s  " << rd->GetFullName() << "," << rs1->GetFullName()
+      << "\n";
+  }
+};
+
+class RiscvFcvtwsInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  RiscvFcvtwsInstruction(RiscvOperand *rd, RiscvOperand *rs1) {
+    opcode = RiscvOpcode::FCVTWS; // 使用FCVTWS伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  fcvt.w.s  " << rd->GetFullName() << "," << rs1->GetFullName()
+      << ",rtz"
+      << "\n";
   }
 };
