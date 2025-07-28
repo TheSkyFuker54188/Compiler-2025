@@ -41,13 +41,13 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
     std::cout << "  Running algebraic simplification..." << std::endl;
     algebraicSimplification(optimized_ir);
 
-    // 6. 公共子表达式消除
-    std::cout << "  Running common subexpression elimination..." << std::endl;
-    commonSubexpressionElimination(optimized_ir);
-
-    // 7. φ函数简化
+    // 6. φ函数简化
     std::cout << "  Running phi function simplification..." << std::endl;
     simplifyPhiFunctions(optimized_ir);
+
+    // 7. 不可达代码消除
+    std::cout << "  Running unreachable code elimination..." << std::endl;
+    eliminateUnreachableCode(optimized_ir);
 
     size_t after_count = countInstructions(optimized_ir);
 
@@ -544,46 +544,48 @@ void SSAOptimizer::copyPropagation(LLVMIR &ir) {
 
 void SSAOptimizer::commonSubexpressionElimination(LLVMIR &ir) {
   std::cout << "  Running common subexpression elimination..." << std::endl;
-  
+
   size_t eliminated_count = 0;
-  
+
   // 对每个函数进行公共子表达式消除
   for (auto &func_pair : ir.function_block_map) {
     std::map<int, LLVMBlock> &blocks = func_pair.second;
-    
+
     // 表达式到寄存器的映射
     std::unordered_map<std::string, int> expr_to_reg;
-    
+
     // 按支配顺序处理基本块（简化：按ID顺序）
     for (const auto &block_pair : blocks) {
       LLVMBlock block = block_pair.second;
-      
+
       for (auto &inst : block->Instruction_list) {
-        if (!inst) continue;
-        
+        if (!inst)
+          continue;
+
         // 检查是否是可以进行CSE的指令
         if (canPerformCSE(inst)) {
           std::string expr_str = generateExpressionString(inst);
-          
+
           auto existing_it = expr_to_reg.find(expr_str);
           if (existing_it != expr_to_reg.end()) {
             // 找到相同的表达式，替换当前指令
             int existing_reg = existing_it->second;
             int current_reg = getInstructionResultRegister(inst);
-            
+
             if (current_reg != -1 && existing_reg != current_reg) {
               // 在复制传播中处理替换
-              std::cout << "    Found common subexpression: " << expr_str << std::endl;
-              
+              std::cout << "    Found common subexpression: " << expr_str
+                        << std::endl;
+
               // 记录这个寄存器应该被替换
               constants_map.erase(current_reg); // 清除可能的常量映射
-              
+
               // 创建复制关系
               auto existing_const_it = constants_map.find(existing_reg);
               if (existing_const_it != constants_map.end()) {
                 constants_map[current_reg] = existing_const_it->second;
               }
-              
+
               eliminated_count++;
             }
           } else {
@@ -597,9 +599,10 @@ void SSAOptimizer::commonSubexpressionElimination(LLVMIR &ir) {
       }
     }
   }
-  
+
   if (eliminated_count > 0) {
-    std::cout << "    Eliminated " << eliminated_count << " common subexpressions" << std::endl;
+    std::cout << "    Eliminated " << eliminated_count
+              << " common subexpressions" << std::endl;
   }
 }
 
@@ -2190,4 +2193,344 @@ bool SSAOptimizer::isAllOnes(const ConstantValue &const_val) {
   }
 
   return false;
+}
+
+// ============================================================================
+// φ函数简化实现 (基于现有的φ函数处理逻辑)
+// ============================================================================
+
+void SSAOptimizer::simplifyPhiFunctions(LLVMIR &ir) {
+  std::cout << "    Starting phi function simplification..." << std::endl;
+
+  size_t simplified_count = 0;
+
+  // 对每个函数进行φ函数简化
+  for (auto &func_pair : ir.function_block_map) {
+    std::map<int, LLVMBlock> &blocks = func_pair.second;
+
+    for (const auto &block_pair : blocks) {
+      LLVMBlock block = block_pair.second;
+
+      auto it = block->Instruction_list.begin();
+      while (it != block->Instruction_list.end()) {
+        Instruction inst = *it;
+
+        if (inst && inst->GetOpcode() == PHI) {
+          // 使用现有的isPhiCopyCandidate逻辑
+          if (isPhiCopyCandidate(inst)) {
+            int phi_result = getInstructionResultRegister(inst);
+            int source_reg = getPhiSingleSource(inst);
+
+            if (phi_result != -1 && source_reg != -1) {
+              // 传播常量信息
+              auto source_const_it = constants_map.find(source_reg);
+              if (source_const_it != constants_map.end()) {
+                constants_map[phi_result] = source_const_it->second;
+              }
+
+              std::cout << "      Simplified redundant phi function, reg "
+                        << phi_result << " -> reg " << source_reg << std::endl;
+
+              // 移除φ函数，让复制传播处理替换
+              it = block->Instruction_list.erase(it);
+              simplified_count++;
+              continue;
+            }
+          }
+        }
+
+        ++it;
+      }
+    }
+  }
+
+  if (simplified_count > 0) {
+    std::cout << "    Phi function simplification completed, "
+              << simplified_count << " phi functions simplified" << std::endl;
+  } else {
+    std::cout << "    No phi functions to simplify" << std::endl;
+  }
+}
+
+// ============================================================================
+// 不可达代码消除实现
+// ============================================================================
+
+void SSAOptimizer::eliminateUnreachableCode(LLVMIR &ir) {
+  std::cout << "    Starting unreachable code elimination..." << std::endl;
+
+  size_t eliminated_blocks = 0;
+
+  // 对每个函数进行不可达代码消除
+  for (auto &func_pair : ir.function_block_map) {
+    std::map<int, LLVMBlock> &blocks = func_pair.second;
+
+    if (blocks.empty())
+      continue;
+
+    // 1. 从入口块开始标记可达的基本块
+    std::unordered_set<int> reachable_blocks;
+    std::queue<int> work_list;
+
+    int entry_block = blocks.begin()->first;
+    work_list.push(entry_block);
+    reachable_blocks.insert(entry_block);
+
+    while (!work_list.empty()) {
+      int current_block = work_list.front();
+      work_list.pop();
+
+      auto block_it = blocks.find(current_block);
+      if (block_it == blocks.end())
+        continue;
+
+      LLVMBlock block = block_it->second;
+
+      // 查找跳转指令，标记后继块为可达
+      for (const auto &inst : block->Instruction_list) {
+        if (!inst)
+          continue;
+
+        int opcode = inst->GetOpcode();
+        if (opcode == BR_UNCOND) {
+          // 无条件跳转
+          int target = getUnconditionalBranchTarget(inst);
+          if (target != -1 &&
+              reachable_blocks.find(target) == reachable_blocks.end()) {
+            reachable_blocks.insert(target);
+            work_list.push(target);
+          }
+        } else if (opcode == BR_COND) {
+          // 条件跳转
+          std::pair<int, int> targets = getConditionalBranchTargets(inst);
+          if (targets.first != -1 &&
+              reachable_blocks.find(targets.first) == reachable_blocks.end()) {
+            reachable_blocks.insert(targets.first);
+            work_list.push(targets.first);
+          }
+          if (targets.second != -1 &&
+              reachable_blocks.find(targets.second) == reachable_blocks.end()) {
+            reachable_blocks.insert(targets.second);
+            work_list.push(targets.second);
+          }
+        }
+      }
+    }
+
+    // 2. 删除不可达的基本块
+    auto block_it = blocks.begin();
+    while (block_it != blocks.end()) {
+      int block_id = block_it->first;
+
+      if (reachable_blocks.find(block_id) == reachable_blocks.end()) {
+        std::cout << "      Eliminating unreachable block L" << block_id
+                  << std::endl;
+        block_it = blocks.erase(block_it);
+        eliminated_blocks++;
+      } else {
+        ++block_it;
+      }
+    }
+  }
+
+  if (eliminated_blocks > 0) {
+    std::cout << "    Unreachable code elimination completed, "
+              << eliminated_blocks << " blocks eliminated" << std::endl;
+  } else {
+    std::cout << "    No unreachable blocks found" << std::endl;
+  }
+}
+
+int SSAOptimizer::getUnconditionalBranchTarget(const Instruction &inst) {
+  if (!inst || inst->GetOpcode() != BR_UNCOND)
+    return -1;
+
+  BrUncondInstruction *br_inst = dynamic_cast<BrUncondInstruction *>(inst);
+  if (br_inst) {
+    Operand label_op = br_inst->GetLabel();
+    if (label_op && label_op->GetOperandType() == BasicOperand::LABEL) {
+      LabelOperand *label_operand = dynamic_cast<LabelOperand *>(label_op);
+      if (label_operand) {
+        return label_operand->GetLabelNo();
+      }
+    }
+  }
+
+  return -1;
+}
+
+std::pair<int, int>
+SSAOptimizer::getConditionalBranchTargets(const Instruction &inst) {
+  if (!inst || inst->GetOpcode() != BR_COND)
+    return {-1, -1};
+
+  BrCondInstruction *br_inst = dynamic_cast<BrCondInstruction *>(inst);
+  if (br_inst) {
+    int true_target = -1;
+    int false_target = -1;
+
+    Operand true_label = br_inst->GetTrueLabel();
+    if (true_label && true_label->GetOperandType() == BasicOperand::LABEL) {
+      LabelOperand *true_operand = dynamic_cast<LabelOperand *>(true_label);
+      if (true_operand) {
+        true_target = true_operand->GetLabelNo();
+      }
+    }
+
+    Operand false_label = br_inst->GetFalseLabel();
+    if (false_label && false_label->GetOperandType() == BasicOperand::LABEL) {
+      LabelOperand *false_operand = dynamic_cast<LabelOperand *>(false_label);
+      if (false_operand) {
+        false_target = false_operand->GetLabelNo();
+      }
+    }
+
+    return {true_target, false_target};
+  }
+
+  return {-1, -1};
+}
+
+// ============================================================================
+// 辅助函数：公共子表达式消除支持
+// ============================================================================
+
+bool SSAOptimizer::canPerformCSE(const Instruction &inst) {
+  if (!inst)
+    return false;
+
+  int opcode = inst->GetOpcode();
+
+  // 只对纯函数（无副作用）的指令进行CSE
+  switch (opcode) {
+  case ADD:
+  case SUB:
+  case MUL_OP:
+  case DIV_OP:
+  case MOD_OP:
+  case FADD:
+  case FSUB:
+  case FMUL:
+  case FDIV:
+  case BITAND:
+  case BITOR:
+  case BITXOR:
+  case SHL:
+  case ICMP:
+  case FCMP:
+  case ZEXT:
+  case SITOFP:
+  case FPTOSI:
+  case SELECT:
+    return true;
+
+  // LOAD可能有副作用，暂时不进行CSE
+  case LOAD:
+  case STORE:
+  case CALL:
+    return false;
+
+  default:
+    return false;
+  }
+}
+
+// ============================================================================
+// 表达式字符串生成（用于CSE）
+// ============================================================================
+
+std::string SSAOptimizer::generateExpressionString(const Instruction &inst) {
+  if (!inst)
+    return "";
+
+  std::ostringstream oss;
+  int opcode = inst->GetOpcode();
+
+  // 操作码名称
+  switch (opcode) {
+  case ADD:
+    oss << "add";
+    break;
+  case SUB:
+    oss << "sub";
+    break;
+  case MUL_OP:
+    oss << "mul";
+    break;
+  case DIV_OP:
+    oss << "div";
+    break;
+  case MOD_OP:
+    oss << "mod";
+    break;
+  case FADD:
+    oss << "fadd";
+    break;
+  case FSUB:
+    oss << "fsub";
+    break;
+  case FMUL:
+    oss << "fmul";
+    break;
+  case FDIV:
+    oss << "fdiv";
+    break;
+  case BITAND:
+    oss << "and";
+    break;
+  case BITOR:
+    oss << "or";
+    break;
+  case BITXOR:
+    oss << "xor";
+    break;
+  case SHL:
+    oss << "shl";
+    break;
+  case ICMP:
+    oss << "icmp";
+    break;
+  case FCMP:
+    oss << "fcmp";
+    break;
+  default:
+    oss << "unknown";
+    break;
+  }
+
+  // 操作数
+  std::vector<Operand> operands = getInstructionOperands(inst);
+  for (const auto &operand : operands) {
+    oss << "_";
+
+    if (isRegisterOperand(operand)) {
+      int reg_num = getRegisterFromOperand(operand);
+      // 如果寄存器对应常量，使用常量值
+      auto const_it = constants_map.find(reg_num);
+      if (const_it != constants_map.end()) {
+        const ConstantValue &const_val = const_it->second;
+        if (const_val.isInt()) {
+          oss << "c" << const_val.int_val;
+        } else if (const_val.isFloat()) {
+          oss << "f" << const_val.float_val;
+        } else {
+          oss << "r" << reg_num;
+        }
+      } else {
+        oss << "r" << reg_num;
+      }
+    } else {
+      // 立即数操作数
+      ConstantValue const_val = getConstantFromOperand(operand);
+      if (const_val.isInt()) {
+        oss << "c" << const_val.int_val;
+      } else if (const_val.isFloat()) {
+        oss << "f" << const_val.float_val;
+      } else {
+        oss << "imm";
+      }
+    }
+  }
+
+  return oss.str();
 }

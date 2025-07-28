@@ -281,6 +281,13 @@ private:
   bool isOne(const ConstantValue &const_val);
   bool isTwo(const ConstantValue &const_val);
   bool isAllOnes(const ConstantValue &const_val);
+
+  // 不可达代码消除辅助函数
+  int getUnconditionalBranchTarget(const Instruction &inst);
+  std::pair<int, int> getConditionalBranchTargets(const Instruction &inst);
+
+  // 公共子表达式消除辅助函数
+  bool canPerformCSE(const Instruction &inst);
 };
 
 /**

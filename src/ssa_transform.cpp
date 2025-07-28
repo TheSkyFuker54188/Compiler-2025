@@ -29,6 +29,24 @@ LLVMIR SSATransformer::transform(const LLVMIR &ir) {
   return ssa_ir;
 }
 
+    std::cout << "Converting function to SSA form..." << std::endl;
+
+    // 1. 构建控制流图
+    ControlFlowGraph cfg = buildControlFlowGraph(blocks);
+
+    // 2. 计算支配信息
+    DominanceInfo dom_info = computeDominanceInfoFromCFG(blocks, cfg);
+
+    // 3. 插入φ函数
+    insertPhiFunctions(blocks, dom_info);
+
+    // 4. 变量重命名
+    renameVariables(blocks, dom_info);
+  }
+
+  return ssa_ir;
+}
+
 SSATransformer::ControlFlowGraph
 SSATransformer::buildControlFlowGraph(const std::map<int, LLVMBlock> &blocks) {
   ControlFlowGraph cfg;
@@ -148,16 +166,23 @@ SSATransformer::DominanceInfo SSATransformer::computeDominanceInfoFromCFG(
 
   // 迭代计算支配关系 - 使用更robust的算法
   bool changed = true;
-  int max_iterations = blocks.size() * 2; // 更合理的迭代限制
+  int max_iterations = std::min(20, static_cast<int>(blocks.size() * 2)); // 限制最大迭代次数
   int iteration_count = 0;
 
   while (changed && iteration_count < max_iterations) {
     changed = false;
     iteration_count++;
 
-    if (iteration_count % 10 == 0) {
+    if (iteration_count % 5 == 0) {
       std::cout << "Dominator analysis iteration " << iteration_count
                 << std::endl;
+    }
+
+    // 对于非常复杂的控制流，提前退出
+    if (blocks.size() > 30 && iteration_count > 10) {
+      std::cout << "Early termination for very complex control flow (blocks: " 
+                << blocks.size() << ")" << std::endl;
+      break;
     }
 
     for (const auto &block_pair : blocks) {
@@ -295,7 +320,7 @@ SSATransformer::computeDominanceInfo(const std::map<int, LLVMBlock> &blocks) {
 
   // 迭代计算支配关系
   bool changed = true;
-  int max_iterations = 5; // 大幅降低迭代限制
+  int max_iterations = 3; // 大幅降低迭代限制
   int iteration_count = 0;
 
   while (changed && iteration_count < max_iterations) {
@@ -306,7 +331,7 @@ SSATransformer::computeDominanceInfo(const std::map<int, LLVMBlock> &blocks) {
               << std::endl;
 
     // 对于复杂情况，提前退出
-    if (blocks.size() > 10 && iteration_count > 2) {
+    if (blocks.size() > 5 && iteration_count > 1) {
       std::cout << "Early termination for complex control flow" << std::endl;
       break;
     }
