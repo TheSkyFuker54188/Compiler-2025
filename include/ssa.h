@@ -1,8 +1,7 @@
-#ifndef SSA_H
-#define SSA_H
+#pragma once
 
 #include "block.h"
-#include "instruction.h"
+#include "llvm_instruction.h"
 #include <queue>
 #include <string>
 #include <unordered_map>
@@ -316,5 +315,3 @@ private:
   void validateSSADestruction(const LLVMIR &original_ssa,
                               const LLVMIR &destroyed_ir);
 };
-
-#endif // SSA_H

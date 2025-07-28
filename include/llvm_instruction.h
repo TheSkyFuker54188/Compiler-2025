@@ -1,5 +1,4 @@
-#ifndef INSTRUCTION_H
-#define INSTRUCTION_H
+#pragma once
 
 #include "ast.h"
 #include "symtab.h"
@@ -133,6 +132,10 @@ protected:
 public:
   BasicOperand() {}
   operand_type GetOperandType() { return operandType; }
+  bool isIMM() {
+    return operandType == IMMI32 || operandType == IMMF32 ||
+           operandType == IMMI64;
+  }
   virtual std::string GetFullName() = 0;
   virtual Operand CopyOperand() = 0;
 };
@@ -1076,5 +1079,3 @@ public:
       << value->GetFullName() << " to " << to_type << "\n";
   }
 };
-
-#endif

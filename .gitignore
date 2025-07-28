@@ -11,10 +11,13 @@ tests/h_functional/*.ll
 tests/functional/*.ast
 tests/h_functional/*.ast
 
-tests/functional/*.mir
-tests/h_functional/*.mir
-
 tests/functional/*.s
 tests/h_functional/*.s
 
+tests/functional/*.c
+tests/h_functional/*.c
+
 test_logs/
+test_logs_ssa/
+test_logs_opt/
+test_results/

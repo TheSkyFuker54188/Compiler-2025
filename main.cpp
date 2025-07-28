@@ -1,11 +1,9 @@
 #include "include/ast.h"
 #include "include/astprinter.h"
 #include "include/block.h"
-#include "include/code_emitter.h"
-#include "include/globalisel.h"
-#include "include/riscv_mir.h"
+#include "include/irtranslater.h"
+#include "include/register_allocator.h"
 #include "include/semantic.h"
-#include "include/ssa.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -22,6 +20,8 @@ extern int line_number;
 int line_number = 1;
 int col_number = 1;
 int cur_col_number = 1;
+
+std::map<std::string, int> function_name_to_maxreg;
 
 /**
  * 编译单个SYS语言文件：词法分析、语法分析、语义分析
@@ -42,53 +42,40 @@ bool compileFile(const std::string &filename, bool verbose = true,
     return false;
   }
 
-  if (verbose) {
+  if (verbose)
     std::cout << "=== 编译 " << filename << " ===" << std::endl;
-  }
-
-  // 第一阶段：执行语法分析
-  if (verbose) {
+  if (verbose)
     std::cout << "阶段1: 词法和语法分析..." << std::endl;
-  }
 
   int result = yyparse();
   fclose(yyin);
-
   if (result != 0) {
     std::cerr << "语法分析失败!" << std::endl;
     return false;
   }
-
   if (!root) {
     std::cerr << "没有生成AST!" << std::endl;
     return false;
   }
 
-  if (verbose) {
+  if (verbose)
     std::cout << "语法分析成功!" << std::endl;
-  }
 
-  // 第二阶段：语义分析
   bool semantic_success = true;
   if (enable_semantic) {
-    if (verbose) {
+    if (verbose)
       std::cout << "阶段2: 语义分析..." << std::endl;
-    }
-
     SemanticAnalyzer analyzer;
     semantic_success = analyzer.analyze(*root);
-
     if (semantic_success) {
-      if (verbose) {
+      if (verbose)
         std::cout << "语义分析成功!" << std::endl;
-      }
     } else {
       std::cerr << "语义分析失败!" << std::endl;
       analyzer.printErrors();
     }
   }
 
-  // 第三阶段：打印AST（可选）
   if (print_ast) {
     std::string AST = filename.substr(0, filename.find_last_of('.')) + ".ast";
     std::ofstream ast_file(AST);
@@ -98,156 +85,67 @@ bool compileFile(const std::string &filename, bool verbose = true,
     root->accept(printer);
   }
 
-  // 第四阶段：生成中间代码
   LLVMIR ir;
   if (generate_ir && semantic_success) {
-    if (verbose) {
+    if (verbose)
       std::cout << "阶段3: 中间代码生成..." << std::endl;
-    }
-
     IRgenerator irgen;
     root->accept(irgen);
     ir = irgen.getLLVMIR();
-
-    // 输出原始IR到文件
     std::string ir_filename =
         filename.substr(0, filename.find_last_of('.')) + ".ll";
     std::ofstream ir_file(ir_filename);
     if (ir_file.is_open()) {
       ir.printIR(ir_file);
       ir_file.close();
-      if (verbose) {
+      if (verbose)
         std::cout << "中间代码已生成到 " << ir_filename << std::endl;
-      }
     } else {
       std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
       return false;
     }
   }
 
-  // 第五阶段：SSA变换和优化
   LLVMIR optimized_ir = ir;
-  if (semantic_success && !ir.function_block_map.empty() && optimize) {
-    if (verbose) {
-      std::cout << "阶段4: SSA变换和优化..." << std::endl;
-    }
+  // SSA变换暂时禁用
+  // if (semantic_success && !ir.function_block_map.empty() && optimize) {
+  //   if (verbose)
+  //     std::cout << "阶段4: SSA变换和优化..." << std::endl;
+  //   SSATransformer ssa_transformer;
+  //   LLVMIR ssa_ir = ssa_transformer.transform(ir);
+  //   optimized_ir = ssa_ir;
+  //   if (verbose)
+  //     std::cout << "SSA变换完成" << std::endl;
+  // }
 
-    // SSA变换
-    SSATransformer ssa_transformer;
-    LLVMIR ssa_ir = ssa_transformer.transform(ir);
+  // 汇编代码生成阶段
+  if (semantic_success && generate_asm) {
+    if (verbose)
+      std::cout << "阶段5: RISC-V汇编代码生成..." << std::endl;
 
-    if (verbose) {
-      std::cout << "SSA变换完成" << std::endl;
-    }
+    // 使用原始IR（SSA优化暂时禁用）
+    LLVMIR &final_ir = ir;
 
-    // 输出SSA形式的IR到文件（可选）
-    std::string ssa_ir_filename =
-        filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
-    std::ofstream ssa_ir_file(ssa_ir_filename);
-    if (ssa_ir_file.is_open()) {
-      ssa_ir.printIR(ssa_ir_file);
-      ssa_ir_file.close();
-      if (verbose) {
-        std::cout << "SSA中间代码已生成到 " << ssa_ir_filename << std::endl;
-      }
-    }
+    Translator translator(output_file);
 
-    // SSA优化
-    SSAOptimizer ssa_optimizer;
-    LLVMIR optimized_ssa_ir = ssa_optimizer.optimize(ssa_ir);
+    // 执行翻译
+    translator.translate(final_ir);
 
-    if (verbose) {
-      std::cout << "SSA优化完成" << std::endl;
-    }
+    if (verbose)
+      std::cout << "阶段6: 寄存器分配..." << std::endl;
 
-    // SSA销毁
-    SSADestroyer ssa_destroyer;
-    optimized_ir = ssa_destroyer.destroySSA(optimized_ssa_ir);
+    // 执行寄存器分配
+    // RegisterAllocationPass::applyToTranslator(translator);
 
-    if (verbose) {
-      std::cout << "SSA销毁完成，准备后端代码生成" << std::endl;
-    }
-
-    // 输出优化后的IR到文件
-    std::string opt_ir_filename =
-        filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
-    std::ofstream opt_ir_file(opt_ir_filename);
-    if (opt_ir_file.is_open()) {
-      optimized_ir.printIR(opt_ir_file);
-      opt_ir_file.close();
-      if (verbose) {
-        std::cout << "优化后的中间代码已生成到 " << opt_ir_filename
-                  << std::endl;
-      }
-    }
-  }
-
-  // 第五阶段：汇编代码生成
-  if (generate_asm && semantic_success && generate_ir) {
-    if (verbose) {
-      std::cout << "阶段4: 汇编代码生成..." << std::endl;
-    }
-
-    try {
-      MachineModule mir_module;
-      MachineModule asm_module; // 用于汇编生成的模块
-      RISCVGlobalISel global_isel;
-
-      // 第一步：运行到InstructionSelect阶段，用于生成MIR文件
-      bool isel_success = global_isel.runGlobalISelToInstructionSelect(
-          optimized_ir, mir_module);
-
-      if (isel_success) {
-        // 输出生成的MIR到文件（InstructionSelect阶段的状态）
-        // std::string mir_filename =
-        //     filename.substr(0, filename.find_last_of('.')) + ".mir";
-        // std::ofstream mir_file(mir_filename);
-        // if (mir_file.is_open()) {
-        //   mir_module.printMIR(mir_file);  // 使用MIR专用格式
-        //   mir_file.close();
-        //   if (verbose) {
-        //     std::cout << "机器中间代码已生成到 " << mir_filename <<
-        //     std::endl;
-        //   }
-        // } else {
-        //   std::cerr << "无法创建MIR文件 " << mir_filename << std::endl;
-        // }
-
-        // 第二步：运行完整流程用于生成汇编文件
-        bool full_success = global_isel.runGlobalISel(ir, asm_module);
-
-        if (full_success) {
-          if (verbose) {
-            std::cout << "GlobalISel指令选择成功!" << std::endl;
-          }
-
-          // 输出生成的RISC-V汇编代码到文件（使用代码发射器）
-          std::string asm_filename =
-              output_file.empty()
-                  ? filename.substr(0, filename.find_last_of('.')) + ".s"
-                  : output_file;
-          std::ofstream asm_file(asm_filename);
-          if (asm_file.is_open()) {
-            RISCVCodeEmitter emitter(asm_file); // 使用专门的代码发射器
-            emitter.emitModule(asm_module);
-            asm_file.close();
-            if (verbose) {
-              std::cout << "RISC-V汇编代码已生成到 " << asm_filename
-                        << std::endl;
-            }
-          } else {
-            std::cerr << "无法创建汇编文件 " << asm_filename << std::endl;
-          }
-        } else {
-          std::cerr << "GlobalISel完整流程执行失败!" << std::endl;
-          return false;
-        }
-      } else {
-        std::cerr << "GlobalISel指令选择失败!" << std::endl;
-        return false;
-      }
-    } catch (const std::exception &e) {
-      std::cerr << "GlobalISel执行出错: " << e.what() << std::endl;
+    // 输出汇编代码到文件
+    std::ofstream asm_file(output_file);
+    if (asm_file.is_open()) {
+      translator.riscv.print(asm_file);
+      asm_file.close();
+      if (verbose)
+        std::cout << "RISC-V汇编代码已生成到 " << output_file << std::endl;
+    } else {
+      std::cerr << "无法创建汇编文件 " << output_file << std::endl;
       return false;
     }
   }
@@ -277,12 +175,12 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  bool quiet_mode = true;
+  bool quiet_mode = false;
   bool enable_semantic = true;
   bool print_ast = false;
   bool generate_ir = true;
   bool generate_asm = true;
-  bool optimize = true; // 默认启用优化
+  bool optimize = false;
   std::string filename;
   std::string output_file;
 
