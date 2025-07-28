@@ -60,26 +60,52 @@ SSATransformer::buildControlFlowGraph(const std::map<int, LLVMBlock> &blocks) {
 
     if (last_inst->GetOpcode() == BR_UNCOND) {
       // 无条件跳转：提取目标块
-      // 这里需要根据具体的指令格式来解析目标
-      // 暂时简化：假设跳转到下一个块
-      auto next_it = blocks.find(block_id + 1);
-      if (next_it != blocks.end()) {
-        cfg.successors[block_id].push_back(block_id + 1);
-        cfg.predecessors[block_id + 1].push_back(block_id);
+      BrUncondInstruction *br_inst =
+          dynamic_cast<BrUncondInstruction *>(last_inst);
+      if (br_inst) {
+        Operand label_op = br_inst->GetLabel();
+        if (label_op && label_op->GetOperandType() == BasicOperand::LABEL) {
+          LabelOperand *label_operand = dynamic_cast<LabelOperand *>(label_op);
+          if (label_operand) {
+            int target_block = label_operand->GetLabelNo();
+            if (blocks.find(target_block) != blocks.end()) {
+              cfg.successors[block_id].push_back(target_block);
+              cfg.predecessors[target_block].push_back(block_id);
+            }
+          }
+        }
       }
     } else if (last_inst->GetOpcode() == BR_COND) {
       // 条件跳转：有两个目标块
-      // 这里需要根据具体的指令格式来解析目标
-      // 暂时简化：假设跳转到下一个和下下个块
-      auto next_it = blocks.find(block_id + 1);
-      if (next_it != blocks.end()) {
-        cfg.successors[block_id].push_back(block_id + 1);
-        cfg.predecessors[block_id + 1].push_back(block_id);
-      }
-      auto next2_it = blocks.find(block_id + 2);
-      if (next2_it != blocks.end()) {
-        cfg.successors[block_id].push_back(block_id + 2);
-        cfg.predecessors[block_id + 2].push_back(block_id);
+      BrCondInstruction *br_inst = dynamic_cast<BrCondInstruction *>(last_inst);
+      if (br_inst) {
+        // 提取true分支目标
+        Operand true_label = br_inst->GetTrueLabel();
+        if (true_label && true_label->GetOperandType() == BasicOperand::LABEL) {
+          LabelOperand *true_operand = dynamic_cast<LabelOperand *>(true_label);
+          if (true_operand) {
+            int true_target = true_operand->GetLabelNo();
+            if (blocks.find(true_target) != blocks.end()) {
+              cfg.successors[block_id].push_back(true_target);
+              cfg.predecessors[true_target].push_back(block_id);
+            }
+          }
+        }
+
+        // 提取false分支目标
+        Operand false_label = br_inst->GetFalseLabel();
+        if (false_label &&
+            false_label->GetOperandType() == BasicOperand::LABEL) {
+          LabelOperand *false_operand =
+              dynamic_cast<LabelOperand *>(false_label);
+          if (false_operand) {
+            int false_target = false_operand->GetLabelNo();
+            if (blocks.find(false_target) != blocks.end()) {
+              cfg.successors[block_id].push_back(false_target);
+              cfg.predecessors[false_target].push_back(block_id);
+            }
+          }
+        }
       }
     } else if (last_inst->GetOpcode() == RET) {
       // 返回指令：没有后继
@@ -442,15 +468,24 @@ void SSATransformer::insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
           if (has_phi.find(frontier_block) == has_phi.end()) {
             // 在frontier_block的开头插入φ函数
 
-            // 获取前驱块数量来创建φ函数的参数
+            // 获取前驱块来创建φ函数的参数
             auto pred_it = cfg.predecessors.find(frontier_block);
             if (pred_it != cfg.predecessors.end() && !pred_it->second.empty()) {
-              // 创建φ函数的结果操作数（临时变量）
-              auto phi_result =
-                  GetNewRegOperand(0); // 使用友元函数创建RegOperand
+              // 创建φ函数的结果操作数
+              static int phi_counter = 1;
+              auto phi_result = GetNewRegOperand(phi_counter++);
 
-              // 创建φ指令（先创建空的，稍后在变量重命名阶段填充操作数）
-              auto phi_inst = new PhiInstruction(I32, phi_result);
+              // 为每个前驱块创建φ参数（暂时用占位符）
+              std::vector<std::pair<Operand, Operand>> phi_args;
+              for (int pred_block : pred_it->second) {
+                // 创建占位符操作数（稍后在变量重命名阶段会被正确的值替换）
+                auto placeholder_val = GetNewRegOperand(0);
+                auto pred_label = GetNewLabelOperand(pred_block);
+                phi_args.push_back(std::make_pair(placeholder_val, pred_label));
+              }
+
+              // 创建完整的φ指令
+              auto phi_inst = new PhiInstruction(I32, phi_result, phi_args);
 
               // 插入到基本块开头
               auto frontier_block_it = blocks.find(frontier_block);
@@ -459,6 +494,10 @@ void SSATransformer::insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
                 // 插入到指令列表的开头
                 block->Instruction_list.insert(block->Instruction_list.begin(),
                                                phi_inst);
+
+                std::cout << "  Inserted phi function in block L"
+                          << frontier_block << " for variable " << var
+                          << std::endl;
               }
             }
 
@@ -486,10 +525,16 @@ void SSATransformer::renameVariables(std::map<int, LLVMBlock> &blocks,
     rename_info.var_stack[var].push_back(0);
   }
 
+  // 重新构建CFG用于φ函数参数更新
+  ControlFlowGraph cfg = buildControlFlowGraph(blocks);
+
   // 从入口块开始递归重命名
   if (!blocks.empty()) {
     int entry_block = blocks.begin()->first;
     renameVariablesRecursive(entry_block, blocks, dom_info, rename_info);
+
+    // 重命名完成后，更新所有φ函数的参数
+    updatePhiArguments(blocks, cfg, rename_info);
   }
 }
 
@@ -579,13 +624,67 @@ void SSATransformer::renameVariablesRecursive(
   // 记录在这个块中修改的变量，以便稍后恢复
   std::vector<std::string> modified_vars;
 
+  std::cout << "  Renaming variables in block L" << block_id << std::endl;
+
   // 重命名该块中的指令
   for (auto &inst : block->Instruction_list) {
-    // 根据指令类型进行重命名
-    // 这里需要根据具体的指令格式来实现
+    if (!inst)
+      continue;
+
+    int opcode = inst->GetOpcode();
+
+    // 处理φ函数：为结果分配新版本
+    if (opcode == PHI) {
+      PhiInstruction *phi_inst = dynamic_cast<PhiInstruction *>(inst);
+      if (phi_inst) {
+        // φ函数定义新的变量版本
+        // 这里简化处理：假设φ函数对应的是某个alloca变量
+        // 实际中需要更复杂的映射逻辑
+        std::cout << "    Processing phi instruction" << std::endl;
+      }
+    }
+
+    // 处理alloca：记录变量声明
+    else if (opcode == ALLOCA) {
+      AllocaInstruction *alloca_inst = dynamic_cast<AllocaInstruction *>(inst);
+      if (alloca_inst) {
+        std::string var_name = alloca_inst->GetResult()->GetFullName();
+        // alloca指令定义变量的初始版本
+        std::cout << "    Found alloca for variable " << var_name << std::endl;
+      }
+    }
+
+    // 处理store：这是变量的定义点
+    else if (opcode == STORE) {
+      StoreInstruction *store_inst = dynamic_cast<StoreInstruction *>(inst);
+      if (store_inst) {
+        std::string var_name = store_inst->GetPointer()->GetFullName();
+
+        // 为这个变量分配新版本
+        std::string new_var_name = getNewVariableName(var_name, rename_info);
+        modified_vars.push_back(var_name);
+
+        std::cout << "    Store to " << var_name << " -> " << new_var_name
+                  << std::endl;
+      }
+    }
+
+    // 处理load：这是变量的使用点
+    else if (opcode == LOAD) {
+      LoadInstruction *load_inst = dynamic_cast<LoadInstruction *>(inst);
+      if (load_inst) {
+        std::string var_name = load_inst->GetPointer()->GetFullName();
+        std::string current_version =
+            getCurrentVariableVersion(var_name, rename_info);
+
+        std::cout << "    Load from " << var_name
+                  << " (current version: " << current_version << ")"
+                  << std::endl;
+      }
+    }
   }
 
-  // 递归处理支配的子块
+  // 递归处理被此块直接支配的子块
   for (const auto &child_block : blocks) {
     int child_id = child_block.first;
     auto idom_it = dom_info.idom.find(child_id);
@@ -595,7 +694,7 @@ void SSATransformer::renameVariablesRecursive(
     }
   }
 
-  // 恢复变量栈
+  // 恢复变量栈状态
   for (const std::string &var : modified_vars) {
     if (!rename_info.var_stack[var].empty()) {
       rename_info.var_stack[var].pop_back();
@@ -622,4 +721,50 @@ SSATransformer::getCurrentVariableVersion(const std::string &var_name,
   }
 
   return var_name + "_0"; // 默认版本
+}
+
+void SSATransformer::updatePhiArguments(std::map<int, LLVMBlock> &blocks,
+                                        const ControlFlowGraph &cfg,
+                                        const RenameInfo &rename_info) {
+  std::cout << "  Updating phi function arguments..." << std::endl;
+
+  // 遍历所有基本块，寻找φ函数并更新其参数
+  for (auto &block_pair : blocks) {
+    int block_id = block_pair.first;
+    LLVMBlock block = block_pair.second;
+
+    for (auto &inst : block->Instruction_list) {
+      if (!inst || inst->GetOpcode() != PHI)
+        continue;
+
+      PhiInstruction *phi_inst = dynamic_cast<PhiInstruction *>(inst);
+      if (!phi_inst)
+        continue;
+
+      std::cout << "    Updating phi in block L" << block_id << std::endl;
+
+      // 获取该块的前驱
+      auto pred_it = cfg.predecessors.find(block_id);
+      if (pred_it == cfg.predecessors.end())
+        continue;
+
+      // 清空现有的φ参数
+      phi_inst->phi_list.clear();
+
+      // 为每个前驱块添加φ参数
+      for (int pred_block : pred_it->second) {
+        // 简化处理：创建占位符值
+        // 在真实实现中，这里应该根据变量重命名的结果来设置正确的值
+        auto placeholder_val =
+            GetNewRegOperand(pred_block); // 使用前驱块ID作为占位符
+        auto pred_label = GetNewLabelOperand(pred_block);
+
+        phi_inst->phi_list.push_back(
+            std::make_pair(placeholder_val, pred_label));
+
+        std::cout << "      Added phi arg from block L" << pred_block
+                  << std::endl;
+      }
+    }
+  }
 }

@@ -1,0 +1,13 @@
+// 测试控制流的例子 - 应该产生phi函数
+int main(){
+    int a, result;
+    a = 5;
+    
+    if (a > 3) {
+        result = 10;
+    } else {
+        result = 20;
+    }
+    
+    return result;  // 这里应该需要phi函数合并两个分支的result值
+}

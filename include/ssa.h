@@ -123,6 +123,13 @@ private:
    */
   std::string getCurrentVariableVersion(const std::string &var_name,
                                         const RenameInfo &rename_info);
+
+  /**
+   * 更新φ函数的参数
+   */
+  void updatePhiArguments(std::map<int, LLVMBlock> &blocks,
+                          const ControlFlowGraph &cfg,
+                          const RenameInfo &rename_info);
 };
 
 /**
@@ -259,13 +266,21 @@ private:
   int getGenericInstructionResultRegister(const Instruction &inst);
 
   // 新增的增强优化函数
-  void simplifyArithmeticInstruction(Instruction &inst);
-  void simplifyBitwiseInstruction(Instruction &inst);
+  bool simplifyArithmeticInstruction(Instruction &inst);
+  bool simplifyBitwiseInstruction(Instruction &inst);
   bool isRedundantPhiFunction(const Instruction &inst);
   void replaceRegisterUsages(std::map<int, LLVMBlock> &blocks, int old_reg,
                              int new_reg);
   bool tryConstantPropagation(Instruction &inst);
   void replaceInstructionWithOperand(Instruction &inst, const Operand &operand);
+  void convertMultiplyByTwoToAdd(Instruction &inst, const Operand &operand);
+  bool isSameRegisterOperand(const Operand &op1, const Operand &op2);
+
+  // 代数化简辅助函数
+  bool isZero(const ConstantValue &const_val);
+  bool isOne(const ConstantValue &const_val);
+  bool isTwo(const ConstantValue &const_val);
+  bool isAllOnes(const ConstantValue &const_val);
 };
 
 /**
