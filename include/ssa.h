@@ -184,6 +184,12 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
+    //除法优化
+    bool isPowerOfTwo(int n);
+    int log2_upper(int x);
+    std::tuple<long long, int, int> choose_multiplier(int d, int prec);
+    void optimizeDivision(LLVMIR &ir);
+
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
   size_t countInstructions(const LLVMIR &ir);

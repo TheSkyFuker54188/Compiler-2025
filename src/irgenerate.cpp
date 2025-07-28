@@ -102,6 +102,15 @@ std::ostream &operator<<(std::ostream &s, LLVMIROpcode type) {
   case SHL:
     s << "shl";
     break;
+  case ASHR:
+    s << "ashr";
+    break;
+  case LSHR:
+    s << "lshr";
+    break;
+  case TRUNC:
+    s << "trunc";
+    break;
   }
   return s;
 }
@@ -2133,7 +2142,7 @@ void IRgenerator::visit(FuncDef &node) {
   function_returntype = node.return_type;
   llvmIR.NewFunction(function_now);
   now_label = 0;
-  current_reg_counter = 0; // Reset register counter
+  current_reg_counter = -1; // Reset register counter
   max_label = 0;           // 重置标签计数器
   // max_reg = -1;
   // llvmIR.NewBlock(function_now, now_label);
@@ -2429,12 +2438,32 @@ void IRgenerator::visit(WhileStmt &node) {
 
   // 6. 恢复外层状态
   now_label = end_label;
+  // before_label = old_before_label;
+  // cond_label = old_cond_label;
+  // body_label = end_label;
+  // end_label = old_end_label;
+  // loop_start_label = old_loop_start;
+  // loop_end_label = old_loop_end;
+
+  end_label_temp = end_label;
+  LLVMBlock B_end = llvmIR.GetBlock(function_now, end_label_temp);
+  end_label_temp = end_label;
+
+  if(end_label!=max_label){
+    int end_end_label = newLabel();
+    int end_end_label_temp = end_end_label;
+    llvmIR.NewBlock(function_now, end_end_label_temp);
+    end_end_label_temp = end_end_label;
+    now_label = end_end_label;
+    IRgenBRUnCond(B_end, end_end_label_temp);
+  }
   before_label = old_before_label;
   cond_label = old_cond_label;
   body_label = end_label;
   end_label = old_end_label;
   loop_start_label = old_loop_start;
   loop_end_label = old_loop_end;
+
 }
 
 void IRgenerator::visit(ExpStmt &node) {
