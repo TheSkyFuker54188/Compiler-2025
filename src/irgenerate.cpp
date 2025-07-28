@@ -2538,26 +2538,37 @@ void IRgenerator::visit(ReturnStmt &node) {
       if (ret_type == LLVMType::FLOAT32) {
         // IRgenRetImmFloat(getCurrentBlock(), ret_type, 0.0f);
         //  处理浮点返回类型：将整数常量转换为浮点数
-        int temp_reg = newReg();
+        //int temp_reg = newReg();
         LLVMBlock B = getCurrentBlock();
 
         // 创建临时寄存器存储整数常量
-        B->InsertInstruction(1, new ArithmeticInstruction(
-                                    ADD, LLVMType::I32, new ImmI32Operand(0),
-                                    new ImmI32Operand(ret_attr.IntInitVals[0]),
-                                    GetNewRegOperand(temp_reg)));
+        // B->InsertInstruction(1, new ArithmeticInstruction(
+        //                             ADD, LLVMType::I32, new ImmI32Operand(0),
+        //                             new ImmI32Operand(ret_attr.IntInitVals[0]),
+        //                             GetNewRegOperand(temp_reg)));
 
         // 将整数转换为浮点数
         int float_reg = newReg();
-        IRgenSitofp(B, temp_reg, float_reg);
+        //IRgenSitofp(B, temp_reg, float_reg);
+        IRgenSitofp(B, ret_reg, float_reg);
 
         // 返回浮点数
         IRgenRetReg(B, ret_type, float_reg);
       } else {
-        IRgenRetImmInt(getCurrentBlock(), ret_type, ret_attr.IntInitVals[0]);
+        //IRgenRetImmInt(getCurrentBlock(), ret_type, ret_attr.IntInitVals[0]);
+        IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
       }
     } else if (ret_attr.FloatInitVals.size() > 0) {
-      IRgenRetImmFloat(getCurrentBlock(), ret_type, ret_attr.FloatInitVals[0]);
+      if(ret_type == LLVMType::I32){
+        int temp_reg = newReg();
+        LLVMBlock B = getCurrentBlock();
+        IRgenFptosi(B, ret_reg, temp_reg);
+        IRgenRetReg(B, ret_type, temp_reg);
+      }
+      else{
+        IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
+      }
+      //IRgenRetImmFloat(getCurrentBlock(), ret_type, ret_attr.FloatInitVals[0]);
     } else if (node.expression.has_value() &&
                dynamic_cast<FunctionCall *>((*node.expression).get())) {
       IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
