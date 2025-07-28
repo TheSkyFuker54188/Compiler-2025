@@ -184,6 +184,21 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
+  /**
+   * 代数化简
+   */
+  void algebraicSimplification(LLVMIR &ir);
+
+  /**
+   * φ函数简化
+   */
+  void simplifyPhiFunctions(LLVMIR &ir);
+
+  /**
+   * 无用代码消除
+   */
+  void eliminateUnreachableCode(LLVMIR &ir);
+
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
   size_t countInstructions(const LLVMIR &ir);
@@ -242,6 +257,15 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
+
+  // 新增的增强优化函数
+  void simplifyArithmeticInstruction(Instruction &inst);
+  void simplifyBitwiseInstruction(Instruction &inst);
+  bool isRedundantPhiFunction(const Instruction &inst);
+  void replaceRegisterUsages(std::map<int, LLVMBlock> &blocks, int old_reg,
+                             int new_reg);
+  bool tryConstantPropagation(Instruction &inst);
+  void replaceInstructionWithOperand(Instruction &inst, const Operand &operand);
 };
 
 /**

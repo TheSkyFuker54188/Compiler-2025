@@ -1,0 +1,179 @@
+// 更全面的SSA优化测试用例
+// 测试各种优化技术的效果
+
+int test_constant_folding() {
+    // 测试常量折叠
+    int a = 10 + 5;        // 应该折叠为 15
+    int b = 20 * 2;        // 应该折叠为 40  
+    int c = 100 / 4;       // 应该折叠为 25
+    int d = 50 - 30;       // 应该折叠为 20
+    return a + b + c + d;  // 应该折叠为 100
+}
+
+int test_algebraic_simplification() {
+    // 测试代数化简
+    int x = 42;
+    int a = x + 0;         // 应该简化为 x
+    int b = x * 1;         // 应该简化为 x
+    int c = x - 0;         // 应该简化为 x
+    int d = x | 0;         // 应该简化为 x
+    int e = x & (-1);      // 应该简化为 x
+    int f = 0 * x;         // 应该简化为 0
+    return a + b + c + d + e + f;
+}
+
+int test_dead_code_elimination() {
+    // 测试死代码消除
+    int alive = 5;
+    int dead1 = 10;        // 未使用，应该被删除
+    int dead2 = dead1 + 20; // 未使用，应该被删除
+    
+    int used = alive * 2;
+    int another_dead = 99;  // 未使用，应该被删除
+    
+    return used;           // 只有alive和used应该保留
+}
+
+int test_copy_propagation() {
+    // 测试复制传播
+    int original = 100;
+    int copy1 = original;   // copy1 应该被原值替代
+    int copy2 = copy1;      // copy2 应该被原值替代
+    int copy3 = copy2;      // copy3 应该被原值替代
+    
+    return copy3;           // 应该直接返回 original
+}
+
+int test_phi_simplification() {
+    // 测试φ函数简化
+    int x;
+    int condition = 1;
+    
+    if (condition) {
+        x = 42;             // 两个分支都赋相同值
+    } else {
+        x = 42;             // φ函数应该被简化
+    }
+    
+    return x;               // 应该直接返回 42
+}
+
+int test_unreachable_elimination() {
+    // 测试不可达代码消除
+    int result = 10;
+    
+    if (1) {               // 条件恒为真
+        result = result + 5;
+        return result;      // 这里就返回了
+    } else {
+        result = 999;      // 这段代码不可达，应该被删除
+        result = result * 2;
+    }
+    
+    return 0;              // 也不可达
+}
+
+int test_constant_propagation_through_branches() {
+    // 测试通过分支的常量传播
+    int x = 10;            // 常量
+    int y;
+    
+    if (x > 5) {           // 应该被识别为恒为真
+        y = 20;
+    } else {
+        y = 30;            // 不可达
+    }
+    
+    return y;              // 应该被优化为返回 20
+}
+
+int test_nested_expressions() {
+    // 测试嵌套表达式优化
+    int a = 5;
+    int b = 10;
+    int c = 15;
+    
+    // 复杂表达式，包含多种优化机会
+    int result = (a * 1) + (b + 0) + (c - 0) + (0 * 100);
+    
+    return result;          // 应该优化为 a + b + c = 30
+}
+
+int test_loop_invariant() {
+    // 简单的循环不变代码测试
+    int invariant = 42;     // 循环不变
+    int sum = 0;
+    
+    for (int i = 0; i < 10; i++) {
+        int temp = invariant * 2;  // 循环不变，可以外提
+        sum = sum + temp;
+    }
+    
+    return sum;
+}
+
+int test_strength_reduction() {
+    // 强度削减测试
+    int result = 0;
+    
+    for (int i = 0; i < 8; i++) {
+        result = result + i * 4;   // 乘法可以转换为移位
+    }
+    
+    return result;
+}
+
+int main() {
+    int total = 0;
+    
+    total += test_constant_folding();
+    total += test_algebraic_simplification();
+    total += test_dead_code_elimination();
+    total += test_copy_propagation();
+    total += test_phi_simplification();
+    total += test_unreachable_elimination();
+    total += test_constant_propagation_through_branches();
+    total += test_nested_expressions();
+    total += test_loop_invariant();
+    total += test_strength_reduction();
+    
+    return total;
+}
+
+// 额外的测试函数
+
+int test_boolean_simplification() {
+    // 布尔表达式简化
+    int x = 1;
+    int y = 0;
+    
+    int a = x && 1;        // 应该简化为 x
+    int b = y || 0;        // 应该简化为 y  
+    int c = x && 0;        // 应该简化为 0
+    int d = y || 1;        // 应该简化为 1
+    
+    return a + b + c + d;
+}
+
+int test_redundant_loads() {
+    // 冗余加载消除测试
+    int array[10];
+    array[0] = 100;
+    
+    int val1 = array[0];   // 第一次加载
+    int val2 = array[0];   // 冗余加载，应该复用val1
+    int val3 = array[0];   // 冗余加载，应该复用val1
+    
+    return val1 + val2 + val3;  // 应该优化为 val1 * 3
+}
+
+float test_floating_point_optimization() {
+    // 浮点优化测试
+    float x = 3.14f;
+    float a = x + 0.0f;    // 应该简化为 x
+    float b = x * 1.0f;    // 应该简化为 x
+    float c = x - 0.0f;    // 应该简化为 x
+    float d = 0.0f * x;    // 应该简化为 0.0f
+    
+    return a + b + c + d;
+}
