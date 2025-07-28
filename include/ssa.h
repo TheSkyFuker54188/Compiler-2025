@@ -239,6 +239,10 @@ private:
   void replaceInstructionWithConstant(Instruction &inst,
                                       const ConstantValue &constant);
   void replaceOperandRegister(Operand &operand, int new_reg);
+
+  // 新增的通用指令处理函数
+  std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
+  int getGenericInstructionResultRegister(const Instruction &inst);
 };
 
 /**

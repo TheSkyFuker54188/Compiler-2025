@@ -61,54 +61,172 @@ void SSAOptimizer::eliminateDeadCode(LLVMIR &ir) {
   for (auto &func_pair : ir.function_block_map) {
     std::map<int, LLVMBlock> &blocks = func_pair.second;
 
-    // 第一步：标记所有有用的指令
+    // 第一步：建立完整的指令映射和依赖关系
+    std::unordered_map<int, Instruction> reg_to_inst;
+    std::unordered_map<Instruction, std::vector<int>> inst_to_defined_regs;
+    std::unordered_map<Instruction, std::vector<int>> inst_to_used_regs;
+
+    // 建立寄存器到指令的映射
+    for (const auto &block_pair : blocks) {
+      LLVMBlock block = block_pair.second;
+      for (const auto &inst : block->Instruction_list) {
+        if (!inst)
+          continue;
+
+        // 记录指令定义的寄存器
+        int result_reg = getInstructionResultRegister(inst);
+        if (result_reg != -1) {
+          reg_to_inst[result_reg] = inst;
+          inst_to_defined_regs[inst].push_back(result_reg);
+        }
+
+        // 记录指令使用的寄存器
+        std::vector<Operand> operands = getInstructionOperands(inst);
+        for (const auto &operand : operands) {
+          if (isRegisterOperand(operand)) {
+            int reg_num = getRegisterFromOperand(operand);
+            if (reg_num != -1) {
+              inst_to_used_regs[inst].push_back(reg_num);
+            }
+          }
+        }
+      }
+    }
+
+    // 第二步：标记所有有用的指令
     useful_instructions.clear();
     std::queue<Instruction> work_list;
+    std::unordered_set<Instruction> in_worklist;
 
     // 标记所有关键指令为有用
     for (const auto &block_pair : blocks) {
       LLVMBlock block = block_pair.second;
-
       for (const auto &inst : block->Instruction_list) {
         if (!inst)
           continue;
 
         if (isCriticalInstruction(inst)) {
-          markInstructionAsUseful(inst);
-          work_list.push(inst);
+          if (useful_instructions.find(inst) == useful_instructions.end()) {
+            markInstructionAsUseful(inst);
+            if (in_worklist.find(inst) == in_worklist.end()) {
+              work_list.push(inst);
+              in_worklist.insert(inst);
+            }
+          }
         }
       }
     }
 
-    // 第二步：传播有用性
+    // 第三步：传播有用性（使用更强健的算法）
     while (!work_list.empty()) {
       Instruction inst = work_list.front();
       work_list.pop();
+      in_worklist.erase(inst);
 
-      // 标记该指令的所有操作数定义为有用
-      std::vector<Operand> operands = getInstructionOperands(inst);
-      for (const auto &operand : operands) {
-        if (isRegisterOperand(operand)) {
-          markOperandDefAsUseful(operand, blocks);
-
-          // 找到定义该操作数的指令
-          Instruction def_inst = findDefiningInstruction(operand, blocks);
-          if (def_inst &&
-              useful_instructions.find(def_inst) == useful_instructions.end()) {
-            markInstructionAsUseful(def_inst);
-            work_list.push(def_inst);
+      // 标记该指令使用的所有寄存器的定义指令为有用
+      auto used_regs_it = inst_to_used_regs.find(inst);
+      if (used_regs_it != inst_to_used_regs.end()) {
+        for (int reg_num : used_regs_it->second) {
+          auto def_inst_it = reg_to_inst.find(reg_num);
+          if (def_inst_it != reg_to_inst.end()) {
+            Instruction def_inst = def_inst_it->second;
+            if (def_inst && useful_instructions.find(def_inst) ==
+                                useful_instructions.end()) {
+              markInstructionAsUseful(def_inst);
+              if (in_worklist.find(def_inst) == in_worklist.end()) {
+                work_list.push(def_inst);
+                in_worklist.insert(def_inst);
+              }
+            }
           }
         }
       }
 
-      // 对于φ函数，还需要标记控制依赖
-      if (inst->GetOpcode() == PHI) {
-        // φ函数依赖于控制流，需要保证其前驱的分支指令
+      // 对于φ函数和控制流相关指令，标记控制依赖
+      int opcode = inst->GetOpcode();
+      if (opcode == PHI || opcode == BR_COND || opcode == BR_UNCOND) {
         markControlDependencies(inst, blocks, work_list);
+        // 将新加入工作列表的指令标记
+        while (!work_list.empty()) {
+          Instruction control_inst = work_list.front();
+          work_list.pop();
+          if (in_worklist.find(control_inst) == in_worklist.end()) {
+            work_list.push(control_inst);
+            in_worklist.insert(control_inst);
+          }
+        }
       }
     }
 
-    // 第三步：删除所有无用指令
+    // 第四步：保守地保留所有地址计算指令
+    // 这是为了确保我们不会删除任何可能被间接使用的指令
+    for (const auto &block_pair : blocks) {
+      LLVMBlock block = block_pair.second;
+      for (const auto &inst : block->Instruction_list) {
+        if (!inst)
+          continue;
+
+        int opcode = inst->GetOpcode();
+        if (opcode == GETELEMENTPTR || opcode == ALLOCA) {
+          if (useful_instructions.find(inst) == useful_instructions.end()) {
+            // 检查是否有任何指令使用这个结果
+            int result_reg = getInstructionResultRegister(inst);
+            if (result_reg != -1) {
+              bool is_used = false;
+              for (const auto &check_block_pair : blocks) {
+                LLVMBlock check_block = check_block_pair.second;
+                for (const auto &check_inst : check_block->Instruction_list) {
+                  if (!check_inst || check_inst == inst)
+                    continue;
+
+                  std::vector<Operand> operands =
+                      getInstructionOperands(check_inst);
+                  for (const auto &operand : operands) {
+                    if (isRegisterOperand(operand) &&
+                        getRegisterFromOperand(operand) == result_reg) {
+                      is_used = true;
+                      break;
+                    }
+                  }
+                  if (is_used)
+                    break;
+                }
+                if (is_used)
+                  break;
+              }
+
+              if (is_used) {
+                markInstructionAsUseful(inst);
+                // 递归标记其依赖
+                std::queue<Instruction> conservative_worklist;
+                conservative_worklist.push(inst);
+                while (!conservative_worklist.empty()) {
+                  Instruction cons_inst = conservative_worklist.front();
+                  conservative_worklist.pop();
+
+                  auto used_regs_it = inst_to_used_regs.find(cons_inst);
+                  if (used_regs_it != inst_to_used_regs.end()) {
+                    for (int reg_num : used_regs_it->second) {
+                      auto def_inst_it = reg_to_inst.find(reg_num);
+                      if (def_inst_it != reg_to_inst.end()) {
+                        Instruction def_inst = def_inst_it->second;
+                        if (def_inst && useful_instructions.find(def_inst) ==
+                                            useful_instructions.end()) {
+                          markInstructionAsUseful(def_inst);
+                          conservative_worklist.push(def_inst);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 第五步：删除所有无用指令
     size_t removed_count = 0;
     for (const auto &block_pair : blocks) {
       LLVMBlock block = block_pair.second;
@@ -475,6 +593,7 @@ SSAOptimizer::getInstructionOperands(const Instruction &inst) {
   case SUB:
   case MUL_OP:
   case DIV_OP:
+  case MOD_OP:
   case FADD:
   case FSUB:
   case FMUL:
@@ -485,7 +604,7 @@ SSAOptimizer::getInstructionOperands(const Instruction &inst) {
   case BITOR:
   case BITXOR:
   case SHL: {
-    // 二元运算指令通常有两个操作数
+    // 二元运算指令通常有两个或三个操作数
     ArithmeticInstruction *arith_inst =
         dynamic_cast<ArithmeticInstruction *>(inst);
     if (arith_inst) {
@@ -593,7 +712,62 @@ SSAOptimizer::getInstructionOperands(const Instruction &inst) {
     break;
   }
 
+  case ZEXT:
+  case SITOFP:
+  case FPTOSI:
+  case FPEXT:
+  case BITCAST: {
+    // 类型转换指令通常有一个操作数
+    if (opcode == SITOFP) {
+      SitofpInstruction *sitofp_inst = dynamic_cast<SitofpInstruction *>(inst);
+      if (sitofp_inst && sitofp_inst->value) {
+        operands.push_back(sitofp_inst->value);
+      }
+    } else if (opcode == FPTOSI) {
+      FptosiInstruction *fptosi_inst = dynamic_cast<FptosiInstruction *>(inst);
+      if (fptosi_inst && fptosi_inst->value) {
+        operands.push_back(fptosi_inst->value);
+      }
+    } else if (opcode == FPEXT) {
+      FpextInstruction *fpext_inst = dynamic_cast<FpextInstruction *>(inst);
+      if (fpext_inst && fpext_inst->value) {
+        operands.push_back(fpext_inst->value);
+      }
+    } else if (opcode == BITCAST) {
+      BitCastInstruction *bitcast_inst =
+          dynamic_cast<BitCastInstruction *>(inst);
+      if (bitcast_inst && bitcast_inst->src) {
+        operands.push_back(bitcast_inst->src);
+      }
+    } else {
+      // 其他类型转换指令的通用处理
+      std::vector<Operand> generic_operands =
+          getGenericInstructionOperands(inst);
+      operands.insert(operands.end(), generic_operands.begin(),
+                      generic_operands.end());
+    }
+    break;
+  }
+
+  case SELECT: {
+    // select指令：select i1 %cond, type %val1, type %val2
+    SelectInstruction *select_inst = dynamic_cast<SelectInstruction *>(inst);
+    if (select_inst) {
+      if (select_inst->cond)
+        operands.push_back(select_inst->cond);
+      if (select_inst->op1)
+        operands.push_back(select_inst->op1);
+      if (select_inst->op2)
+        operands.push_back(select_inst->op2);
+    }
+    break;
+  }
+
   default:
+    // 对于未明确处理的指令类型，尝试通用方法
+    std::vector<Operand> generic_operands = getGenericInstructionOperands(inst);
+    operands.insert(operands.end(), generic_operands.begin(),
+                    generic_operands.end());
     break;
   }
 
@@ -1163,9 +1337,65 @@ int SSAOptimizer::getInstructionResultRegister(const Instruction &inst) {
     break;
   }
 
-  default:
-    // 其他指令类型可能没有结果寄存器
+  case ALLOCA: {
+    AllocaInstruction *alloca_inst = dynamic_cast<AllocaInstruction *>(inst);
+    if (alloca_inst) {
+      Operand result = alloca_inst->GetResult();
+      return getRegisterFromOperand(result);
+    }
     break;
+  }
+
+  case ZEXT:
+  case SITOFP:
+  case FPTOSI:
+  case FPEXT:
+  case BITCAST: {
+    // 类型转换指令通常有结果寄存器
+    if (opcode == SITOFP) {
+      SitofpInstruction *sitofp_inst = dynamic_cast<SitofpInstruction *>(inst);
+      if (sitofp_inst) {
+        return getRegisterFromOperand(sitofp_inst->result);
+      }
+    } else if (opcode == FPTOSI) {
+      FptosiInstruction *fptosi_inst = dynamic_cast<FptosiInstruction *>(inst);
+      if (fptosi_inst) {
+        return getRegisterFromOperand(fptosi_inst->result);
+      }
+    } else if (opcode == FPEXT) {
+      FpextInstruction *fpext_inst = dynamic_cast<FpextInstruction *>(inst);
+      if (fpext_inst) {
+        return getRegisterFromOperand(fpext_inst->result);
+      }
+    } else if (opcode == BITCAST) {
+      BitCastInstruction *bitcast_inst =
+          dynamic_cast<BitCastInstruction *>(inst);
+      if (bitcast_inst) {
+        return getRegisterFromOperand(bitcast_inst->dst);
+      }
+    }
+    return getGenericInstructionResultRegister(inst);
+  }
+
+  case SELECT: {
+    // select指令有结果寄存器
+    SelectInstruction *select_inst = dynamic_cast<SelectInstruction *>(inst);
+    if (select_inst) {
+      return getRegisterFromOperand(select_inst->result);
+    }
+    return getGenericInstructionResultRegister(inst);
+  }
+
+  // 这些指令通常没有结果寄存器
+  case STORE:
+  case RET:
+  case BR_COND:
+  case BR_UNCOND:
+    return -1;
+
+  default:
+    // 对于未知指令类型，尝试通用方法
+    return getGenericInstructionResultRegister(inst);
   }
 
   return -1; // 没有结果寄存器
@@ -1415,4 +1645,31 @@ void SSAOptimizer::replaceOperandRegister(Operand &operand, int new_reg) {
   // 这里需要根据具体的操作数类系统来实现
 
   // 简化处理：暂时不做实际替换
+}
+
+// 新增的通用操作数提取方法
+std::vector<Operand>
+SSAOptimizer::getGenericInstructionOperands(const Instruction &inst) {
+  std::vector<Operand> operands;
+
+  if (!inst)
+    return operands;
+
+  // 这里可以添加更通用的操作数提取逻辑
+  // 例如通过反射或者指令基类的通用接口
+  // 目前返回空向量作为占位符
+
+  return operands;
+}
+
+// 新增的通用结果寄存器提取方法
+int SSAOptimizer::getGenericInstructionResultRegister(const Instruction &inst) {
+  if (!inst)
+    return -1;
+
+  // 这里可以添加更通用的结果寄存器提取逻辑
+  // 例如通过指令基类的通用接口
+  // 目前返回-1作为占位符
+
+  return -1;
 }
