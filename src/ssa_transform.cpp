@@ -387,6 +387,9 @@ void SSATransformer::insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
   // 收集所有变量定义
   std::unordered_set<std::string> all_vars = collectDefinedVariables(blocks);
 
+  // 重新构建CFG用于φ函数插入
+  ControlFlowGraph cfg = buildControlFlowGraph(blocks);
+
   for (const std::string &var : all_vars) {
     // 收集定义该变量的基本块
     std::unordered_set<int> def_blocks;
@@ -397,11 +400,25 @@ void SSATransformer::insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
 
       // 检查该块是否定义了变量var
       for (const auto &inst : block->Instruction_list) {
-        // 这里需要根据具体指令格式来判断是否定义了变量
-        // 简化处理：假设store指令定义变量，load指令使用变量
-        if (inst->GetOpcode() == STORE || inst->GetOpcode() == ALLOCA) {
-          // 这里需要提取变量名，暂时简化处理
-          def_blocks.insert(block_id);
+        // 从ALLOCA指令中提取变量名
+        if (inst->GetOpcode() == ALLOCA) {
+          auto alloca_inst = dynamic_cast<AllocaInstruction *>(inst);
+          if (alloca_inst) {
+            std::string var_name = alloca_inst->GetResult()->GetFullName();
+            if (var_name == var) {
+              def_blocks.insert(block_id);
+            }
+          }
+        }
+        // 从STORE指令中提取目标变量
+        else if (inst->GetOpcode() == STORE) {
+          auto store_inst = dynamic_cast<StoreInstruction *>(inst);
+          if (store_inst) {
+            std::string var_name = store_inst->GetPointer()->GetFullName();
+            if (var_name == var) {
+              def_blocks.insert(block_id);
+            }
+          }
         }
       }
     }
@@ -424,7 +441,26 @@ void SSATransformer::insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
         for (int frontier_block : df_it->second) {
           if (has_phi.find(frontier_block) == has_phi.end()) {
             // 在frontier_block的开头插入φ函数
-            // TODO: 创建φ指令并插入到块的开头
+
+            // 获取前驱块数量来创建φ函数的参数
+            auto pred_it = cfg.predecessors.find(frontier_block);
+            if (pred_it != cfg.predecessors.end() && !pred_it->second.empty()) {
+              // 创建φ函数的结果操作数（临时变量）
+              auto phi_result =
+                  GetNewRegOperand(0); // 使用友元函数创建RegOperand
+
+              // 创建φ指令（先创建空的，稍后在变量重命名阶段填充操作数）
+              auto phi_inst = new PhiInstruction(I32, phi_result);
+
+              // 插入到基本块开头
+              auto frontier_block_it = blocks.find(frontier_block);
+              if (frontier_block_it != blocks.end()) {
+                LLVMBlock block = frontier_block_it->second;
+                // 插入到指令列表的开头
+                block->Instruction_list.insert(block->Instruction_list.begin(),
+                                               phi_inst);
+              }
+            }
 
             has_phi.insert(frontier_block);
 
@@ -466,9 +502,22 @@ std::unordered_set<std::string> SSATransformer::collectDefinedVariables(
     LLVMBlock block = block_pair.second;
 
     for (const auto &inst : block->Instruction_list) {
-      // 根据指令类型收集定义的变量
-      // 这里需要根据具体的指令格式来实现
-      // 暂时简化处理
+      // 从ALLOCA指令收集变量定义
+      if (inst->GetOpcode() == ALLOCA) {
+        auto alloca_inst = dynamic_cast<AllocaInstruction *>(inst);
+        if (alloca_inst) {
+          std::string var_name = alloca_inst->GetResult()->GetFullName();
+          vars.insert(var_name);
+        }
+      }
+      // 从STORE指令收集变量使用
+      else if (inst->GetOpcode() == STORE) {
+        auto store_inst = dynamic_cast<StoreInstruction *>(inst);
+        if (store_inst) {
+          std::string var_name = store_inst->GetPointer()->GetFullName();
+          vars.insert(var_name);
+        }
+      }
     }
   }
 

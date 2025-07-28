@@ -27,7 +27,6 @@ ASTPRINTER_SRC = $(SRCDIR)/astprinter.cpp
 SEMANTIC_SRC = $(SRCDIR)/semantic.cpp
 IRGENERATE_SRC = $(SRCDIR)/irgenerate.cpp
 IRTRANSLATER_SRC = $(SRCDIR)/irtranslater.cpp
-RISCV_INSTRUCTION_SRC = $(SRCDIR)/riscv_instruction.cpp
 REGISTER_ALLOCATOR_SRC = $(SRCDIR)/register_allocator.cpp
 # SSA模块源文件
 SSA_TRANSFORM_SRC = $(SRCDIR)/ssa_transform.cpp
@@ -40,7 +39,6 @@ ASTPRINTER_OBJ = $(BUILD_DIR)/astprinter.o
 SEMANTIC_OBJ = $(BUILD_DIR)/semantic.o
 IRGENERATE_OBJ = $(BUILD_DIR)/irgenerate.o
 IRTRANSLATER_OBJ = $(BUILD_DIR)/irtranslater.o
-RISCV_INSTRUCTION_OBJ = $(BUILD_DIR)/riscv_instruction.o
 REGISTER_ALLOCATOR_OBJ = $(BUILD_DIR)/register_allocator.o
 SSA_TRANSFORM_OBJ = $(BUILD_DIR)/ssa_transform.o
 SSA_OPTIMIZER_OBJ = $(BUILD_DIR)/ssa_optimizer.o
@@ -49,7 +47,7 @@ LEX_OBJ = $(BUILD_DIR)/lex.yy.o
 PARSER_OBJ = $(BUILD_DIR)/parser.tab.o
 
 # 所有目标文件
-OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(IRTRANSLATER_OBJ) $(RISCV_INSTRUCTION_OBJ) $(REGISTER_ALLOCATOR_OBJ) $(SSA_TRANSFORM_OBJ) $(SSA_OPTIMIZER_OBJ) $(SSA_DESTROYER_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
+OBJS = $(MAIN_OBJ) $(ASTPRINTER_OBJ) $(SEMANTIC_OBJ) $(IRGENERATE_OBJ) $(IRTRANSLATER_OBJ) $(SSA_TRANSFORM_OBJ) $(SSA_OPTIMIZER_OBJ) $(SSA_DESTROYER_OBJ) $(LEX_OBJ) $(PARSER_OBJ) 
 
 # 主编译器目标
 TARGET = compiler
@@ -82,10 +80,6 @@ $(IRGENERATE_OBJ): $(IRGENERATE_SRC) $(INCDIR)/block.h $(INCDIR)/ast.h $(INCDIR)
 
 $(IRTRANSLATER_OBJ): $(IRTRANSLATER_SRC) $(INCDIR)/irtranslater.h $(INCDIR)/block.h $(INCDIR)/riscv_instruction.h | $(BUILD_DIR)
 	@echo "Compiling irtranslater.cpp..."
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(RISCV_INSTRUCTION_OBJ): $(RISCV_INSTRUCTION_SRC) $(INCDIR)/riscv_instruction.h | $(BUILD_DIR)
-	@echo "Compiling riscv_instruction.cpp..."
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(REGISTER_ALLOCATOR_OBJ): $(REGISTER_ALLOCATOR_SRC) $(INCDIR)/register_allocator.h $(INCDIR)/irtranslater.h $(INCDIR)/riscv_instruction.h | $(BUILD_DIR)

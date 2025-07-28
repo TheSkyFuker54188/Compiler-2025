@@ -4,6 +4,7 @@
 #include "include/irtranslater.h"
 #include "include/register_allocator.h"
 #include "include/semantic.h"
+#include "include/ssa.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -29,7 +30,8 @@ std::map<std::string, int> function_name_to_maxreg;
 bool compileFile(const std::string &filename, bool verbose = true,
                  bool enable_semantic = true, bool print_ast = false,
                  bool generate_ir = true, bool generate_asm = false,
-                 bool optimize = false, const std::string &output_file = "") {
+                 bool optimize = false, bool enable_ssa = false, 
+                 const std::string &output_file = "") {
   // 重置全局变量
   line_number = 1;
   col_number = 1;
@@ -86,17 +88,22 @@ bool compileFile(const std::string &filename, bool verbose = true,
   }
 
   LLVMIR ir;
+  LLVMIR optimized_ir;
+
   if (generate_ir && semantic_success) {
     if (verbose)
       std::cout << "阶段3: 中间代码生成..." << std::endl;
     IRgenerator irgen;
     root->accept(irgen);
     ir = irgen.getLLVMIR();
+    optimized_ir = ir; // 默认使用原始IR
+
+    // 保存原始IR到文件
     std::string ir_filename =
         filename.substr(0, filename.find_last_of('.')) + ".ll";
     std::ofstream ir_file(ir_filename);
     if (ir_file.is_open()) {
-      ir.printIR(ir_file);
+      ir.printIR(ir_file); // 保存原始IR
       ir_file.close();
       if (verbose)
         std::cout << "中间代码已生成到 " << ir_filename << std::endl;
@@ -104,19 +111,32 @@ bool compileFile(const std::string &filename, bool verbose = true,
       std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
       return false;
     }
-  }
 
-  LLVMIR optimized_ir = ir;
-  // SSA变换暂时禁用
-  // if (semantic_success && !ir.function_block_map.empty() && optimize) {
-  //   if (verbose)
-  //     std::cout << "阶段4: SSA变换和优化..." << std::endl;
-  //   SSATransformer ssa_transformer;
-  //   LLVMIR ssa_ir = ssa_transformer.transform(ir);
-  //   optimized_ir = ssa_ir;
-  //   if (verbose)
-  //     std::cout << "SSA变换完成" << std::endl;
-  // }
+    // 启用SSA变换
+    if (enable_ssa && !ir.function_block_map.empty()) {
+      if (verbose)
+        std::cout << "阶段4: SSA变换和优化..." << std::endl;
+      SSATransformer ssa_transformer;
+      LLVMIR ssa_ir = ssa_transformer.transform(ir);
+      optimized_ir = ssa_ir; // 使用SSA转换后的IR
+      
+      // 保存SSA形式的IR到文件
+      std::string ssa_ir_filename =
+          filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
+      std::ofstream ssa_ir_file(ssa_ir_filename);
+      if (ssa_ir_file.is_open()) {
+        ssa_ir.printIR(ssa_ir_file); // 保存SSA形式的IR
+        ssa_ir_file.close();
+        if (verbose)
+          std::cout << "SSA形式中间代码已生成到 " << ssa_ir_filename << std::endl;
+      } else {
+        std::cerr << "无法创建SSA IR文件 " << ssa_ir_filename << std::endl;
+      }
+      
+      if (verbose)
+        std::cout << "SSA变换完成" << std::endl;
+    }
+  }
 
   // 汇编代码生成阶段
   if (semantic_success && generate_asm) {
@@ -167,6 +187,7 @@ void showUsage(const char *program_name) {
   std::cout << "  --ast            打印AST结构" << std::endl;
   std::cout << "  --no-semantic    跳过语义分析" << std::endl;
   std::cout << "  --O1             优化" << std::endl;
+  std::cout << "  --ssa            启用SSA变换" << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -181,6 +202,7 @@ int main(int argc, char *argv[]) {
   bool generate_ir = true;
   bool generate_asm = true;
   bool optimize = false;
+  bool enable_ssa = false;
   std::string filename;
   std::string output_file;
 
@@ -208,6 +230,8 @@ int main(int argc, char *argv[]) {
       enable_semantic = false;
     } else if (arg == "--O1") {
       optimize = true;
+    } else if (arg == "--ssa") {
+      enable_ssa = true;
     } else if (arg[0] == '-') {
       std::cerr << "未知选项: " << arg << std::endl;
       showUsage(argv[0]);
@@ -230,7 +254,7 @@ int main(int argc, char *argv[]) {
 
   // 编译文件
   bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast,
-                             generate_ir, generate_asm, optimize, output_file);
+                             generate_ir, generate_asm, optimize, enable_ssa, output_file);
 
   return success ? 0 : 1;
 }

@@ -48,8 +48,8 @@ for test_file in "${TEST_FILES[@]}"; do
         continue
     fi
     
-    # 运行编译器
-    ./compiler -S -o "test_results/ssa/$(basename ${test_file%.sy}).s" "$test_file" > "test_results/ssa/$(basename ${test_file%.sy}).log" 2>&1
+    # 运行编译器 - 添加SSA参数
+    ./compiler --ssa -S -o "test_results/ssa/$(basename ${test_file%.sy}).s" "$test_file" > "test_results/ssa/$(basename ${test_file%.sy}).log" 2>&1
     
     if [ $? -eq 0 ]; then
         echo "  ✓ 编译成功"
