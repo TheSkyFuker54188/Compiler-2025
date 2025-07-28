@@ -4,6 +4,8 @@
 #include <queue>
 #include <sstream>
 
+extern std::map<std::string, int> function_name_to_maxreg;
+
 LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
   LLVMIR optimized_ir = ssa_ir;
 
@@ -36,6 +38,10 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
     // 4. 复制传播
     std::cout << "  Running copy propagation..." << std::endl;
     copyPropagation(optimized_ir);
+
+    //5. 除法优化
+    std::cout << "  Running division optimization..." << std::endl;
+    optimizeDivision(optimized_ir);
 
     size_t after_count = countInstructions(optimized_ir);
 
@@ -1672,4 +1678,197 @@ int SSAOptimizer::getGenericInstructionResultRegister(const Instruction &inst) {
   // 目前返回-1作为占位符
 
   return -1;
+}
+
+bool SSAOptimizer::isPowerOfTwo(int n) {
+  return n > 0 && (n & (n - 1)) == 0;
+}
+
+int SSAOptimizer::log2_upper(int x) {
+  int y = x;
+  int count = 0;
+  while (y != 0) {
+      y = y >> 1;
+      count += 1;
+  }
+  if ((1 << (count - 1)) == x) {
+      return count - 1;
+  } else {
+      return count;
+  }
+}
+
+std::tuple<long long, int, int> SSAOptimizer::choose_multiplier(int d, int prec) {
+  int l = log2_upper(d);
+  int sh_post = l;
+  const int N = 32;
+
+  long long m_low = ((long long)1 << (N + l)) / d;
+  long long m_high = (((long long)1 << (N + l)) + ((long long)1 << (N + l - prec))) / d;
+  while ((m_low / 2) < (m_high / 2) && sh_post > 0) {
+      m_low = m_low / 2;
+      m_high = m_high / 2;
+      sh_post -= 1;
+  }
+  return {m_high, sh_post, l};
+}
+
+int SRA(int x1, int x2) {
+  return x1 >> x2;
+}
+
+int SRL(int x1, int x2) {
+  return (unsigned) x1 >> x2;
+}
+
+int MULSH(int x1, int x2) {
+//    cout << x1 << endl;
+//    int t1 = x1;
+//    cout << t1 << endl;
+  const int N = 32;
+  return ((long long) x1 * x2) >> N;
+//    int t1;
+//    if (x1 % 2 == 0 || x1 > 0) {
+//        t1 = (int) (x1 >> (N - 1));
+//    } else {
+//        t1 = (int) ((x1 >> (N - 1)) + 1);
+//    }
+//    cout << "t1 : " << t1 << endl;
+//    auto t2 = (int) (x1 - (t1 << (N - 1)));
+//    cout << "t2 : " << t2 << endl;
+//    int temp1 = (t1 * x2) >> 1;
+//    cout << "temp1 : " << temp1 << endl;
+//    int temp2 = ((long long) t2 * x2) >> N;
+//    cout << "temp2 : " << temp2 << endl;
+//    return temp1 + temp2;
+}
+
+int XSIGN(int x) {
+  const int N = 32;
+  return SRA(x, N - 1);
+}
+
+void SSAOptimizer::optimizeDivision(LLVMIR &ir) {
+  for (auto &func : ir.function_block_map) {
+    std::string func_name = func.first->Func_name;
+    int &max_reg = function_name_to_maxreg[func_name];
+    max_reg++;
+    for (auto &block : func.second) {
+      auto &inst_list = block.second->Instruction_list;
+      for (auto it = inst_list.begin(); it != inst_list.end();) {
+        if (auto *arith = dynamic_cast<ArithmeticInstruction*>(*it)) {
+          if (arith->GetOpcode() == DIV_OP) {
+            Operand op1 = arith->GetOp1();
+            Operand op2 = arith->GetOp2();
+
+            // 情况 1: 两个操作数均为立即数
+            if (auto *imm1 = dynamic_cast<ImmI32Operand*>(op1)) {
+              if (auto *imm2 = dynamic_cast<ImmI32Operand*>(op2)) {
+                int dividend = imm1->GetIntImmVal();
+                int divisor = imm2->GetIntImmVal();
+                if (divisor != 0) {
+                  int result_val = dividend / divisor;
+                  *it = new ArithmeticInstruction(ADD, I32, new ImmI32Operand(result_val), new ImmI32Operand(0), arith->GetResult());
+                  ++it;
+                  continue;
+                }
+              }
+            }
+
+            // 情况 2: 除数为立即数
+            if (auto *imm2 = dynamic_cast<ImmI32Operand*>(op2)) {
+              int d = imm2->GetIntImmVal();
+              if (d == 0) { ++it; continue; }
+
+              int abs_d = d >= 0 ? d : -d;
+              Operand n = op1;
+              Operand result = arith->GetResult();
+              const int N = 32;
+
+              if (abs_d == 1) {
+                *it = new ArithmeticInstruction(ADD, I32, n, new ImmI32Operand(0), result);
+                if (d < 0) {
+                  it = inst_list.insert(it + 1, new ArithmeticInstruction(SUB, I32, new ImmI32Operand(0), result, result));
+                }
+                it = inst_list.erase(it);
+                continue;
+              }
+
+              auto [m, sh_post, l] = choose_multiplier(abs_d, N - 1);
+              std::vector<Instruction> new_insts;
+
+              if (isPowerOfTwo(abs_d) && abs_d == (1 << l)) {
+                Operand t1 = GetNewRegOperand(++max_reg);
+                Operand t2 = GetNewRegOperand(++max_reg);
+                new_insts.push_back(new ArithmeticInstruction(ASHR, I32, n, new ImmI32Operand(l - 1), t1));
+                new_insts.push_back(new ArithmeticInstruction(LSHR, I32, t1, new ImmI32Operand(N - l), t2));
+                Operand t3 = GetNewRegOperand(++max_reg);
+                new_insts.push_back(new ArithmeticInstruction(ADD, I32, n, t2, t3));
+                new_insts.push_back(new ArithmeticInstruction(ASHR, I32, t3, new ImmI32Operand(l), result));
+              } else if (m < ((long long)1 << (N - 1))) {
+                Operand t1 = GetNewRegOperand(++max_reg);
+                Operand t2 = GetNewRegOperand(++max_reg);
+                Operand t3 = GetNewRegOperand(++max_reg);
+                Operand t4 = GetNewRegOperand(++max_reg);
+                Operand t5 = GetNewRegOperand(++max_reg);
+
+                new_insts.push_back(new ZextInstruction(I64, t1, I32, n));
+                new_insts.push_back(new ZextInstruction(I64, t2, I32, new ImmI32Operand((int)m)));
+                new_insts.push_back(new ArithmeticInstruction(MUL_OP, I64, t1, t2, t3));
+                new_insts.push_back(new ArithmeticInstruction(LSHR, I64, t3, new ImmI32Operand(32), t4));
+                new_insts.push_back(new TruncInstruction(I64, t4, I32, t5));
+
+                Operand t6 = GetNewRegOperand(++max_reg);
+                new_insts.push_back(new ArithmeticInstruction(ASHR, I32, t5, new ImmI32Operand(sh_post), t6));
+                Operand t7 = GetNewRegOperand(++max_reg);
+                new_insts.push_back(new ArithmeticInstruction(ASHR, I32, n, new ImmI32Operand(N - 1), t7));
+                new_insts.push_back(new ArithmeticInstruction(SUB, I32, t6, t7, result));
+              } else {
+                long long m_adj = m - ((long long)1 << N);
+                Operand t1 = GetNewRegOperand(++max_reg);
+                Operand t2 = GetNewRegOperand(++max_reg);
+                Operand t3 = GetNewRegOperand(++max_reg);
+                Operand t4 = GetNewRegOperand(++max_reg);
+                Operand t5 = GetNewRegOperand(++max_reg);
+                Operand t6 = GetNewRegOperand(++max_reg);
+
+                new_insts.push_back(new ZextInstruction(I64, t1, I32, n));
+                new_insts.push_back(new ZextInstruction(I64, t2, I32, new ImmI32Operand((int)m_adj)));
+                new_insts.push_back(new ArithmeticInstruction(MUL_OP, I64, t1, t2, t3));
+                new_insts.push_back(new ArithmeticInstruction(LSHR, I64, t3, new ImmI32Operand(32), t4));
+                new_insts.push_back(new TruncInstruction(I64, t4, I32, t5));
+                new_insts.push_back(new ArithmeticInstruction(ADD, I32, n, t5, t6));
+
+                Operand t7 = GetNewRegOperand(++max_reg);
+                new_insts.push_back(new ArithmeticInstruction(ASHR, I32, t6, new ImmI32Operand(sh_post), t7));
+                Operand t8 = GetNewRegOperand(++max_reg);
+                new_insts.push_back(new ArithmeticInstruction(SUB, I32, t7, t8, result));
+              }
+
+              if (d < 0) {
+                new_insts.push_back(new ArithmeticInstruction(SUB, I32, new ImmI32Operand(0), result, result));
+              }
+
+              it = inst_list.erase(it);
+              it = inst_list.insert(it, new_insts.begin(), new_insts.end());
+              it += new_insts.size();
+              continue;
+            }
+
+            // 情况 3: 被除数为立即数，除数为寄存器
+            if (auto *imm1 = dynamic_cast<ImmI32Operand*>(op1)) {
+              int dividend = imm1->GetIntImmVal();
+              if (dividend == 0) {
+                *it = new ArithmeticInstruction(ADD, I32, new ImmI32Operand(0), new ImmI32Operand(0), arith->GetResult());
+                ++it;
+                continue;
+              }
+            }
+          }
+        }
+        ++it;
+      }
+      function_name_to_maxreg[func_name] = max_reg;
+    }
+  }
 }
