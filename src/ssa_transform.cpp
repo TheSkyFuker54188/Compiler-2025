@@ -12,36 +12,25 @@ LLVMIR SSATransformer::transform(const LLVMIR &ir) {
     std::map<int, LLVMBlock> &blocks = func_pair.second;
 
     std::cout << "Converting function to SSA form..." << std::endl;
+    std::cout << "  Function has " << blocks.size() << " blocks" << std::endl;
 
     // 1. 构建控制流图
+    std::cout << "  Building control flow graph..." << std::endl;
     ControlFlowGraph cfg = buildControlFlowGraph(blocks);
 
     // 2. 计算支配信息
+    std::cout << "  Computing dominance information..." << std::endl;
     DominanceInfo dom_info = computeDominanceInfoFromCFG(blocks, cfg);
 
     // 3. 插入φ函数
+    std::cout << "  Inserting phi functions..." << std::endl;
     insertPhiFunctions(blocks, dom_info);
 
     // 4. 变量重命名
+    std::cout << "  Renaming variables..." << std::endl;
     renameVariables(blocks, dom_info);
-  }
 
-  return ssa_ir;
-}
-
-    std::cout << "Converting function to SSA form..." << std::endl;
-
-    // 1. 构建控制流图
-    ControlFlowGraph cfg = buildControlFlowGraph(blocks);
-
-    // 2. 计算支配信息
-    DominanceInfo dom_info = computeDominanceInfoFromCFG(blocks, cfg);
-
-    // 3. 插入φ函数
-    insertPhiFunctions(blocks, dom_info);
-
-    // 4. 变量重命名
-    renameVariables(blocks, dom_info);
+    std::cout << "  Function SSA conversion completed." << std::endl;
   }
 
   return ssa_ir;
@@ -150,6 +139,11 @@ SSATransformer::DominanceInfo SSATransformer::computeDominanceInfoFromCFG(
 
   int entry_block = blocks.begin()->first;
 
+  // 对于大型控制流图，使用简化的快速算法
+  if (blocks.size() > 10) {
+    return computeFastDominanceInfo(blocks, cfg);
+  }
+
   // 初始化支配关系
   for (const auto &block_pair : blocks) {
     int block_id = block_pair.first;
@@ -166,24 +160,13 @@ SSATransformer::DominanceInfo SSATransformer::computeDominanceInfoFromCFG(
 
   // 迭代计算支配关系 - 使用更robust的算法
   bool changed = true;
-  int max_iterations = std::min(20, static_cast<int>(blocks.size() * 2)); // 限制最大迭代次数
+  int max_iterations =
+      std::min(10, static_cast<int>(blocks.size())); // 更严格的限制
   int iteration_count = 0;
 
   while (changed && iteration_count < max_iterations) {
     changed = false;
     iteration_count++;
-
-    if (iteration_count % 5 == 0) {
-      std::cout << "Dominator analysis iteration " << iteration_count
-                << std::endl;
-    }
-
-    // 对于非常复杂的控制流，提前退出
-    if (blocks.size() > 30 && iteration_count > 10) {
-      std::cout << "Early termination for very complex control flow (blocks: " 
-                << blocks.size() << ")" << std::endl;
-      break;
-    }
 
     for (const auto &block_pair : blocks) {
       int block_id = block_pair.first;
@@ -789,6 +772,186 @@ void SSATransformer::updatePhiArguments(std::map<int, LLVMBlock> &blocks,
 
         std::cout << "      Added phi arg from block L" << pred_block
                   << std::endl;
+      }
+    }
+  }
+}
+
+/**
+ * 快速支配算法 - 适用于大型控制流图
+ * 使用简化的迭代算法，减少复杂集合运算
+ */
+SSATransformer::DominanceInfo
+SSATransformer::computeFastDominanceInfo(const std::map<int, LLVMBlock> &blocks,
+                                         const ControlFlowGraph &cfg) {
+  std::cout << "Using fast dominance algorithm for " << blocks.size()
+            << " blocks" << std::endl;
+
+  DominanceInfo info;
+
+  if (blocks.empty())
+    return info;
+
+  int entry_block = blocks.begin()->first;
+
+  // 使用更简单的数据结构：直接支配者映射
+  std::unordered_map<int, int> immediate_dominators;
+
+  // 入口块没有直接支配者
+  immediate_dominators[entry_block] = -1;
+
+  // 初始化：所有非入口块的直接支配者都设为entry
+  for (const auto &block_pair : blocks) {
+    int block_id = block_pair.first;
+    if (block_id != entry_block) {
+      immediate_dominators[block_id] = entry_block;
+    }
+  }
+
+  // 简单的迭代更新算法 - 最多5轮
+  bool changed = true;
+  int max_iterations = 5;
+  int iteration = 0;
+
+  while (changed && iteration < max_iterations) {
+    changed = false;
+    iteration++;
+
+    // 逆拓扑序遍历（简化版）
+    for (const auto &block_pair : blocks) {
+      int block_id = block_pair.first;
+
+      if (block_id == entry_block)
+        continue;
+
+      auto pred_it = cfg.predecessors.find(block_id);
+      if (pred_it == cfg.predecessors.end() || pred_it->second.empty())
+        continue;
+
+      // 找到第一个已处理的前驱作为候选
+      int new_idom = -1;
+      for (int pred : pred_it->second) {
+        if (immediate_dominators.find(pred) != immediate_dominators.end()) {
+          new_idom = pred;
+          break;
+        }
+      }
+
+      if (new_idom == -1)
+        continue;
+
+      // 与其他前驱求公共支配者
+      for (int pred : pred_it->second) {
+        if (pred == new_idom)
+          continue;
+        if (immediate_dominators.find(pred) == immediate_dominators.end())
+          continue;
+
+        new_idom = findCommonDominator(new_idom, pred, immediate_dominators);
+      }
+
+      // 更新
+      if (immediate_dominators[block_id] != new_idom) {
+        immediate_dominators[block_id] = new_idom;
+        changed = true;
+      }
+    }
+  }
+
+  // 构建传统的支配信息结构
+  info.idom = immediate_dominators;
+
+  // 构建完整支配集合（简化版）
+  for (const auto &block_pair : blocks) {
+    int block_id = block_pair.first;
+    info.dominators[block_id].insert(block_id); // 自己支配自己
+
+    // 向上遍历支配树
+    int current = immediate_dominators[block_id];
+    while (current != -1 && current != block_id) {
+      info.dominators[block_id].insert(current);
+      auto it = immediate_dominators.find(current);
+      if (it == immediate_dominators.end()) {
+        break;
+      }
+      current = it->second;
+    }
+  }
+
+  // 简化支配边界计算
+  computeSimplifiedDominanceFrontier(info, blocks, cfg);
+
+  std::cout << "Fast dominance analysis completed in " << iteration
+            << " iterations" << std::endl;
+
+  return info;
+}
+
+/**
+ * 找到两个块的公共支配者
+ */
+int SSATransformer::findCommonDominator(
+    int b1, int b2, const std::unordered_map<int, int> &idom) {
+
+  std::unordered_set<int> path1;
+
+  // 收集b1到根的路径
+  int current = b1;
+  while (current != -1 && path1.find(current) == path1.end()) {
+    path1.insert(current);
+    auto it = idom.find(current);
+    if (it == idom.end()) {
+      break;
+    }
+    current = it->second;
+  }
+
+  // 沿着b2到根的路径找第一个交点
+  current = b2;
+  while (current != -1) {
+    if (path1.find(current) != path1.end()) {
+      return current;
+    }
+    auto it = idom.find(current);
+    if (it == idom.end()) {
+      break;
+    }
+    current = it->second;
+  }
+
+  return b1; // 默认返回b1
+}
+
+/**
+ * 简化的支配边界计算
+ */
+void SSATransformer::computeSimplifiedDominanceFrontier(
+    DominanceInfo &info, const std::map<int, LLVMBlock> &blocks,
+    const ControlFlowGraph &cfg) {
+
+  // 简化版本：只计算必要的支配边界
+  for (const auto &block_pair : blocks) {
+    int block_id = block_pair.first;
+
+    auto pred_it = cfg.predecessors.find(block_id);
+    if (pred_it == cfg.predecessors.end() || pred_it->second.size() < 2)
+      continue;
+
+    // 对于有多个前驱的块，其前驱的某些支配者可能在其支配边界中
+    for (int pred : pred_it->second) {
+      int runner = pred;
+      while (runner != -1) {
+        if (info.dominators[block_id].find(runner) ==
+            info.dominators[block_id].end()) {
+          info.dom_frontier[runner].insert(block_id);
+        } else {
+          break; // runner支配block_id，停止
+        }
+
+        auto idom_it = info.idom.find(runner);
+        if (idom_it == info.idom.end() || idom_it->second == runner)
+          break;
+        runner = idom_it->second;
       }
     }
   }
