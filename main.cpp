@@ -106,36 +106,12 @@ bool compileFile(const std::string &filename, bool verbose = true,
     }
   }
 
-  LLVMIR optimized_ir = ir;
-  // SSA变换暂时禁用
-  // if (semantic_success && !ir.function_block_map.empty() && optimize) {
-  //   if (verbose)
-  //     std::cout << "阶段4: SSA变换和优化..." << std::endl;
-  //   SSATransformer ssa_transformer;
-  //   LLVMIR ssa_ir = ssa_transformer.transform(ir);
-  //   optimized_ir = ssa_ir;
-  //   if (verbose)
-  //     std::cout << "SSA变换完成" << std::endl;
-  // }
-
-  // 汇编代码生成阶段
   if (semantic_success && generate_asm) {
     if (verbose)
       std::cout << "阶段5: RISC-V汇编代码生成..." << std::endl;
-
-    // 使用原始IR（SSA优化暂时禁用）
-    LLVMIR &final_ir = ir;
-
     Translator translator(output_file);
-
     // 执行翻译
-    translator.translate(final_ir);
-
-    if (verbose)
-      std::cout << "阶段6: 寄存器分配..." << std::endl;
-
-    // 执行寄存器分配
-    // RegisterAllocationPass::applyToTranslator(translator);
+    translator.translate(ir);
 
     // 输出汇编代码到文件
     std::ofstream asm_file(output_file);
