@@ -282,8 +282,12 @@ void SSAOptimizer::constantPropagation(LLVMIR &ir) {
       }
     }
 
-    // 处理工作列表
-    while (!work_list.empty()) {
+    // 处理工作列表 - 添加迭代限制防止无限循环
+    int max_iterations = std::min(10000, (int)(blocks.size() * 100));
+    int iteration_count = 0;
+
+    while (!work_list.empty() && iteration_count < max_iterations) {
+      iteration_count++;
       auto [block_id, inst_idx] = work_list.front();
       work_list.pop();
 
@@ -368,6 +372,13 @@ void SSAOptimizer::constantPropagation(LLVMIR &ir) {
         updateConstantMapping(inst);
         break;
       }
+    }
+
+    // 检查是否达到迭代限制
+    if (iteration_count >= max_iterations) {
+      std::cout << "  Warning: Constant propagation reached iteration limit ("
+                << max_iterations << ") for function with " << blocks.size()
+                << " blocks" << std::endl;
     }
   }
 }
@@ -1495,11 +1506,21 @@ void SSAOptimizer::addUsersToWorkList(
     int reg_num, const std::map<int, LLVMBlock> &blocks,
     std::queue<std::pair<int, size_t>> &work_list) {
   // 找到所有使用该寄存器的指令并加入工作列表
+  // 限制添加的数量以防止工作列表过度增长
+  int added_count = 0;
+  const int max_additions = 50; // 限制每次最多添加50个指令
+
   for (const auto &block_pair : blocks) {
+    if (added_count >= max_additions)
+      break;
+
     int block_id = block_pair.first;
     LLVMBlock block = block_pair.second;
 
     for (size_t i = 0; i < block->Instruction_list.size(); ++i) {
+      if (added_count >= max_additions)
+        break;
+
       Instruction inst = block->Instruction_list[i];
       if (!inst)
         continue;
@@ -1509,6 +1530,7 @@ void SSAOptimizer::addUsersToWorkList(
         if (isRegisterOperand(operand) &&
             getRegisterFromOperand(operand) == reg_num) {
           work_list.push({block_id, i});
+          added_count++;
           break;
         }
       }

@@ -88,8 +88,10 @@ int test_simple_loop() {
     int sum = 0;
     int i;
     
-    for (i = 0; i < 5; i = i + 1) {
+    i = 0;
+    while (i < 5) {
         sum = sum + 1;      // 简单的累加
+        i = i + 1;
     }
     
     return sum;             // 应该返回5
