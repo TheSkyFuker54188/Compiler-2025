@@ -82,6 +82,8 @@ public:
   void spillRegister(int physical_reg, int current_pos);
   std::vector<int> extractVirtualRegisters(RiscvInstruction* inst);
   void rewriteOperand(RiscvOperand*& operand);
+  void rewriteOperandSafe(RiscvOperand*& operand, std::set<RiscvOperand*>& rewritten_operands);
+  void rewriteOperandNew(RiscvOperand*& operand, const std::map<int, RiscvOperand*>& virtual_to_new_operand);
   bool usesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   bool definesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   

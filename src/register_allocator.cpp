@@ -49,7 +49,7 @@ void RegisterAllocator::allocateRegistersForFunction(
     const std::string &func_name,
     std::map<int, RiscvBlock *> &blocks,
     StackFrameInfo *frame_info) {
-  // std::cout << "开始为函数 " << func_name << " 分配寄存器..." << std::endl;
+  std::cout << "开始为函数 " << func_name << " 分配寄存器..." << std::endl;
 
   if (!frame_info) {
     throw std::runtime_error("StackFrameInfo is null for function: " + func_name);
@@ -74,22 +74,29 @@ void RegisterAllocator::allocateRegistersForFunction(
   try {
   // 1. 计算生存期
   computeLiveRanges(blocks);
+  std::cout << "步骤1完成: 生存期计算" << std::endl;
 
   // 2. 预分配特殊寄存器
   preAllocateSpecialRegisters(blocks);
+  std::cout << "步骤2完成: 预分配特殊寄存器" << std::endl;
 
   // 3. 执行线性扫描分配
   performLinearScanAllocation();
+  std::cout << "步骤3完成: 线性扫描分配" << std::endl;
 
     // 4. 插入溢出代码
   insertSpillCode(blocks);
+  std::cout << "步骤4完成: 插入溢出代码" << std::endl;
 
     // 5. 重写指令，替换虚拟寄存器为物理寄存器
   rewriteInstructions(blocks);
+  std::cout << "步骤5完成: 重写指令" << std::endl;
 
     // 6. 更新栈帧大小（考虑溢出）
+  std::cout << "步骤6: 更新栈帧大小，溢出的虚拟寄存器数量: " << spilled_virtuals.size() << std::endl;
   if (!spilled_virtuals.empty()) {
     int spill_area_size = next_spill_slot * 4; // 每个溢出槽4字节
+    std::cout << "溢出区域大小: " << spill_area_size << " 字节" << std::endl;
     current_frame->local_vars_size += spill_area_size;
     current_frame->calculateTotalSize();
       
@@ -99,6 +106,8 @@ void RegisterAllocator::allocateRegistersForFunction(
                                 std::to_string(current_frame->total_frame_size) + 
                                 " bytes for function: " + func_name);
       }
+  }
+  std::cout << "步骤6完成: 栈帧大小更新" << std::endl;
 
     // 更新所有基本块中的栈帧大小显示和相关指令
     for (auto &block_pair : blocks) {
@@ -130,20 +139,25 @@ void RegisterAllocator::allocateRegistersForFunction(
         }
       }
     }
-  }
 
     // 7. 输出分配结果
   // printAllocationResult();
+  
+  std::cout << "寄存器分配完成，准备返回" << std::endl;
     
   } catch (const std::exception& e) {
     std::cerr << "Error in register allocation for function " << func_name 
               << ": " << e.what() << std::endl;
     throw;
   }
+  
+  std::cout << "allocateRegistersForFunction 函数正常结束" << std::endl;
 }
 
 void RegisterAllocator::computeLiveRanges(
     const std::map<int, RiscvBlock *> &blocks) {
+  std::cout << "计算生存期: 共有 " << blocks.size() << " 个基本块" << std::endl;
+  
   // 第一步：构建控制流图
   std::map<int, std::vector<int>> successors;
   std::map<int, std::vector<int>> predecessors;
@@ -151,6 +165,7 @@ void RegisterAllocator::computeLiveRanges(
   // 初始化控制流图
   for (const auto &block_pair : blocks) {
     int block_id = block_pair.first;
+    std::cout << "初始化基本块 " << block_id << std::endl;
     successors[block_id] = {};
     predecessors[block_id] = {};
   }
@@ -160,11 +175,15 @@ void RegisterAllocator::computeLiveRanges(
     int block_id = block_pair.first;
     const auto &block = block_pair.second;
     
+    std::cout << "分析基本块 " << block_id << ", 指令数量: " << block->instruction_list.size() << std::endl;
+    
     if (block->instruction_list.empty()) {
       // 空块，顺序执行到下一块
-      if (block_id + 1 < blocks.size()) {
-        successors[block_id].push_back(block_id + 1);
-        predecessors[block_id + 1].push_back(block_id);
+      auto next_it = blocks.upper_bound(block_id);
+      if (next_it != blocks.end()) {
+        int next_block_id = next_it->first;
+        successors[block_id].push_back(next_block_id);
+        predecessors[next_block_id].push_back(block_id);
       }
       continue;
     }
@@ -188,24 +207,30 @@ void RegisterAllocator::computeLiveRanges(
             }
           } catch (const std::exception&) {
             // 解析失败，使用简化处理
-            if (block_id + 1 < blocks.size()) {
-              successors[block_id].push_back(block_id + 1);
-              predecessors[block_id + 1].push_back(block_id);
+            auto next_it = blocks.upper_bound(block_id);
+            if (next_it != blocks.end()) {
+              int next_block_id = next_it->first;
+              successors[block_id].push_back(next_block_id);
+              predecessors[next_block_id].push_back(block_id);
             }
           }
         }
       } else {
         // 无法解析标签，使用简化处理
-        if (block_id + 1 < blocks.size()) {
-          successors[block_id].push_back(block_id + 1);
-          predecessors[block_id + 1].push_back(block_id);
+        auto next_it = blocks.upper_bound(block_id);
+        if (next_it != blocks.end()) {
+          int next_block_id = next_it->first;
+          successors[block_id].push_back(next_block_id);
+          predecessors[next_block_id].push_back(block_id);
         }
       }
     } else if (auto *branch_inst = dynamic_cast<RiscvBranchInstruction*>(last_inst)) {
       // 条件跳转，有两个后继
-      if (block_id + 1 < blocks.size()) {
-        successors[block_id].push_back(block_id + 1);
-        predecessors[block_id + 1].push_back(block_id);
+      auto next_it = blocks.upper_bound(block_id);
+      if (next_it != blocks.end()) {
+        int next_block_id = next_it->first;
+        successors[block_id].push_back(next_block_id);
+        predecessors[next_block_id].push_back(block_id);
       }
       // 尝试解析跳转目标
       if (auto *label_operand = dynamic_cast<RiscvLabelOperand*>(branch_inst->label)) {
@@ -218,28 +243,21 @@ void RegisterAllocator::computeLiveRanges(
               predecessors[target_block].push_back(block_id);
             }
           } catch (const std::exception&) {
-            // 解析失败，使用简化处理
-            if (block_id + 2 < blocks.size()) {
-              successors[block_id].push_back(block_id + 2);
-              predecessors[block_id + 2].push_back(block_id);
-            }
+            // 解析失败，跳过
           }
-        }
-      } else {
-        // 无法解析标签，使用简化处理
-        if (block_id + 2 < blocks.size()) {
-          successors[block_id].push_back(block_id + 2);
-          predecessors[block_id + 2].push_back(block_id);
         }
       }
     } else {
       // 其他指令，顺序执行
-      if (block_id + 1 < blocks.size()) {
-        successors[block_id].push_back(block_id + 1);
-        predecessors[block_id + 1].push_back(block_id);
+      auto next_it = blocks.upper_bound(block_id);
+      if (next_it != blocks.end()) {
+        int next_block_id = next_it->first;
+        successors[block_id].push_back(next_block_id);
+        predecessors[next_block_id].push_back(block_id);
       }
     }
   }
+  std::cout << "控制流图构建完成" << std::endl;
   
   // 第二步：计算每个基本块的liveIn和liveOut
   std::map<int, std::set<int>> block_live_in;
@@ -252,19 +270,32 @@ void RegisterAllocator::computeLiveRanges(
     block_live_out[block_id] = {};
   }
   
+  std::cout << "开始活跃性分析迭代" << std::endl;
+  
   // 迭代计算直到收敛
   bool changed = true;
+  int iteration = 0;
   while (changed) {
+    std::cout << "活跃性分析迭代 " << iteration++ << std::endl;
     changed = false;
     
     for (const auto &block_pair : blocks) {
       int block_id = block_pair.first;
       const auto &block = block_pair.second;
       
+      std::cout << "处理基本块 " << block_id << std::endl;
+      
       // 计算当前块的use和def集合
       std::set<int> use_set, def_set;
       
-      for (const auto &inst : block->instruction_list) {
+      for (size_t i = 0; i < block->instruction_list.size(); i++) {
+        const auto &inst = block->instruction_list[i];
+        
+        if (!inst) {
+          std::cerr << "错误: 基本块 " << block_id << " 中第 " << i << " 条指令为空!" << std::endl;
+          continue;
+        }
+        
         std::vector<int> used_regs = extractVirtualRegisters(inst);
         
         // 先处理使用，再处理定义（按照指令中的顺序）
@@ -307,7 +338,10 @@ void RegisterAllocator::computeLiveRanges(
     }
   }
   
+  std::cout << "活跃性分析完成" << std::endl;
+  
   // 第三步：计算指令级别的生存期
+  std::cout << "开始计算指令级生存期" << std::endl;
   std::map<int, int> virtual_first_def;
   std::map<int, int> virtual_last_use;
 
@@ -316,7 +350,14 @@ void RegisterAllocator::computeLiveRanges(
   for (const auto &block_pair : blocks) {
     const auto &block = block_pair.second;
 
-    for (const auto &inst : block->instruction_list) {
+    for (size_t i = 0; i < block->instruction_list.size(); i++) {
+      const auto &inst = block->instruction_list[i];
+      
+      if (!inst) {
+        std::cerr << "错误: 在生存期计算中发现空指令!" << std::endl;
+        continue;
+      }
+      
       // 分别处理使用和定义
       std::vector<int> used_virtuals = extractVirtualRegisters(inst);
 
@@ -348,35 +389,59 @@ void RegisterAllocator::computeLiveRanges(
     }
   }
 
+  std::cout << "指令级生存期计算完成，开始创建生存期对象" << std::endl;
+  
   // 创建生存期对象
+  std::cout << "虚拟寄存器定义数量: " << virtual_first_def.size() << std::endl;
   live_ranges.reserve(virtual_first_def.size());
 
   for (const auto &def_pair : virtual_first_def) {
     int virtual_reg = def_pair.first;
     int start_pos = def_pair.second;
+    
+    std::cout << "处理虚拟寄存器 " << virtual_reg << ", 开始位置: " << start_pos << std::endl;
+    
     int end_pos = virtual_last_use.find(virtual_reg) != virtual_last_use.end() 
                     ? virtual_last_use[virtual_reg] 
                     : start_pos; // 如果没有使用，生存期就是定义点
 
+    std::cout << "结束位置: " << end_pos << std::endl;
+
     // 确保生存期至少有一个位置
     if (end_pos < start_pos) {
       end_pos = start_pos;
+      std::cout << "调整结束位置为: " << end_pos << std::endl;
     }
 
+    std::cout << "创建 LiveRange(" << virtual_reg << ", " << start_pos << ", " << end_pos << ")" << std::endl;
     live_ranges.emplace_back(virtual_reg, start_pos, end_pos);
-    virtual_to_range[virtual_reg] = &live_ranges.back();
+    std::cout << "成功创建生存期对象" << std::endl;
   }
 
+  std::cout << "所有生存期对象创建完成，开始排序..." << std::endl;
   // 按开始位置排序
   std::sort(live_ranges.begin(), live_ranges.end(),
             [](const LiveRange &a, const LiveRange &b) {
               return a.start_pos < b.start_pos;
             });
+
+  std::cout << "排序完成，重建映射..." << std::endl;
+  // 重新建立映射（排序后指针才是正确的）
+  virtual_to_range.clear();
+  for (auto &range : live_ranges) {
+    virtual_to_range[range.virtual_reg] = &range;
+  }
+  std::cout << "映射重建完成，生存期计算完成" << std::endl;
 }
 
 std::vector<int>
 RegisterAllocator::extractVirtualRegisters(RiscvInstruction *inst) {
   std::vector<int> virtuals;
+
+  if (!inst) {
+    std::cerr << "错误: 空指令指针!" << std::endl;
+    return virtuals;
+  }
 
   // 从指令的操作数中提取虚拟寄存器
   auto extractFromOperand = [&](RiscvOperand *operand) {
@@ -709,6 +774,11 @@ bool RegisterAllocator::usesVirtualRegister(RiscvInstruction* inst, int virtual_
 
 // 辅助函数：检查指令是否定义虚拟寄存器
 bool RegisterAllocator::definesVirtualRegister(RiscvInstruction* inst, int virtual_reg) {
+  if (!inst) {
+    std::cerr << "错误: definesVirtualRegister 收到空指令指针!" << std::endl;
+    return false;
+  }
+  
   // 根据指令类型检查目标寄存器
   if (auto *add_inst = dynamic_cast<RiscvAddInstruction *>(inst)) {
     if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(add_inst->rd)) {
@@ -901,130 +971,194 @@ void RegisterAllocationPass::applyToTranslator(Translator &translator) {
 
 void RegisterAllocator::rewriteInstructions(
     std::map<int, RiscvBlock *> &blocks) {
-  // std::cout << "重写指令，替换虚拟寄存器为物理寄存器..." << std::endl;
+  std::cout << "开始重写指令，替换虚拟寄存器为物理寄存器..." << std::endl;
+  
+  // 第一步：创建虚拟寄存器到新操作数的映射
+  std::map<int, RiscvOperand*> virtual_to_new_operand;
+  
+  // 为每个虚拟寄存器创建对应的新操作数
+  for (const auto &mapping : virtual_to_physical) {
+    int virtual_reg = mapping.first;
+    int physical_reg = mapping.second;
+    virtual_to_new_operand[virtual_reg] = new RiscvRegOperand(-physical_reg);
+    std::cout << "创建新操作数: 虚拟寄存器 " << virtual_reg << " -> 物理寄存器 " << physical_reg << std::endl;
+  }
+  
+  // 为溢出的虚拟寄存器创建t6操作数
+  for (int virtual_reg : spilled_virtuals) {
+    virtual_to_new_operand[virtual_reg] = new RiscvRegOperand(-31); // t6
+    std::cout << "创建溢出操作数: 虚拟寄存器 " << virtual_reg << " -> t6" << std::endl;
+  }
 
   for (auto &block_pair : blocks) {
     auto &block = block_pair.second;
+    std::cout << "重写基本块 " << block_pair.first << ", 指令数量: " << block->instruction_list.size() << std::endl;
 
-    for (auto &inst : block->instruction_list) {
+    for (size_t i = 0; i < block->instruction_list.size(); i++) {
+      auto &inst = block->instruction_list[i];
+      std::cout << "处理指令 " << i << std::endl;
+      
+      if (!inst) {
+        std::cout << "指令 " << i << " 为空，跳过" << std::endl;
+        continue;
+      }
+      
       // 根据指令类型重写操作数
       if (auto *add_inst = dynamic_cast<RiscvAddInstruction *>(inst)) {
-        rewriteOperand(add_inst->rd);
-        rewriteOperand(add_inst->rs1);
-        rewriteOperand(add_inst->rs2);
+        rewriteOperandNew(add_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(add_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(add_inst->rs2, virtual_to_new_operand);
       } else if (auto *sub_inst = dynamic_cast<RiscvSubInstruction *>(inst)) {
-        rewriteOperand(sub_inst->rd);
-        rewriteOperand(sub_inst->rs1);
-        rewriteOperand(sub_inst->rs2);
+        rewriteOperandNew(sub_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(sub_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(sub_inst->rs2, virtual_to_new_operand);
       } else if (auto *mul_inst = dynamic_cast<RiscvMulInstruction *>(inst)) {
-        rewriteOperand(mul_inst->rd);
-        rewriteOperand(mul_inst->rs1);
-        rewriteOperand(mul_inst->rs2);
+        rewriteOperandNew(mul_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(mul_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(mul_inst->rs2, virtual_to_new_operand);
       } else if (auto *div_inst = dynamic_cast<RiscvDivInstruction *>(inst)) {
-        rewriteOperand(div_inst->rd);
-        rewriteOperand(div_inst->rs1);
-        rewriteOperand(div_inst->rs2);
+        rewriteOperandNew(div_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(div_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(div_inst->rs2, virtual_to_new_operand);
       } else if (auto *addi_inst = dynamic_cast<RiscvAddiInstruction *>(inst)) {
-        rewriteOperand(addi_inst->rd);
-        rewriteOperand(addi_inst->rs1);
+        rewriteOperandNew(addi_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(addi_inst->rs1, virtual_to_new_operand);
       } else if (auto *li_inst = dynamic_cast<RiscvLiInstruction *>(inst)) {
-        rewriteOperand(li_inst->rd);
+        rewriteOperandNew(li_inst->rd, virtual_to_new_operand);
       } else if (auto *ld_inst = dynamic_cast<RiscvLdInstruction *>(inst)) {
-        rewriteOperand(ld_inst->rd);
-        rewriteOperand(ld_inst->address);
+        rewriteOperandNew(ld_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(ld_inst->address, virtual_to_new_operand);
       } else if (auto *sd_inst = dynamic_cast<RiscvSdInstruction *>(inst)) {
-        rewriteOperand(sd_inst->reg);
-        rewriteOperand(sd_inst->address);
+        rewriteOperandNew(sd_inst->reg, virtual_to_new_operand);
+        rewriteOperandNew(sd_inst->address, virtual_to_new_operand);
       } else if (auto *branch_inst = dynamic_cast<RiscvBranchInstruction *>(inst)) {
-        rewriteOperand(branch_inst->rs1);
-        rewriteOperand(branch_inst->rs2);
+        rewriteOperandNew(branch_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(branch_inst->rs2, virtual_to_new_operand);
         // label不需要重写
       } else if (auto *jump_inst = dynamic_cast<RiscvJumpInstruction *>(inst)) {
-        rewriteOperand(jump_inst->rd);
+        rewriteOperandNew(jump_inst->rd, virtual_to_new_operand);
         // target不需要重写（是label）
       } else if (auto *call_inst = dynamic_cast<RiscvCallInstruction *>(inst)) {
         // 函数调用的参数重写
         for (auto &arg : call_inst->args) {
-          rewriteOperand(arg);
+          rewriteOperandNew(arg, virtual_to_new_operand);
         }
       } else if (auto *fadd_inst = dynamic_cast<RiscvFAddInstruction *>(inst)) {
-        rewriteOperand(fadd_inst->rd);
-        rewriteOperand(fadd_inst->rs1);
-        rewriteOperand(fadd_inst->rs2);
+        rewriteOperandNew(fadd_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fadd_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(fadd_inst->rs2, virtual_to_new_operand);
       } else if (auto *fsub_inst = dynamic_cast<RiscvFSubInstruction *>(inst)) {
-        rewriteOperand(fsub_inst->rd);
-        rewriteOperand(fsub_inst->rs1);
-        rewriteOperand(fsub_inst->rs2);
+        rewriteOperandNew(fsub_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fsub_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(fsub_inst->rs2, virtual_to_new_operand);
       } else if (auto *fmul_inst = dynamic_cast<RiscvFMulInstruction *>(inst)) {
-        rewriteOperand(fmul_inst->rd);
-        rewriteOperand(fmul_inst->rs1);
-        rewriteOperand(fmul_inst->rs2);
+        rewriteOperandNew(fmul_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fmul_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(fmul_inst->rs2, virtual_to_new_operand);
       } else if (auto *fdiv_inst = dynamic_cast<RiscvFDivInstruction *>(inst)) {
-        rewriteOperand(fdiv_inst->rd);
-        rewriteOperand(fdiv_inst->rs1);
-        rewriteOperand(fdiv_inst->rs2);
+        rewriteOperandNew(fdiv_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fdiv_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(fdiv_inst->rs2, virtual_to_new_operand);
       } else if (auto *mod_inst = dynamic_cast<RiscvModInstruction *>(inst)) {
-        rewriteOperand(mod_inst->rd);
-        rewriteOperand(mod_inst->rs1);
-        rewriteOperand(mod_inst->rs2);
+        rewriteOperandNew(mod_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(mod_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(mod_inst->rs2, virtual_to_new_operand);
       } else if (auto *jr_inst = dynamic_cast<RiscvJrInstruction *>(inst)) {
-        rewriteOperand(jr_inst->rd);
+        rewriteOperandNew(jr_inst->rd, virtual_to_new_operand);
       } else if (auto *sw_inst = dynamic_cast<RiscvSwInstruction *>(inst)) {
-        rewriteOperand(sw_inst->rs);
-        rewriteOperand(sw_inst->address);
+        rewriteOperandNew(sw_inst->rs, virtual_to_new_operand);
+        rewriteOperandNew(sw_inst->address, virtual_to_new_operand);
       } else if (auto *lw_inst = dynamic_cast<RiscvLwInstruction *>(inst)) {
-        rewriteOperand(lw_inst->rd);
-        rewriteOperand(lw_inst->address);
+        rewriteOperandNew(lw_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(lw_inst->address, virtual_to_new_operand);
       } else if (auto *mv_inst = dynamic_cast<RiscvMvInstruction *>(inst)) {
-        rewriteOperand(mv_inst->rd);
-        rewriteOperand(mv_inst->rs1);
+        rewriteOperandNew(mv_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(mv_inst->rs1, virtual_to_new_operand);
       } else if (auto *la_inst = dynamic_cast<RiscvLaInstruction *>(inst)) {
-        rewriteOperand(la_inst->rd);
-        rewriteOperand(la_inst->address);
+        rewriteOperandNew(la_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(la_inst->address, virtual_to_new_operand);
       } else if (auto *fmv_inst = dynamic_cast<RiscvFmvInstruction *>(inst)) {
-        rewriteOperand(fmv_inst->rd);
-        rewriteOperand(fmv_inst->rs1);
+        rewriteOperandNew(fmv_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fmv_inst->rs1, virtual_to_new_operand);
       } else if (auto *flw_inst = dynamic_cast<RiscvFlwInstruction *>(inst)) {
-        rewriteOperand(flw_inst->rd);
-        rewriteOperand(flw_inst->address);
+        rewriteOperandNew(flw_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(flw_inst->address, virtual_to_new_operand);
       } else if (auto *fsw_inst = dynamic_cast<RiscvFswInstruction *>(inst)) {
-        rewriteOperand(fsw_inst->rs);
-        rewriteOperand(fsw_inst->address);
+        rewriteOperandNew(fsw_inst->rs, virtual_to_new_operand);
+        rewriteOperandNew(fsw_inst->address, virtual_to_new_operand);
       } else if (auto *fcvtsw_inst = dynamic_cast<RiscvFcvtswInstruction *>(inst)) {
-        rewriteOperand(fcvtsw_inst->rd);
-        rewriteOperand(fcvtsw_inst->rs1);
+        rewriteOperandNew(fcvtsw_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fcvtsw_inst->rs1, virtual_to_new_operand);
       } else if (auto *fcvtws_inst = dynamic_cast<RiscvFcvtwsInstruction *>(inst)) {
-        rewriteOperand(fcvtws_inst->rd);
-        rewriteOperand(fcvtws_inst->rs1);
+        rewriteOperandNew(fcvtws_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fcvtws_inst->rs1, virtual_to_new_operand);
       } else if (auto *bnez_inst = dynamic_cast<RiscvBnezInstruction *>(inst)) {
-        rewriteOperand(bnez_inst->rs1);
+        rewriteOperandNew(bnez_inst->rs1, virtual_to_new_operand);
         // label不需要重写
       } else if (auto *snez_inst = dynamic_cast<RiscvSnezInstruction *>(inst)) {
-        rewriteOperand(snez_inst->rs1);
-        rewriteOperand(snez_inst->rs2);
+        rewriteOperandNew(snez_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(snez_inst->rs2, virtual_to_new_operand);
       }
     }
   }
 
-  // std::cout << "指令重写完成" << std::endl;
+  std::cout << "指令重写完成" << std::endl;
+}
+
+void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand, 
+                                         const std::map<int, RiscvOperand*> &virtual_to_new_operand) {
+  if (!operand) {
+    return;
+  }
+
+  if (auto *reg_operand = dynamic_cast<RiscvRegOperand *>(operand)) {
+    int virtual_reg = reg_operand->GetRegNo();
+    
+    // 如果是虚拟寄存器（非负数）
+    if (virtual_reg >= 0) {
+      auto it = virtual_to_new_operand.find(virtual_reg);
+      if (it != virtual_to_new_operand.end()) {
+        // 删除旧操作数并替换为新操作数的副本
+        delete operand;
+        // 创建新操作数的副本而不是共享同一个对象
+        if (auto *new_reg_operand = dynamic_cast<RiscvRegOperand *>(it->second)) {
+          operand = new RiscvRegOperand(new_reg_operand->GetRegNo());
+        }
+      }
+    }
+  } else if (auto *ptr_operand = dynamic_cast<RiscvPtrOperand *>(operand)) {
+    // 递归处理指针操作数的基址寄存器
+    rewriteOperandNew(ptr_operand->base_reg, virtual_to_new_operand);
+  }
 }
 
 void RegisterAllocator::rewriteOperand(RiscvOperand *&operand) {
-  if (!operand)
+  std::cout << "重写操作数: " << (void*)operand << std::endl;
+  
+  if (!operand) {
+    std::cout << "操作数为空，返回" << std::endl;
     return;
+  }
 
   // 只处理寄存器操作数
   if (auto *reg_operand = dynamic_cast<RiscvRegOperand *>(operand)) {
     int virtual_reg = reg_operand->GetRegNo();
+    std::cout << "虚拟寄存器: " << virtual_reg << std::endl;
 
     // 如果是虚拟寄存器（非负数）且有分配的物理寄存器
     if (virtual_reg >= 0) {
       auto it = virtual_to_physical.find(virtual_reg);
       if (it != virtual_to_physical.end()) {
         int physical_reg = it->second;
-        // 替换为物理寄存器（使用负数表示物理寄存器）
-        delete operand;  // 删除旧操作数
-        operand = new RiscvRegOperand(-physical_reg);
+        std::cout << "分配到物理寄存器: " << physical_reg << std::endl;
+        
+        // 检查是否已经被替换过（避免重复删除）
+        if (virtual_reg >= 0) {  // 只有虚拟寄存器才需要替换
+          // 替换为物理寄存器（使用负数表示物理寄存器）
+          delete operand;  // 删除旧操作数
+          operand = new RiscvRegOperand(-physical_reg);
+          std::cout << "操作数替换完成" << std::endl;
+        }
       } else if (isSpilled(virtual_reg)) {
         // 溢出的寄存器在这里应该已经被替换为t6了
         // 因为insertSpillCode已经插入了相应的load/store指令
