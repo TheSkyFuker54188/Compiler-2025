@@ -517,6 +517,54 @@ RegisterAllocator::extractVirtualRegisters(RiscvInstruction *inst) {
   } else if (auto *snez_inst = dynamic_cast<RiscvSnezInstruction *>(inst)) {
     extractFromOperand(snez_inst->rs1);
     extractFromOperand(snez_inst->rs2);
+  } else if (auto *xor_inst = dynamic_cast<RiscvXorInstruction *>(inst)) {
+    extractFromOperand(xor_inst->rd);
+    extractFromOperand(xor_inst->rs1);
+    extractFromOperand(xor_inst->rs2);
+  } else if (auto *seqz_inst = dynamic_cast<RiscvSeqzInstruction *>(inst)) {
+    // 基于当前的SEQZ指令定义：rs1是目标，rs2是源
+    extractFromOperand(seqz_inst->rs1); // 目标寄存器
+    extractFromOperand(seqz_inst->rs2); // 源寄存器
+  } else if (auto *and_inst = dynamic_cast<RiscvAndInstruction *>(inst)) {
+    extractFromOperand(and_inst->rd);
+    extractFromOperand(and_inst->rs1);
+    extractFromOperand(and_inst->rs2);
+  } else if (auto *or_inst = dynamic_cast<RiscvOrInstruction *>(inst)) {
+    extractFromOperand(or_inst->rd);
+    extractFromOperand(or_inst->rs1);
+    extractFromOperand(or_inst->rs2);
+  } else if (auto *slt_inst = dynamic_cast<RiscvSltInstruction *>(inst)) {
+    extractFromOperand(slt_inst->rd);
+    extractFromOperand(slt_inst->rs1);
+    extractFromOperand(slt_inst->rs2);
+  } else if (auto *xori_inst = dynamic_cast<RiscvXoriInstruction *>(inst)) {
+    extractFromOperand(xori_inst->rd);
+    extractFromOperand(xori_inst->rs1);
+    // imm不需要提取
+  } else if (auto *andi_inst = dynamic_cast<RiscvAndiInstruction *>(inst)) {
+    extractFromOperand(andi_inst->rd);
+    extractFromOperand(andi_inst->rs1);
+    // imm不需要提取
+  } else if (auto *fmvxw_inst = dynamic_cast<RiscvFmvxwInstruction *>(inst)) {
+    extractFromOperand(fmvxw_inst->rd);
+    extractFromOperand(fmvxw_inst->rs1);
+  } else if (auto *fmvwx_inst = dynamic_cast<RiscvFmvwxInstruction *>(inst)) {
+    extractFromOperand(fmvwx_inst->rd);
+    extractFromOperand(fmvwx_inst->rs1);
+  } else if (auto *feq_inst = dynamic_cast<RiscvFeqInstruction *>(inst)) {
+    extractFromOperand(feq_inst->rd);
+    extractFromOperand(feq_inst->rs1);
+    extractFromOperand(feq_inst->rs2);
+  } else if (auto *flt_inst = dynamic_cast<RiscvFltInstruction *>(inst)) {
+    extractFromOperand(flt_inst->rd);
+    extractFromOperand(flt_inst->rs1);
+    extractFromOperand(flt_inst->rs2);
+  } else if (auto *fle_inst = dynamic_cast<RiscvFleInstruction *>(inst)) {
+    extractFromOperand(fle_inst->rd);
+    extractFromOperand(fle_inst->rs1);
+    extractFromOperand(fle_inst->rs2);
+  } else if (auto *j_inst = dynamic_cast<RiscvJInstruction *>(inst)) {
+    // J: unconditional jump, no registers to extract
   }
 
   return virtuals;
@@ -830,6 +878,58 @@ bool RegisterAllocator::definesVirtualRegister(RiscvInstruction* inst, int virtu
     if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(fdiv_inst->rd)) {
       return rd_reg->GetRegNo() == virtual_reg;
     }
+  } else if (auto *xor_inst = dynamic_cast<RiscvXorInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(xor_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *seqz_inst = dynamic_cast<RiscvSeqzInstruction *>(inst)) {
+    // seqz指令定义第一个操作数（目标寄存器），读取第二个操作数
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(seqz_inst->rs1)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *and_inst = dynamic_cast<RiscvAndInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(and_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *or_inst = dynamic_cast<RiscvOrInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(or_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *slt_inst = dynamic_cast<RiscvSltInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(slt_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *xori_inst = dynamic_cast<RiscvXoriInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(xori_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *andi_inst = dynamic_cast<RiscvAndiInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(andi_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *fmvxw_inst = dynamic_cast<RiscvFmvxwInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(fmvxw_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *fmvwx_inst = dynamic_cast<RiscvFmvwxInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(fmvwx_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *feq_inst = dynamic_cast<RiscvFeqInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(feq_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *flt_inst = dynamic_cast<RiscvFltInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(flt_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *fle_inst = dynamic_cast<RiscvFleInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(fle_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *j_inst = dynamic_cast<RiscvJInstruction *>(inst)) {
+    // J指令不定义寄存器
+    return false;
   }
   return false;
 }
@@ -1006,6 +1106,53 @@ void RegisterAllocator::rewriteInstructions(
       } else if (auto *snez_inst = dynamic_cast<RiscvSnezInstruction *>(inst)) {
         rewriteOperandNew(snez_inst->rs1, virtual_to_new_operand);
         rewriteOperandNew(snez_inst->rs2, virtual_to_new_operand);
+      } else if (auto *xor_inst = dynamic_cast<RiscvXorInstruction *>(inst)) {
+        rewriteOperandNew(xor_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(xor_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(xor_inst->rs2, virtual_to_new_operand);
+      } else if (auto *seqz_inst = dynamic_cast<RiscvSeqzInstruction *>(inst)) {
+        rewriteOperandNew(seqz_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(seqz_inst->rs2, virtual_to_new_operand);
+      } else if (auto *and_inst = dynamic_cast<RiscvAndInstruction *>(inst)) {
+        rewriteOperandNew(and_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(and_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(and_inst->rs2, virtual_to_new_operand);
+      } else if (auto *or_inst = dynamic_cast<RiscvOrInstruction *>(inst)) {
+        rewriteOperandNew(or_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(or_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(or_inst->rs2, virtual_to_new_operand);
+      } else if (auto *slt_inst = dynamic_cast<RiscvSltInstruction *>(inst)) {
+        rewriteOperandNew(slt_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(slt_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(slt_inst->rs2, virtual_to_new_operand);
+      } else if (auto *xori_inst = dynamic_cast<RiscvXoriInstruction *>(inst)) {
+        rewriteOperandNew(xori_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(xori_inst->rs1, virtual_to_new_operand);
+        // imm不需要重写
+      } else if (auto *andi_inst = dynamic_cast<RiscvAndiInstruction *>(inst)) {
+        rewriteOperandNew(andi_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(andi_inst->rs1, virtual_to_new_operand);
+        // imm不需要重写
+      } else if (auto *fmvxw_inst = dynamic_cast<RiscvFmvxwInstruction *>(inst)) {
+        rewriteOperandNew(fmvxw_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fmvxw_inst->rs1, virtual_to_new_operand);
+      } else if (auto *fmvwx_inst = dynamic_cast<RiscvFmvwxInstruction *>(inst)) {
+        rewriteOperandNew(fmvwx_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fmvwx_inst->rs1, virtual_to_new_operand);
+      } else if (auto *feq_inst = dynamic_cast<RiscvFeqInstruction *>(inst)) {
+        rewriteOperandNew(feq_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(feq_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(feq_inst->rs2, virtual_to_new_operand);
+      } else if (auto *flt_inst = dynamic_cast<RiscvFltInstruction *>(inst)) {
+        rewriteOperandNew(flt_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(flt_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(flt_inst->rs2, virtual_to_new_operand);
+      } else if (auto *fle_inst = dynamic_cast<RiscvFleInstruction *>(inst)) {
+        rewriteOperandNew(fle_inst->rd, virtual_to_new_operand);
+        rewriteOperandNew(fle_inst->rs1, virtual_to_new_operand);
+        rewriteOperandNew(fle_inst->rs2, virtual_to_new_operand);
+      } else if (auto *j_inst = dynamic_cast<RiscvJInstruction *>(inst)) {
+        // J指令没有寄存器操作数需要重写
       }
     }
   }
