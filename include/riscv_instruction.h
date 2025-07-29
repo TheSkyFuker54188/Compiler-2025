@@ -35,6 +35,7 @@ enum class RiscvOpcode {
   SNEZ,
   SEQZ,
   AND,
+  ANDI,
   OR,
   XOR,
   XORI,
@@ -833,5 +834,21 @@ public:
   void PrintIR(std::ostream &s) override {
     s << "  fle.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
       << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvAndiInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvAndiInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::ANDI; // 使用ANDI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  andi  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
   }
 };

@@ -221,6 +221,9 @@ void Translator::translateInstruction(Instruction inst,
     break;
   case LLVMIROpcode::ALLOCA:
     break;
+  case LLVMIROpcode::ZEXT:
+    translateZext(dynamic_cast<ZextInstruction *>(inst), riscv_block);
+    break;
   default:
     std::cerr << "Unsupported instruction opcode: " << inst->GetOpcode()
               << std::endl;
@@ -1792,6 +1795,15 @@ void Translator::translateOr(ArithmeticInstruction *inst, RiscvBlock *block) {
     block->InsertInstruction(2, snez_inst2);
     block->InsertInstruction(3, and_inst);
   }
+}
+
+void Translator::translateZext(ZextInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->result);
+  auto value = translateOperand(inst->value);
+  auto andi_inst = new RiscvAndiInstruction(result, value, 1);
+  block->InsertInstruction(1, andi_inst);
 }
 
 RiscvRegOperand *Translator::createVirtualReg() {

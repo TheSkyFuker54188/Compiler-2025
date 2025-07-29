@@ -124,6 +124,7 @@ private:
   void translateSitofp(SitofpInstruction *inst, RiscvBlock *block);
   void translateAnd(ArithmeticInstruction *inst, RiscvBlock *block);
   void translateOr(ArithmeticInstruction *inst, RiscvBlock *block);
+  void translateZext(ZextInstruction *inst, RiscvBlock *block);
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
