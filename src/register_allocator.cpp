@@ -49,8 +49,6 @@ void RegisterAllocator::allocateRegistersForFunction(
     const std::string &func_name,
     std::map<int, RiscvBlock *> &blocks,
     StackFrameInfo *frame_info) {
-  std::cout << "开始为函数 " << func_name << " 分配寄存器..." << std::endl;
-
   if (!frame_info) {
     throw std::runtime_error("StackFrameInfo is null for function: " + func_name);
   }
@@ -74,29 +72,22 @@ void RegisterAllocator::allocateRegistersForFunction(
   try {
   // 1. 计算生存期
   computeLiveRanges(blocks);
-  std::cout << "步骤1完成: 生存期计算" << std::endl;
 
   // 2. 预分配特殊寄存器
   preAllocateSpecialRegisters(blocks);
-  std::cout << "步骤2完成: 预分配特殊寄存器" << std::endl;
 
   // 3. 执行线性扫描分配
   performLinearScanAllocation();
-  std::cout << "步骤3完成: 线性扫描分配" << std::endl;
 
     // 4. 插入溢出代码
   insertSpillCode(blocks);
-  std::cout << "步骤4完成: 插入溢出代码" << std::endl;
 
     // 5. 重写指令，替换虚拟寄存器为物理寄存器
   rewriteInstructions(blocks);
-  std::cout << "步骤5完成: 重写指令" << std::endl;
 
     // 6. 更新栈帧大小（考虑溢出）
-  std::cout << "步骤6: 更新栈帧大小，溢出的虚拟寄存器数量: " << spilled_virtuals.size() << std::endl;
   if (!spilled_virtuals.empty()) {
     int spill_area_size = next_spill_slot * 4; // 每个溢出槽4字节
-    std::cout << "溢出区域大小: " << spill_area_size << " 字节" << std::endl;
     current_frame->local_vars_size += spill_area_size;
     current_frame->calculateTotalSize();
       
@@ -107,7 +98,6 @@ void RegisterAllocator::allocateRegistersForFunction(
                                 " bytes for function: " + func_name);
       }
   }
-  std::cout << "步骤6完成: 栈帧大小更新" << std::endl;
 
     // 更新所有基本块中的栈帧大小显示和相关指令
     for (auto &block_pair : blocks) {
@@ -143,21 +133,15 @@ void RegisterAllocator::allocateRegistersForFunction(
     // 7. 输出分配结果
   // printAllocationResult();
   
-  std::cout << "寄存器分配完成，准备返回" << std::endl;
-    
   } catch (const std::exception& e) {
     std::cerr << "Error in register allocation for function " << func_name 
               << ": " << e.what() << std::endl;
     throw;
   }
-  
-  std::cout << "allocateRegistersForFunction 函数正常结束" << std::endl;
 }
 
 void RegisterAllocator::computeLiveRanges(
     const std::map<int, RiscvBlock *> &blocks) {
-  std::cout << "计算生存期: 共有 " << blocks.size() << " 个基本块" << std::endl;
-  
   // 第一步：构建控制流图
   std::map<int, std::vector<int>> successors;
   std::map<int, std::vector<int>> predecessors;
@@ -165,7 +149,6 @@ void RegisterAllocator::computeLiveRanges(
   // 初始化控制流图
   for (const auto &block_pair : blocks) {
     int block_id = block_pair.first;
-    std::cout << "初始化基本块 " << block_id << std::endl;
     successors[block_id] = {};
     predecessors[block_id] = {};
   }
@@ -174,8 +157,6 @@ void RegisterAllocator::computeLiveRanges(
   for (const auto &block_pair : blocks) {
     int block_id = block_pair.first;
     const auto &block = block_pair.second;
-    
-    std::cout << "分析基本块 " << block_id << ", 指令数量: " << block->instruction_list.size() << std::endl;
     
     if (block->instruction_list.empty()) {
       // 空块，顺序执行到下一块
@@ -257,7 +238,6 @@ void RegisterAllocator::computeLiveRanges(
       }
     }
   }
-  std::cout << "控制流图构建完成" << std::endl;
   
   // 第二步：计算每个基本块的liveIn和liveOut
   std::map<int, std::set<int>> block_live_in;
@@ -270,20 +250,15 @@ void RegisterAllocator::computeLiveRanges(
     block_live_out[block_id] = {};
   }
   
-  std::cout << "开始活跃性分析迭代" << std::endl;
-  
   // 迭代计算直到收敛
   bool changed = true;
   int iteration = 0;
   while (changed) {
-    std::cout << "活跃性分析迭代 " << iteration++ << std::endl;
     changed = false;
     
     for (const auto &block_pair : blocks) {
       int block_id = block_pair.first;
       const auto &block = block_pair.second;
-      
-      std::cout << "处理基本块 " << block_id << std::endl;
       
       // 计算当前块的use和def集合
       std::set<int> use_set, def_set;
@@ -338,10 +313,7 @@ void RegisterAllocator::computeLiveRanges(
     }
   }
   
-  std::cout << "活跃性分析完成" << std::endl;
-  
   // 第三步：计算指令级别的生存期
-  std::cout << "开始计算指令级生存期" << std::endl;
   std::map<int, int> virtual_first_def;
   std::map<int, int> virtual_last_use;
 
@@ -389,49 +361,36 @@ void RegisterAllocator::computeLiveRanges(
     }
   }
 
-  std::cout << "指令级生存期计算完成，开始创建生存期对象" << std::endl;
-  
   // 创建生存期对象
-  std::cout << "虚拟寄存器定义数量: " << virtual_first_def.size() << std::endl;
   live_ranges.reserve(virtual_first_def.size());
 
   for (const auto &def_pair : virtual_first_def) {
     int virtual_reg = def_pair.first;
     int start_pos = def_pair.second;
     
-    std::cout << "处理虚拟寄存器 " << virtual_reg << ", 开始位置: " << start_pos << std::endl;
-    
     int end_pos = virtual_last_use.find(virtual_reg) != virtual_last_use.end() 
                     ? virtual_last_use[virtual_reg] 
                     : start_pos; // 如果没有使用，生存期就是定义点
 
-    std::cout << "结束位置: " << end_pos << std::endl;
-
     // 确保生存期至少有一个位置
     if (end_pos < start_pos) {
       end_pos = start_pos;
-      std::cout << "调整结束位置为: " << end_pos << std::endl;
     }
 
-    std::cout << "创建 LiveRange(" << virtual_reg << ", " << start_pos << ", " << end_pos << ")" << std::endl;
     live_ranges.emplace_back(virtual_reg, start_pos, end_pos);
-    std::cout << "成功创建生存期对象" << std::endl;
   }
 
-  std::cout << "所有生存期对象创建完成，开始排序..." << std::endl;
   // 按开始位置排序
   std::sort(live_ranges.begin(), live_ranges.end(),
             [](const LiveRange &a, const LiveRange &b) {
               return a.start_pos < b.start_pos;
             });
 
-  std::cout << "排序完成，重建映射..." << std::endl;
   // 重新建立映射（排序后指针才是正确的）
   virtual_to_range.clear();
   for (auto &range : live_ranges) {
     virtual_to_range[range.virtual_reg] = &range;
   }
-  std::cout << "映射重建完成，生存期计算完成" << std::endl;
 }
 
 std::vector<int>
@@ -563,51 +522,63 @@ RegisterAllocator::extractVirtualRegisters(RiscvInstruction *inst) {
   return virtuals;
 }
 
+// Comparator for sorting LiveRange pointers by their end position.
+struct LiveRangeEndPosComparator {
+    bool operator()(const LiveRange* a, const LiveRange* b) const {
+        if (a->end_pos != b->end_pos) {
+            return a->end_pos < b->end_pos;
+        }
+        return a->virtual_reg < b->virtual_reg; // Use virtual_reg for stable ordering
+    }
+};
+
 void RegisterAllocator::performLinearScanAllocation() {
-  std::vector<LiveRange *> active; // 当前活跃的生存期
+  std::set<LiveRange *, LiveRangeEndPosComparator> active; // Active list sorted by end_pos
 
   for (auto &range : live_ranges) {
-    // 跳过已经预分配的虚拟寄存器
+    // Skip pre-colored ranges
     if (virtual_to_physical.find(range.virtual_reg) !=
         virtual_to_physical.end()) {
       continue;
     }
     
-    // 移除已过期的生存期 - 修复：使用<=确保在同一位置结束的范围被释放
-    auto new_end = std::remove_if(active.begin(), active.end(),
-                                [&](LiveRange *active_range) {
-                                  if (active_range->end_pos <= range.start_pos) {
-                                    // 释放物理寄存器（只有当虚拟寄存器确实有物理寄存器分配时）
-                                    auto it = virtual_to_physical.find(
-                                        active_range->virtual_reg);
-                                    if (it != virtual_to_physical.end()) {
-                                      int physical_reg = it->second;
-                                      physical_to_virtual.erase(physical_reg);
-                                    }
-                                    return true;
-                                  }
-                                  return false;
-                                });
-    active.erase(new_end, active.end());
+    // Expire old intervals
+    auto it = active.begin();
+    while (it != active.end() && (*it)->end_pos <= range.start_pos) {
+        auto map_it = virtual_to_physical.find((*it)->virtual_reg);
+        if (map_it != virtual_to_physical.end()) {
+            int physical_reg = map_it->second;
+            physical_to_virtual.erase(physical_reg);
+        }
+        it = active.erase(it);
+    }
 
-    // 尝试分配物理寄存器
+    // Try to find a free register
     int physical_reg = findFreeRegister();
 
     if (physical_reg != -1) {
-      // 成功分配
+      // Found a free register
       virtual_to_physical[range.virtual_reg] = physical_reg;
       physical_to_virtual[physical_reg] = range.virtual_reg;
-      active.push_back(&range);
+      active.insert(&range);
+
     } else {
-      // 需要溢出
+      // No free registers, must spill
       int victim_reg = selectVictimRegister(range.start_pos);
       if (victim_reg != -1) {
+        int victim_vreg = physical_to_virtual.at(victim_reg);
+        LiveRange* victim_range = virtual_to_range.at(victim_vreg);
+        
+        // Spill the victim
         spillRegister(victim_reg, range.start_pos);
+        active.erase(victim_range);
+
+        // Allocate the register to the current range
         virtual_to_physical[range.virtual_reg] = victim_reg;
         physical_to_virtual[victim_reg] = range.virtual_reg;
-        active.push_back(&range);
+        active.insert(&range);
       } else {
-        // 当前范围被溢出
+        // Spill the current range as a fallback
         range.is_spilled = true;
         spilled_virtuals.insert(range.virtual_reg);
         spill_slots[range.virtual_reg] = next_spill_slot++;
@@ -645,44 +616,22 @@ int RegisterAllocator::findFreeRegister() {
 }
 
 int RegisterAllocator::selectVictimRegister(int current_pos) {
-  int victim = -1;
-  int latest_end = current_pos;
-  int victim_priority = -1;
+    LiveRange* victim_range = nullptr;
+    int victim_physical_reg = -1;
 
-  // 选择结束位置最晚且优先级最低的寄存器作为受害者
-  for (const auto &pair : physical_to_virtual) {
-    int physical_reg = pair.first;
-    int virtual_reg = pair.second;
+    // Find the active range that ends last
+    for (const auto& pair : physical_to_virtual) {
+        int physical_reg = pair.first;
+        int virtual_reg = pair.second;
+        LiveRange* range = virtual_to_range.at(virtual_reg);
 
-    auto it = virtual_to_range.find(virtual_reg);
-    if (it != virtual_to_range.end()) {
-      LiveRange *range = it->second;
-      if (range && range->end_pos > latest_end) {
-        // 计算寄存器优先级（临时寄存器 > 参数寄存器 > 保存寄存器）
-        int priority = 0;
-        for (const auto &reg : available_registers) {
-          if (reg.reg_no == physical_reg) {
-            if (!reg.is_callee_saved) {
-              priority = 1; // 临时寄存器
-            } else {
-              priority = 0; // 保存寄存器
-            }
-            break;
-          }
+        if (victim_range == nullptr || range->end_pos > victim_range->end_pos) {
+            victim_range = range;
+            victim_physical_reg = physical_reg;
         }
-        
-        // 优先选择优先级低的寄存器作为受害者
-        if (range->end_pos > latest_end || 
-            (range->end_pos == latest_end && priority < victim_priority)) {
-        latest_end = range->end_pos;
-        victim = physical_reg;
-          victim_priority = priority;
-        }
-      }
     }
-  }
 
-  return victim;
+    return victim_physical_reg;
 }
 
 void RegisterAllocator::spillRegister(int physical_reg, int current_pos) {
@@ -903,47 +852,13 @@ int RegisterAllocator::getSpillOffset(int virtual_reg) {
 }
 
 void RegisterAllocator::printAllocationResult() {
-  std::cout << "\n=== 寄存器分配结果 ===" << std::endl;
-
-  std::cout << "虚拟寄存器 -> 物理寄存器映射:" << std::endl;
-  for (const auto &pair : virtual_to_physical) {
-    std::string phys_name = "unknown";
-    for (const auto &reg : available_registers) {
-      if (reg.reg_no == pair.second) {
-        phys_name = reg.name;
-        break;
-      }
-    }
-    std::cout << "  %r" << pair.first << " -> " << phys_name << " (x"
-              << pair.second << ")" << std::endl;
-  }
-
-  if (!spilled_virtuals.empty()) {
-    std::cout << "溢出到内存的虚拟寄存器:" << std::endl;
-    for (int virtual_reg : spilled_virtuals) {
-      std::cout << "  %r" << virtual_reg << " -> 溢出槽 "
-                << spill_slots[virtual_reg] << " (偏移 "
-                << getSpillOffset(virtual_reg) << ")" << std::endl;
-    }
-  }
-
-  std::cout << "分配统计:" << std::endl;
-  std::cout << "  已分配寄存器: " << virtual_to_physical.size() << std::endl;
-  std::cout << "  溢出寄存器: " << spilled_virtuals.size() << std::endl;
-  std::cout << "  溢出槽使用: " << next_spill_slot << " 个 ("
-            << next_spill_slot * 4 << " 字节)" << std::endl;
+  // 调试输出已禁用
+  // 如果需要输出分配结果，可以重新启用这里的代码
 }
 
 void RegisterAllocator::printLiveRanges() {
-  std::cout << "\n=== 虚拟寄存器生存期 ===" << std::endl;
-  for (const auto &range : live_ranges) {
-    std::cout << "%r" << range.virtual_reg << ": [" << range.start_pos << ", "
-              << range.end_pos << "]";
-    if (range.is_spilled) {
-      std::cout << " (溢出)";
-    }
-    std::cout << std::endl;
-  }
+  // 调试输出已禁用
+  // 如果需要输出生存期信息，可以重新启用这里的代码
 }
 
 // 集成接口
@@ -971,8 +886,6 @@ void RegisterAllocationPass::applyToTranslator(Translator &translator) {
 
 void RegisterAllocator::rewriteInstructions(
     std::map<int, RiscvBlock *> &blocks) {
-  std::cout << "开始重写指令，替换虚拟寄存器为物理寄存器..." << std::endl;
-  
   // 第一步：创建虚拟寄存器到新操作数的映射
   std::map<int, RiscvOperand*> virtual_to_new_operand;
   
@@ -981,25 +894,20 @@ void RegisterAllocator::rewriteInstructions(
     int virtual_reg = mapping.first;
     int physical_reg = mapping.second;
     virtual_to_new_operand[virtual_reg] = new RiscvRegOperand(-physical_reg);
-    std::cout << "创建新操作数: 虚拟寄存器 " << virtual_reg << " -> 物理寄存器 " << physical_reg << std::endl;
   }
   
   // 为溢出的虚拟寄存器创建t6操作数
   for (int virtual_reg : spilled_virtuals) {
     virtual_to_new_operand[virtual_reg] = new RiscvRegOperand(-31); // t6
-    std::cout << "创建溢出操作数: 虚拟寄存器 " << virtual_reg << " -> t6" << std::endl;
   }
 
   for (auto &block_pair : blocks) {
     auto &block = block_pair.second;
-    std::cout << "重写基本块 " << block_pair.first << ", 指令数量: " << block->instruction_list.size() << std::endl;
 
     for (size_t i = 0; i < block->instruction_list.size(); i++) {
       auto &inst = block->instruction_list[i];
-      std::cout << "处理指令 " << i << std::endl;
       
       if (!inst) {
-        std::cout << "指令 " << i << " 为空，跳过" << std::endl;
         continue;
       }
       
@@ -1101,8 +1009,6 @@ void RegisterAllocator::rewriteInstructions(
       }
     }
   }
-
-  std::cout << "指令重写完成" << std::endl;
 }
 
 void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand, 
@@ -1130,31 +1036,25 @@ void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand,
 }
 
 void RegisterAllocator::rewriteOperand(RiscvOperand *&operand) {
-  std::cout << "重写操作数: " << (void*)operand << std::endl;
-  
   if (!operand) {
-    std::cout << "操作数为空，返回" << std::endl;
     return;
   }
 
   // 只处理寄存器操作数
   if (auto *reg_operand = dynamic_cast<RiscvRegOperand *>(operand)) {
     int virtual_reg = reg_operand->GetRegNo();
-    std::cout << "虚拟寄存器: " << virtual_reg << std::endl;
 
     // 如果是虚拟寄存器（非负数）且有分配的物理寄存器
     if (virtual_reg >= 0) {
       auto it = virtual_to_physical.find(virtual_reg);
       if (it != virtual_to_physical.end()) {
         int physical_reg = it->second;
-        std::cout << "分配到物理寄存器: " << physical_reg << std::endl;
         
         // 检查是否已经被替换过（避免重复删除）
         if (virtual_reg >= 0) {  // 只有虚拟寄存器才需要替换
           // 替换为物理寄存器（使用负数表示物理寄存器）
           delete operand;  // 删除旧操作数
           operand = new RiscvRegOperand(-physical_reg);
-          std::cout << "操作数替换完成" << std::endl;
         }
       } else if (isSpilled(virtual_reg)) {
         // 溢出的寄存器在这里应该已经被替换为t6了
