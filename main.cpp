@@ -30,7 +30,7 @@ std::map<std::string, int> function_name_to_maxreg;
 bool compileFile(const std::string &filename, bool verbose = true,
                  bool enable_semantic = true, bool print_ast = false,
                  bool generate_ir = true, bool generate_asm = false,
-                 bool optimize = false, bool enable_ssa = false, 
+                 bool optimize = false, bool enable_ssa = false,
                  const std::string &output_file = "") {
   // 重置全局变量
   line_number = 1;
@@ -112,14 +112,15 @@ bool compileFile(const std::string &filename, bool verbose = true,
       return false;
     }
 
-    // 启用SSA变换
+    // 启用SSA变换和优化
     if (enable_ssa && !ir.function_block_map.empty()) {
       if (verbose)
         std::cout << "阶段4: SSA变换和优化..." << std::endl;
+
+      // 第一步：SSA变换
       SSATransformer ssa_transformer;
       LLVMIR ssa_ir = ssa_transformer.transform(ir);
-      optimized_ir = ssa_ir; // 使用SSA转换后的IR
-      
+
       // 保存SSA形式的IR到文件
       std::string ssa_ir_filename =
           filename.substr(0, filename.find_last_of('.')) + "_ssa.ll";
@@ -128,13 +129,40 @@ bool compileFile(const std::string &filename, bool verbose = true,
         ssa_ir.printIR(ssa_ir_file); // 保存SSA形式的IR
         ssa_ir_file.close();
         if (verbose)
-          std::cout << "SSA形式中间代码已生成到 " << ssa_ir_filename << std::endl;
+          std::cout << "SSA形式中间代码已生成到 " << ssa_ir_filename
+                    << std::endl;
       } else {
         std::cerr << "无法创建SSA IR文件 " << ssa_ir_filename << std::endl;
       }
-      
+
+      // 第二步：SSA优化
       if (verbose)
-        std::cout << "SSA变换完成" << std::endl;
+        std::cout << "执行SSA优化..." << std::endl;
+      SSAOptimizer ssa_optimizer;
+      LLVMIR optimized_ssa_ir = ssa_optimizer.optimize(ssa_ir);
+
+      // 保存优化后的IR到文件
+      std::string opt_ir_filename =
+          filename.substr(0, filename.find_last_of('.')) + "_opt.ll";
+      std::ofstream opt_ir_file(opt_ir_filename);
+      if (opt_ir_file.is_open()) {
+        optimized_ssa_ir.printIR(opt_ir_file); // 保存优化后的IR
+        opt_ir_file.close();
+        if (verbose)
+          std::cout << "优化后中间代码已生成到 " << opt_ir_filename
+                    << std::endl;
+      } else {
+        std::cerr << "无法创建优化IR文件 " << opt_ir_filename << std::endl;
+      }
+
+      // 第三步：SSA销毁（将SSA形式转回普通形式）
+      if (verbose)
+        std::cout << "执行SSA销毁..." << std::endl;
+      SSADestroyer ssa_destroyer;
+      optimized_ir = ssa_destroyer.destroySSA(optimized_ssa_ir);
+
+      if (verbose)
+        std::cout << "SSA变换和优化完成" << std::endl;
     }
   }
 
@@ -143,8 +171,8 @@ bool compileFile(const std::string &filename, bool verbose = true,
     if (verbose)
       std::cout << "阶段5: RISC-V汇编代码生成..." << std::endl;
 
-    // 使用原始IR（SSA优化暂时禁用）
-    LLVMIR &final_ir = ir;
+    // 使用优化后的IR（如果启用了SSA优化）
+    LLVMIR &final_ir = optimized_ir;
 
     Translator translator(output_file);
 
@@ -253,8 +281,9 @@ int main(int argc, char *argv[]) {
   }
 
   // 编译文件
-  bool success = compileFile(filename, !quiet_mode, enable_semantic, print_ast,
-                             generate_ir, generate_asm, optimize, enable_ssa, output_file);
+  bool success =
+      compileFile(filename, !quiet_mode, enable_semantic, print_ast,
+                  generate_ir, generate_asm, optimize, enable_ssa, output_file);
 
   return success ? 0 : 1;
 }

@@ -57,6 +57,12 @@ private:
                               const ControlFlowGraph &cfg);
 
   /**
+   * 快速支配算法 - 适用于大型控制流图
+   */
+  DominanceInfo computeFastDominanceInfo(const std::map<int, LLVMBlock> &blocks,
+                                         const ControlFlowGraph &cfg);
+
+  /**
    * 计算控制流图的支配信息
    */
   DominanceInfo computeDominanceInfo(const std::map<int, LLVMBlock> &blocks);
@@ -93,6 +99,20 @@ private:
                                 const ControlFlowGraph &cfg);
 
   /**
+   * 找到两个块的公共支配者（快速算法辅助函数）
+   */
+  int findCommonDominator(int b1, int b2,
+                          const std::unordered_map<int, int> &idom);
+
+  /**
+   * 简化的支配边界计算（快速算法辅助函数）
+   */
+  void
+  computeSimplifiedDominanceFrontier(DominanceInfo &info,
+                                     const std::map<int, LLVMBlock> &blocks,
+                                     const ControlFlowGraph &cfg);
+
+  /**
    * 获取基本块的前驱
    */
   std::vector<int> getPredecessors(int block_id,
@@ -123,6 +143,13 @@ private:
    */
   std::string getCurrentVariableVersion(const std::string &var_name,
                                         const RenameInfo &rename_info);
+
+  /**
+   * 更新φ函数的参数
+   */
+  void updatePhiArguments(std::map<int, LLVMBlock> &blocks,
+                          const ControlFlowGraph &cfg,
+                          const RenameInfo &rename_info);
 };
 
 /**
@@ -184,6 +211,21 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
+  /**
+   * 代数化简
+   */
+  void algebraicSimplification(LLVMIR &ir);
+
+  /**
+   * φ函数简化
+   */
+  void simplifyPhiFunctions(LLVMIR &ir);
+
+  /**
+   * 无用代码消除
+   */
+  void eliminateUnreachableCode(LLVMIR &ir);
+
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
   size_t countInstructions(const LLVMIR &ir);
@@ -242,6 +284,30 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
+
+  // 新增的增强优化函数
+  bool simplifyArithmeticInstruction(Instruction &inst);
+  bool simplifyBitwiseInstruction(Instruction &inst);
+  bool isRedundantPhiFunction(const Instruction &inst);
+  void replaceRegisterUsages(std::map<int, LLVMBlock> &blocks, int old_reg,
+                             int new_reg);
+  bool tryConstantPropagation(Instruction &inst);
+  void replaceInstructionWithOperand(Instruction &inst, const Operand &operand);
+  void convertMultiplyByTwoToAdd(Instruction &inst, const Operand &operand);
+  bool isSameRegisterOperand(const Operand &op1, const Operand &op2);
+
+  // 代数化简辅助函数
+  bool isZero(const ConstantValue &const_val);
+  bool isOne(const ConstantValue &const_val);
+  bool isTwo(const ConstantValue &const_val);
+  bool isAllOnes(const ConstantValue &const_val);
+
+  // 不可达代码消除辅助函数
+  int getUnconditionalBranchTarget(const Instruction &inst);
+  std::pair<int, int> getConditionalBranchTargets(const Instruction &inst);
+
+  // 公共子表达式消除辅助函数
+  bool canPerformCSE(const Instruction &inst);
 };
 
 /**

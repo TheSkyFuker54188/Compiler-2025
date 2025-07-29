@@ -1,139 +1,102 @@
 #!/bin/bash
 
-# SSA优化测试脚本
-# 测试SSA变换和优化功能的正确性
+# SSA优化全面测试脚本
+echo "=== SSA优化全面测试开始 ==="
+echo "测试时间: $(date)"
+echo ""
 
-echo "=== SSA优化功能测试 ==="
-
-# 编译编译器
-echo "编译SSA编译器..."
-make clean
-make
-
-if [ $? -ne 0 ]; then
-    echo "编译失败!"
-    exit 1
-fi
-
-echo "编译成功!"
-
-# 测试文件
-TEST_FILES=(
-    "tests/functional/00_main.sy"
-    "tests/functional/01_var_defn2.sy" 
-    "tests/functional/11_add2.sy"
-    "tests/functional/21_if_test2.sy"
-    "tests/functional/25_while_if.sy"
-    "tests/functional/100_test_ssa_optimization.sy"
-)
+# 测试结果统计
+total_tests=0
+success_tests=0
+failed_tests=0
 
 # 创建测试结果目录
-mkdir -p test_results/ssa
+mkdir -p test_results/ssa_all/
 
-echo ""
-echo "开始SSA优化功能测试..."
-
-# 统计变量
-total_tests=0
-passed_tests=0
-optimization_stats=""
-
-for test_file in "${TEST_FILES[@]}"; do
-    echo ""
-    echo "测试文件: $test_file"
-    total_tests=$((total_tests + 1))
+# 函数：测试单个文件
+test_file() {
+    local file=$1
+    local filename=$(basename "$file" .sy)
+    echo "正在测试: $filename"
     
-    if [ ! -f "$test_file" ]; then
-        echo "  警告: 测试文件不存在，跳过"
-        continue
-    fi
+    # 增加计数
+    ((total_tests++))
     
-    # 运行编译器 - 添加SSA参数
-    ./compiler --ssa -S -o "test_results/ssa/$(basename ${test_file%.sy}).s" "$test_file" > "test_results/ssa/$(basename ${test_file%.sy}).log" 2>&1
+    # 运行编译
+    ./compiler --ssa "$file" > "test_results/ssa_all/${filename}.log" 2>&1
     
-    if [ $? -eq 0 ]; then
-        echo "  ✓ 编译成功"
-        passed_tests=$((passed_tests + 1))
+    # 检查SSA优化是否成功
+    if grep -q "SSA optimizations completed" "test_results/ssa_all/${filename}.log"; then
+        echo "  ✅ SSA优化成功"
+        ((success_tests++))
         
-        # 检查生成的文件
-        base_name=$(basename ${test_file%.sy})
+        # 统计优化效果
+        eliminated=$(grep -o "Eliminated [0-9]* instructions" "test_results/ssa_all/${filename}.log" | head -1 | grep -o "[0-9]*" || echo "0")
+        blocks_eliminated=$(grep -c "Eliminating unreachable block" "test_results/ssa_all/${filename}.log" || echo "0")
+        algebraic_opts=$(grep -c "simplifications applied" "test_results/ssa_all/${filename}.log" | grep -v "0 simplifications" | wc -l || echo "0")
         
-        echo "  生成的文件:"
-        ls -la "${test_file%.sy}"*.ll "${test_file%.sy}"*.s "test_results/ssa/${base_name}.s" 2>/dev/null | sed 's/^/    /'
-        
-        # 分析优化效果
-        echo "  优化分析:"
-        
-        # 统计原始IR指令数
-        if [ -f "${test_file%.sy}.ll" ]; then
-            original_count=$(grep -c "^\s*%" "${test_file%.sy}.ll" 2>/dev/null | tr -d '\n' || echo "0")
-            echo "    原始IR指令数: $original_count"
-        fi
-        
-        # 统计SSA形式IR指令数
-        if [ -f "${test_file%.sy}_ssa.ll" ]; then
-            ssa_count=$(grep -c "^\s*%" "${test_file%.sy}_ssa.ll" 2>/dev/null | tr -d '\n' || echo "0")
-            echo "    SSA形式IR指令数: $ssa_count"
-            echo "    ✓ SSA形式IR文件已生成"
-        else
-            echo "    ⚠ SSA形式IR文件未找到"
-        fi
-        
-        # 统计优化后IR指令数
-        if [ -f "${test_file%.sy}_opt.ll" ]; then
-            opt_count=$(grep -c "^\s*%" "${test_file%.sy}_opt.ll" 2>/dev/null | tr -d '\n' || echo "0")
-            echo "    优化后IR指令数: $opt_count"
-            echo "    ✓ 优化后IR文件已生成"
-            
-            # 计算优化效果
-            if [ "$original_count" -gt 0 ] && [ "$opt_count" -lt "$original_count" ]; then
-                reduction=$((original_count - opt_count))
-                percentage=$(echo "scale=1; $reduction * 100 / $original_count" | bc -l 2>/dev/null || echo "N/A")
-                echo "    ✓ 优化效果: 减少 $reduction 条指令 (${percentage}%)"
-                optimization_stats="$optimization_stats\n$base_name: $original_count -> $opt_count (-$reduction)"
-            elif [ "$opt_count" -eq "$original_count" ]; then
-                echo "    = 无优化空间或已经是最优"
-            else
-                echo "    - 指令数增加或分析有误"
-            fi
-        else
-            echo "    ⚠ 优化后IR文件未找到"
-        fi
-        
-        # 检查编译日志中的优化信息
-        if [ -f "test_results/ssa/${base_name}.log" ]; then
-            echo "  优化日志摘要:"
-            grep -E "(SSA|optimization|eliminated|removed|folded)" "test_results/ssa/${base_name}.log" | head -5 | sed 's/^/    /'
-        fi
-        
-        # 验证语法正确性
-        if [ -f "test_results/ssa/${base_name}.s" ]; then
-            echo "  ✓ 汇编文件已生成"
-            
-            # 简单的汇编语法检查
-            if grep -q "\.text\|\.data\|\.globl" "test_results/ssa/${base_name}.s"; then
-                echo "    ✓ 汇编文件包含基本段标识"
-            fi
-        fi
-        
+        echo "    - 消除指令: $eliminated 条"
+        echo "    - 消除基本块: $blocks_eliminated 个" 
+        echo "    - 代数化简: $algebraic_opts 次"
     else
-        echo "  ✗ 编译失败"
-        
-        # 显示错误信息
-        if [ -f "test_results/ssa/$(basename ${test_file%.sy}).log" ]; then
-            echo "  错误信息:"
-            tail -10 "test_results/ssa/$(basename ${test_file%.sy}).log" | sed 's/^/    /'
-        fi
+        echo "  ❌ SSA优化失败"
+        ((failed_tests++))
+        # 显示错误信息的前几行
+        echo "    错误信息:"
+        head -10 "test_results/ssa_all/${filename}.log" | sed 's/^/    /'
+    fi
+    echo ""
+}
+
+echo "=== 测试 functional 目录 ==="
+echo ""
+
+# 测试所有functional目录的.sy文件
+for file in tests/functional/*.sy; do
+    if [ -f "$file" ]; then
+        test_file "$file"
     fi
 done
 
+echo "=== 测试 h_functional 目录 ==="
 echo ""
-echo "=== SSA测试结果汇总 ==="
 
-echo "测试统计:"
-echo "  总测试数: $total_tests"
-echo "  通过测试: $passed_tests"
-echo "  成功率: $(echo "scale=1; $passed_tests * 100 / $total_tests" | bc -l 2>/dev/null || echo "N/A")%"
+# 测试所有h_functional目录的.sy文件  
+for file in tests/h_functional/*.sy; do
+    if [ -f "$file" ]; then
+        test_file "$file"
+    fi
+done
+
+echo "=== 测试结果汇总 ==="
+echo "总测试数: $total_tests"
+echo "成功数: $success_tests"
+echo "失败数: $failed_tests"
+echo "成功率: $(( success_tests * 100 / total_tests ))%"
+echo ""
+
+echo "=== 优化效果统计 ==="
+
+# 统计所有测试的优化效果
+total_eliminated=0
+total_blocks_eliminated=0
+total_algebraic_opts=0
+
+for log_file in test_results/ssa_all/*.log; do
+    if [ -f "$log_file" ]; then
+        eliminated=$(grep -o "Eliminated [0-9]* instructions" "$log_file" | head -1 | grep -o "[0-9]*" 2>/dev/null || echo "0")
+        blocks=$(grep -c "Eliminating unreachable block" "$log_file" 2>/dev/null || echo "0")
+        algebraic=$(grep -c "simplifications applied" "$log_file" 2>/dev/null || echo "0")
+        
+        total_eliminated=$((total_eliminated + eliminated))
+        total_blocks_eliminated=$((total_blocks_eliminated + blocks))
+        total_algebraic_opts=$((total_algebraic_opts + algebraic))
+    fi
+done
+
+echo "总消除指令数: $total_eliminated"
+echo "总消除基本块数: $total_blocks_eliminated" 
+echo "总代数化简次数: $total_algebraic_opts"
 
 echo ""
 echo "文件生成统计:"
@@ -339,6 +302,8 @@ else
     echo ""
     echo "注意: 安装bc命令可获得更详细的优化统计"
 fi
+echo "=== 测试完成 ==="
+echo "详细日志保存在: test_results/ssa_all/"
 
 echo
 echo "=== 测试完成 ==="
