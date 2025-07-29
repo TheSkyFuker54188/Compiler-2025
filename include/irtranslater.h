@@ -130,6 +130,12 @@ private:
   std::string getLLVMTypeString(LLVMType type);
   void insertAddiInstruction(RiscvOperand *dest, RiscvOperand *src, int imm,
                              RiscvBlock *block, int pos = 1);
+  void insertLwInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
+  void insertLdInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
+  void insertSdInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
 
   // 栈帧管理方法
   void initFunctionStackFrame(const std::string &func_name);

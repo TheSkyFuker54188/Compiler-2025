@@ -31,6 +31,7 @@ enum class RiscvOpcode {
   LA,
   CALL,
   JR,
+  J,
   BNEZ,
   SNEZ,
   SEQZ,
@@ -850,5 +851,17 @@ public:
   void PrintIR(std::ostream &s) override {
     s << "  andi  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
       << immediate << "\n";
+  }
+};
+
+class RiscvJInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *label;
+  RiscvJInstruction(RiscvOperand *label) {
+    opcode = RiscvOpcode::J; // 使用J伪指令
+    this->label = label;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  j  " << label->GetFullName() << "\n";
   }
 };
