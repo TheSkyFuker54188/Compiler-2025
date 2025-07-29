@@ -56,7 +56,7 @@ public:
   
   // 主要接口
   void allocateRegistersForFunction(const std::string& func_name, 
-                                   std::map<int, std::unique_ptr<RiscvBlock>>& blocks,
+                                   std::map<int, RiscvBlock*>& blocks,
                                    StackFrameInfo* frame_info);
   
   // 寄存器查询
@@ -65,15 +65,15 @@ public:
   int getSpillOffset(int virtual_reg);
   
   // 生存期分析
-  void computeLiveRanges(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  void computeLiveRanges(const std::map<int, RiscvBlock*>& blocks);
   
   // 寄存器分配算法
-  void preAllocateSpecialRegisters(const std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  void preAllocateSpecialRegisters(const std::map<int, RiscvBlock*>& blocks);
   void performLinearScanAllocation();
-  void insertSpillCode(std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  void insertSpillCode(std::map<int, RiscvBlock*>& blocks);
   
   // 指令重写
-  void rewriteInstructions(std::map<int, std::unique_ptr<RiscvBlock>>& blocks);
+  void rewriteInstructions(std::map<int, RiscvBlock*>& blocks);
   
   // 工具方法
   void initializePhysicalRegisters();
@@ -81,7 +81,7 @@ public:
   int selectVictimRegister(int current_pos);
   void spillRegister(int physical_reg, int current_pos);
   std::vector<int> extractVirtualRegisters(RiscvInstruction* inst);
-  void rewriteOperand(std::unique_ptr<RiscvOperand>& operand);
+  void rewriteOperand(RiscvOperand*& operand);
   bool usesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   bool definesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   
