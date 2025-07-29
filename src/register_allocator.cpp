@@ -1118,9 +1118,6 @@ void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand,
     if (virtual_reg >= 0) {
       auto it = virtual_to_new_operand.find(virtual_reg);
       if (it != virtual_to_new_operand.end()) {
-        // 删除旧操作数并替换为新操作数的副本
-        delete operand;
-        // 创建新操作数的副本而不是共享同一个对象
         if (auto *new_reg_operand = dynamic_cast<RiscvRegOperand *>(it->second)) {
           operand = new RiscvRegOperand(new_reg_operand->GetRegNo());
         }
