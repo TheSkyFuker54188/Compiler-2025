@@ -1934,7 +1934,7 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
   auto s0 = getS0Reg();
   auto sp = getSpReg();
   insertAddiInstruction(s0, sp, -current_stack_frame->total_frame_size,
-                        entry_block);
+                        entry_block, 0);
 
   auto ra = getRaReg();
   auto sp_2 = getSpReg();
@@ -1954,7 +1954,7 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
   // addi sp, sp, -frame_size
   auto sp_3 = getSpReg();
   insertAddiInstruction(sp_3->CopyOperand(), sp_3->CopyOperand(),
-                        -current_stack_frame->total_frame_size, entry_block);
+                        -current_stack_frame->total_frame_size, entry_block, 0);
 }
 
 void Translator::generateStackFrameEpilog(RiscvBlock *exit_block) {
@@ -2005,17 +2005,23 @@ int Translator::getCurrentFrameSize() const {
 }
 
 void Translator::insertAddiInstruction(RiscvOperand *dest, RiscvOperand *src,
-                                       int imm, RiscvBlock *block) {
+                                       int imm, RiscvBlock *block, int pos) {
   if (imm < -2048 || imm > 2047) {
     // 如果立即数超出范围，使用LI指令加载到寄存器
     auto list_reg = createVirtualReg();
-    auto li_inst = new RiscvLiInstruction(list_reg, imm);
-    block->InsertInstruction(1, li_inst);
+    if (pos) {
+      auto li_inst = new RiscvLiInstruction(list_reg, imm);
+      block->InsertInstruction(pos, li_inst);
+    }
     auto addi_inst = new RiscvAddInstruction(dest, src, list_reg);
-    block->InsertInstruction(1, addi_inst);
+    block->InsertInstruction(pos, addi_inst);
+    if (!pos) {
+      auto li_inst = new RiscvLiInstruction(list_reg, imm);
+      block->InsertInstruction(pos, li_inst);
+    }
   } else {
     // 否则使用ADDI指令
     auto addi_inst = new RiscvAddiInstruction(dest, src, imm);
-    block->InsertInstruction(1, addi_inst);
+    block->InsertInstruction(pos, addi_inst);
   }
 }

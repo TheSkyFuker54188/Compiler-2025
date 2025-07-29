@@ -128,7 +128,7 @@ private:
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
   void insertAddiInstruction(RiscvOperand *dest, RiscvOperand *src, int imm,
-                             RiscvBlock *block);
+                             RiscvBlock *block, int pos = 1);
 
   // 栈帧管理方法
   void initFunctionStackFrame(const std::string &func_name);
