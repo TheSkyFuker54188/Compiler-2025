@@ -113,6 +113,9 @@ bool compileFile(const std::string &filename, bool verbose = true,
     // 执行翻译
     translator.translate(ir);
 
+    RegisterAllocationPass::applyToTranslator(translator);
+
+
     // 输出汇编代码到文件
     std::ofstream asm_file(output_file);
     if (asm_file.is_open()) {
