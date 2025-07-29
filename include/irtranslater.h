@@ -86,6 +86,7 @@ private:
   RiscvRegOperand *getRaReg();
   RiscvRegOperand *getA0Reg();
   RiscvRegOperand *getZeroReg();
+  RiscvRegOperand *getFa0Reg();
 
   // 指令翻译
   void translateLoad(LoadInstruction *inst, RiscvBlock *block);
@@ -95,7 +96,19 @@ private:
   void translateCall(CallInstruction *inst, RiscvBlock *block);
   void translateReturn(RetInstruction *inst, RiscvBlock *block);
   void translateIcmp(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIeq(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIne(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIgt(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIge(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIlt(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIle(IcmpInstruction *inst, RiscvBlock *block);
   void translateFcmp(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFeq(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFne(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFgt(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFge(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFlt(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFle(FcmpInstruction *inst, RiscvBlock *block);
   void translateAdd(Instruction inst, RiscvBlock *block);
   void translateSub(Instruction inst, RiscvBlock *block);
   void translateMul(Instruction inst, RiscvBlock *block);
@@ -114,6 +127,8 @@ private:
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
+  void insertAddiInstruction(RiscvOperand *dest, RiscvOperand *src, int imm,
+                             RiscvBlock *block);
 
   // 栈帧管理方法
   void initFunctionStackFrame(const std::string &func_name);

@@ -270,9 +270,15 @@ void Translator::translateLoad(LoadInstruction *inst, RiscvBlock *block) {
       auto la_inst = new RiscvLaInstruction(s0, global_var);
       block->InsertInstruction(1, la_inst);
     } else {
-      s0 = getS0Reg(); // 获取s0寄存器
       auto addr = dynamic_cast<RegOperand *>(inst->GetPointer());
-      offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      if (current_stack_frame->var_offsets.find(addr->GetRegNo()) !=
+          current_stack_frame->var_offsets.end()) {
+        s0 = getS0Reg(); // 获取s0寄存器
+        offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      } else {
+        s0 = createVirtualReg(addr->GetRegNo()); // 如果是数组，创建对应的寄存器
+        offset = current_stack_frame->array_offsets[addr->GetRegNo()];
+      }
     }
     auto riscv_inst = new RiscvPtrOperand(-offset, s0);
     auto riscv_load_inst = new RiscvLwInstruction(rs, riscv_inst);
@@ -352,27 +358,33 @@ void Translator::translateReturn(RetInstruction *inst, RiscvBlock *block) {
     return;
   if (inst->GetRetVal()) {
     auto ret_val = inst->GetRetVal();
-    if (ret_val->GetOperandType() == BasicOperand::REG) {
-      // 如果返回值是寄存器，直接将其值放入返回寄存器
-      auto ret_reg = getA0Reg(); // a0寄存器作为返回值寄存器
-      auto mv_inst = new RiscvMvInstruction(ret_reg, ret_reg);
-      block->InsertInstruction(1, mv_inst);
-    } else if (ret_val->GetOperandType() == BasicOperand::IMMI32) {
-      auto imm_val =
-          dynamic_cast<RiscvImmI32Operand *>(translateOperand(ret_val));
-      auto ret_reg = getA0Reg(); // a0寄存器作为返回值寄存器
-      auto li_inst = new RiscvLiInstruction(ret_reg, imm_val->GetIntImmVal());
-      block->InsertInstruction(1, li_inst);
-    } else if (ret_val->GetOperandType() == BasicOperand::IMMF32) {
-      // 如果返回值是浮点数，使用FLW指令
-      auto tmp_reg = createVirtualReg();
-      auto imm_val =
-          dynamic_cast<RiscvImmF32Operand *>(translateOperand(ret_val));
-      auto li_inst = new RiscvLiInstruction(tmp_reg, imm_val->GetFloatVal());
-      auto ret_reg = getA0Reg(); // a0寄存器作为返回值寄存器
-      auto fmv_inst = new RiscvMvInstruction(ret_reg, tmp_reg);
-      block->InsertInstruction(1, li_inst);
-      block->InsertInstruction(2, fmv_inst);
+    if (current_function_return_type == LLVMType::FLOAT32) {
+      if (ret_val->GetOperandType() == BasicOperand::REG) {
+        auto rs = translateOperand(ret_val);
+        auto fmv_inst = new RiscvFmvInstruction(getFa0Reg(), rs);
+        block->InsertInstruction(1, fmv_inst);
+      } else if (ret_val->GetOperandType() == BasicOperand::IMMF32) {
+        auto imm_val =
+            dynamic_cast<RiscvImmF32Operand *>(translateOperand(ret_val));
+        auto tmp_reg = createVirtualReg();
+        auto li_inst = new RiscvLiInstruction(tmp_reg, imm_val->GetFloatVal());
+        block->InsertInstruction(1, li_inst);
+        auto fmvwx_inst = new RiscvFmvwxInstruction(getFa0Reg(), tmp_reg);
+        block->InsertInstruction(1, fmvwx_inst);
+      }
+    } else {
+      // 整数返回值处理
+      if (ret_val->GetOperandType() == BasicOperand::REG) {
+        auto rs = translateOperand(ret_val);
+        auto mv_inst = new RiscvMvInstruction(getA0Reg(), rs);
+        block->InsertInstruction(1, mv_inst);
+      } else if (ret_val->GetOperandType() == BasicOperand::IMMI32) {
+        auto imm_val =
+            dynamic_cast<RiscvImmI32Operand *>(translateOperand(ret_val));
+        auto li_inst =
+            new RiscvLiInstruction(getA0Reg(), imm_val->GetIntImmVal());
+        block->InsertInstruction(1, li_inst);
+      }
     }
   }
   // 生成栈帧尾声代码
@@ -384,13 +396,761 @@ void Translator::translateReturn(RetInstruction *inst, RiscvBlock *block) {
 }
 
 void Translator::translateIcmp(IcmpInstruction *inst, RiscvBlock *block) {
-  // TODO: 实现整数比较指令的翻译
-  std::cerr << "Icmp instruction translation not implemented yet.\n";
+  if (!inst)
+    return;
+  auto cond = inst->GetCond();
+  switch (cond) {
+  case IcmpCond::eq:
+    translateIeq(inst, block);
+    break;
+  case IcmpCond::ne:
+    translateIne(inst, block);
+    break;
+  case IcmpCond::sgt:
+    translateIgt(inst, block);
+    break;
+  case IcmpCond::sge:
+    translateIge(inst, block);
+    break;
+  case IcmpCond::slt:
+    translateIlt(inst, block);
+    break;
+  case IcmpCond::sle:
+    translateIle(inst, block);
+    break;
+  default:
+    std::cerr << "Unsupported Icmp condition: " << static_cast<int>(cond)
+              << std::endl;
+    break;
+  }
+}
+
+void Translator::translateIeq(IcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetIntImmVal() ==
+                                                      op2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs1 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto xor_inst =
+        new RiscvXorInstruction(result, rs1, rs2); // 使用XOR指令比较
+    block->InsertInstruction(1, xor_inst);
+    auto seqz_inst =
+        new RiscvSeqzInstruction(result, result); // 检查结果是否为0
+    block->InsertInstruction(2, seqz_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs2 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto xor_inst =
+        new RiscvXorInstruction(result, rs1, rs2); // 使用XOR指令比较
+    block->InsertInstruction(1, xor_inst);
+    auto seqz_inst =
+        new RiscvSeqzInstruction(result, result); // 检查结果是否为0
+    block->InsertInstruction(2, seqz_inst);
+  } else {
+    // 否则使用SEQZ指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto xor_inst = new RiscvXorInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, xor_inst);
+    auto seqz_inst = new RiscvSeqzInstruction(result, result);
+    block->InsertInstruction(2, seqz_inst);
+  }
+}
+
+void Translator::translateIne(IcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetIntImmVal() !=
+                                                      op2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs1 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto xor_inst =
+        new RiscvXorInstruction(result, rs1, rs2); // 使用XOR指令比较
+    block->InsertInstruction(1, xor_inst);
+    auto snez_inst =
+        new RiscvSnezInstruction(result, result); // 检查结果是否非0
+    block->InsertInstruction(2, snez_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs2 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto xor_inst = new RiscvXorInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, xor_inst);
+    auto snez_inst = new RiscvSnezInstruction(result, result);
+    block->InsertInstruction(2, snez_inst);
+  } else {
+    // 否则使用SNEZ指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto xor_inst = new RiscvXorInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, xor_inst);
+    auto snez_inst = new RiscvSnezInstruction(result, result);
+    block->InsertInstruction(2, snez_inst);
+  }
+}
+
+void Translator::translateIgt(IcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetIntImmVal() >
+                                                      op2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs1 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs2 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, slt_inst);
+  } else {
+    // 否则使用SLT指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+  }
+}
+
+void Translator::translateIge(IcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetIntImmVal() >=
+                                                      op2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs1 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, slt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs2 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, slt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  } else {
+    // 否则使用SLT指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto slt_inst = new RiscvSltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, slt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  }
+}
+
+void Translator::translateIlt(IcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetIntImmVal() <
+                                                      op2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs1 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs2 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, slt_inst);
+  } else {
+    // 否则使用SLT指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+  }
+}
+
+void Translator::translateIle(IcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetIntImmVal() <=
+                                                      op2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs1 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是立即数
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetIntImmVal() == 0) {
+      rs2 = getZeroReg(); // 如果是0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
+      block->InsertInstruction(1, li_inst);
+    }
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  } else {
+    // 否则使用SLT指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, slt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  }
 }
 
 void Translator::translateFcmp(FcmpInstruction *inst, RiscvBlock *block) {
-  // TODO: 实现浮点数比较指令的翻译
-  std::cerr << "Fcmp instruction translation not implemented yet.\n";
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  auto cond = inst->GetCond();
+  switch (cond) {
+  case FcmpCond::OEQ:
+    translateFeq(inst, block);
+    break;
+  case FcmpCond::ONE:
+    translateFne(inst, block);
+    break;
+  case FcmpCond::OLT:
+    translateFlt(inst, block);
+    break;
+  case FcmpCond::OLE:
+    translateFle(inst, block);
+    break;
+  case FcmpCond::OGT:
+    translateFgt(inst, block);
+    break;
+  case FcmpCond::OGE:
+    translateFge(inst, block);
+    break;
+  default:
+    std::cerr << "Unsupported Fcmp condition: " << static_cast<int>(cond)
+              << std::endl;
+    break;
+  }
+}
+
+void Translator::translateFeq(FcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是浮点立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetFloatVal() ==
+                                                      op2->GetFloatVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs1 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, rs1);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto feq_inst = new RiscvFeqInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, feq_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs2 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, rs2);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto feq_inst = new RiscvFeqInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, feq_inst);
+  } else {
+    // 否则使用FEQ指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto feq_inst = new RiscvFeqInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, feq_inst);
+  }
+}
+
+void Translator::translateFne(FcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是浮点立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetFloatVal() !=
+                                                      op2->GetFloatVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs1 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, rs1);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto fne_inst = new RiscvFeqInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fne_inst);
+    auto seqz_inst =
+        new RiscvSeqzInstruction(result, result); // 检查结果是否为0
+    block->InsertInstruction(2, seqz_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs2 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, rs2);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto fne_inst = new RiscvFeqInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fne_inst);
+    auto seqz_inst =
+        new RiscvSeqzInstruction(result, result); // 检查结果是否为0
+    block->InsertInstruction(2, seqz_inst);
+  } else {
+    // 否则使用FNE指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto fne_inst = new RiscvFeqInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fne_inst);
+    auto seqz_inst = new RiscvSeqzInstruction(result, result);
+    block->InsertInstruction(2, seqz_inst); // 检查结果是否为0
+  }
+}
+
+void Translator::translateFlt(FcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是浮点立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst =
+        new RiscvLiInstruction(result, op1->GetFloatVal() < op2->GetFloatVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs1 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, rs1);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto flt_inst = new RiscvFltInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, flt_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs2 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, rs2);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto flt_inst = new RiscvFltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, flt_inst);
+  } else {
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto flt_inst = new RiscvFltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, flt_inst);
+  }
+}
+
+void Translator::translateFle(FcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是浮点立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetFloatVal() <=
+                                                      op2->GetFloatVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs1 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, rs1);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto fle_inst = new RiscvFleInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fle_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs2 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, rs2);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto fle_inst = new RiscvFleInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fle_inst);
+  } else {
+    // 否则使用FLE指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto fle_inst = new RiscvFleInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fle_inst);
+  }
+}
+
+void Translator::translateFgt(FcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是浮点立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst =
+        new RiscvLiInstruction(result, op1->GetFloatVal() > op2->GetFloatVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs1 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, rs1);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto fle_inst = new RiscvFleInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fle_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst);
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs2 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, rs2);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto fle_inst = new RiscvFleInstruction(result, rs2, rs1);
+    block->InsertInstruction(1, fle_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst);
+  } else {
+    // 否则使用FGT指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto fle_inst = new RiscvFleInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, fle_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  }
+}
+
+void Translator::translateFge(FcmpInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是浮点立即数，直接计算结果
+    auto op1 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto op2 =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, op1->GetFloatVal() >=
+                                                      op2->GetFloatVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    // 如果第一个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp1()));
+    auto rs2 = translateOperand(inst->GetOp2());
+    RiscvRegOperand *rs1 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs1 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, rs1);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto flt_inst = new RiscvFltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, flt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  } else if (inst->GetOp2()->isIMM()) {
+    // 如果第二个操作数是浮点立即数
+    auto imm =
+        dynamic_cast<RiscvImmF32Operand *>(translateOperand(inst->GetOp2()));
+    auto rs1 = translateOperand(inst->GetOp1());
+    RiscvRegOperand *rs2 = nullptr;
+    if (imm->GetFloatVal() == 0.0f) {
+      rs2 = getZeroReg(); // 如果是0.0，使用zero寄存器
+    } else {
+      rs2 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs2, imm->GetFloatVal());
+      block->InsertInstruction(1, li_inst);
+      auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, rs2);
+      block->InsertInstruction(2, fmvwx_inst);
+    }
+    auto flt_inst = new RiscvFltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, flt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  } else {
+    // 否则使用FGE指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto flt_inst = new RiscvFltInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, flt_inst);
+    auto xori_inst = new RiscvXoriInstruction(result, result, 1);
+    block->InsertInstruction(2, xori_inst); // 取反结果
+  }
 }
 
 void Translator::translateAdd(Instruction inst, RiscvBlock *block) {
@@ -413,8 +1173,7 @@ void Translator::translateAdd(Instruction inst, RiscvBlock *block) {
     auto imm_op = dynamic_cast<RiscvImmI32Operand *>(
         translateOperand(add_inst->GetOp2()));
     int imm_val = imm_op->GetIntImmVal();
-    auto addi_inst = new RiscvAddiInstruction(result, rs1, imm_val);
-    block->InsertInstruction(1, addi_inst);
+    insertAddiInstruction(result, rs1, imm_val, block);
   } else if (add_inst->GetOp1()->isIMM()) {
     // 如果第一个操作数是立即数，使用ADDI指令
     auto result = translateOperand(add_inst->GetResult());
@@ -422,8 +1181,7 @@ void Translator::translateAdd(Instruction inst, RiscvBlock *block) {
     auto imm_op = dynamic_cast<RiscvImmI32Operand *>(
         translateOperand(add_inst->GetOp1()));
     int imm_val = imm_op->GetIntImmVal();
-    auto addi_inst = new RiscvAddiInstruction(result, rs2, imm_val);
-    block->InsertInstruction(1, addi_inst);
+    insertAddiInstruction(result, rs2, imm_val, block);
   } else {
     // 否则使用ADD指令
     auto result = translateOperand(add_inst->GetResult());
@@ -508,9 +1266,7 @@ void Translator::translateSub(Instruction inst, RiscvBlock *block) {
     auto rs1 = translateOperand(sub_inst->GetOp1());
     auto imm = dynamic_cast<RiscvImmI32Operand *>(
         translateOperand(sub_inst->GetOp2()));
-    auto addi_inst =
-        new RiscvAddiInstruction(result, rs1, -imm->GetIntImmVal());
-    block->InsertInstruction(1, addi_inst);
+    insertAddiInstruction(result, rs1, -imm->GetIntImmVal(), block);
   } else if (sub_inst->GetOp1()->isIMM()) {
     auto result = translateOperand(sub_inst->GetResult());
     auto rs2 = translateOperand(sub_inst->GetOp2());
@@ -647,9 +1403,12 @@ void Translator::translateFadd(Instruction inst, RiscvBlock *block) {
         translateOperand(fadd_inst->GetOp1()));
     auto op2 = dynamic_cast<RiscvImmF32Operand *>(
         translateOperand(fadd_inst->GetOp2()));
-    auto li_inst =
-        new RiscvLiInstruction(result, op1->GetFloatVal() + op2->GetFloatVal());
+    auto tmp_reg = createVirtualReg();
+    auto li_inst = new RiscvLiInstruction(tmp_reg, op1->GetFloatVal() +
+                                                       op2->GetFloatVal());
     block->InsertInstruction(1, li_inst);
+    auto fmvwx_inst = new RiscvFmvwxInstruction(result, tmp_reg);
+    block->InsertInstruction(1, fmvwx_inst);
   } else if (fadd_inst->GetOp2()->isIMM()) {
     auto result = translateOperand(fadd_inst->GetResult());
     auto rs1 = translateOperand(fadd_inst->GetOp1());
@@ -658,10 +1417,10 @@ void Translator::translateFadd(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs2 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs2, li_reg);
+    auto fmvwx_inst = new RiscvFmvwxInstruction(rs2, li_reg);
     auto fadd_inst = new RiscvFAddInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
-    block->InsertInstruction(1, fmv_inst);
+    block->InsertInstruction(1, fmvwx_inst);
     block->InsertInstruction(1, fadd_inst);
   } else if (fadd_inst->GetOp1()->isIMM()) {
     auto result = translateOperand(fadd_inst->GetResult());
@@ -671,10 +1430,10 @@ void Translator::translateFadd(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs1 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs1, li_reg);
+    auto fmvwx_inst = new RiscvFmvwxInstruction(rs1, li_reg);
     auto fadd_inst = new RiscvFAddInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
-    block->InsertInstruction(1, fmv_inst);
+    block->InsertInstruction(1, fmvwx_inst);
     block->InsertInstruction(1, fadd_inst);
   } else {
     // 否则使用FADD指令
@@ -696,9 +1455,12 @@ void Translator::translateFsub(Instruction inst, RiscvBlock *block) {
         translateOperand(fsub_inst->GetOp1()));
     auto op2 = dynamic_cast<RiscvImmF32Operand *>(
         translateOperand(fsub_inst->GetOp2()));
+    auto li_reg = createVirtualReg();
     auto li_inst =
-        new RiscvLiInstruction(result, op1->GetFloatVal() - op2->GetFloatVal());
+        new RiscvLiInstruction(li_reg, op1->GetFloatVal() - op2->GetFloatVal());
     block->InsertInstruction(1, li_inst);
+    auto fmv_inst = new RiscvFmvwxInstruction(result, li_reg);
+    block->InsertInstruction(1, fmv_inst);
   } else if (fsub_inst->GetOp2()->isIMM()) {
     auto result = translateOperand(fsub_inst->GetResult());
     auto rs1 = translateOperand(fsub_inst->GetOp1());
@@ -707,7 +1469,7 @@ void Translator::translateFsub(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs2 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs2, li_reg);
+    auto fmv_inst = new RiscvFmvwxInstruction(rs2, li_reg);
     auto fsub_inst = new RiscvFSubInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
     block->InsertInstruction(1, fmv_inst);
@@ -720,7 +1482,7 @@ void Translator::translateFsub(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs1 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs1, li_reg);
+    auto fmv_inst = new RiscvFmvwxInstruction(rs1, li_reg);
     auto fsub_inst = new RiscvFSubInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
     block->InsertInstruction(1, fmv_inst);
@@ -745,9 +1507,12 @@ void Translator::translateFmul(Instruction inst, RiscvBlock *block) {
         translateOperand(fmul_inst->GetOp1()));
     auto op2 = dynamic_cast<RiscvImmF32Operand *>(
         translateOperand(fmul_inst->GetOp2()));
+    auto li_reg = createVirtualReg();
     auto li_inst =
-        new RiscvLiInstruction(result, op1->GetFloatVal() * op2->GetFloatVal());
+        new RiscvLiInstruction(li_reg, op1->GetFloatVal() * op2->GetFloatVal());
     block->InsertInstruction(1, li_inst);
+    auto fmv_inst = new RiscvFmvwxInstruction(result, li_reg);
+    block->InsertInstruction(1, fmv_inst);
   } else if (fmul_inst->GetOp2()->isIMM()) {
     auto result = translateOperand(fmul_inst->GetResult());
     auto rs1 = translateOperand(fmul_inst->GetOp1());
@@ -756,7 +1521,7 @@ void Translator::translateFmul(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs2 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs2, li_reg);
+    auto fmv_inst = new RiscvFmvwxInstruction(rs2, li_reg);
     auto fmul_inst = new RiscvFMulInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
     block->InsertInstruction(1, fmv_inst);
@@ -769,7 +1534,7 @@ void Translator::translateFmul(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs1 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs1, li_reg);
+    auto fmv_inst = new RiscvFmvwxInstruction(rs1, li_reg);
     auto fmul_inst = new RiscvFMulInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
     block->InsertInstruction(1, fmv_inst);
@@ -795,9 +1560,12 @@ void Translator::translateFdiv(Instruction inst, RiscvBlock *block) {
         translateOperand(fdiv_inst->GetOp1()));
     auto op2 = dynamic_cast<RiscvImmF32Operand *>(
         translateOperand(fdiv_inst->GetOp2()));
-    auto li_inst = new RiscvLiInstruction(
-        std::move(result), op1->GetFloatVal() / op2->GetFloatVal());
+    auto li_reg = createVirtualReg();
+    auto li_inst =
+        new RiscvLiInstruction(li_reg, op1->GetFloatVal() / op2->GetFloatVal());
     block->InsertInstruction(1, li_inst);
+    auto fmv_inst = new RiscvFmvwxInstruction(result, li_reg);
+    block->InsertInstruction(1, fmv_inst);
   } else if (fdiv_inst->GetOp2()->isIMM()) {
     auto result = translateOperand(fdiv_inst->GetResult());
     auto rs1 = translateOperand(fdiv_inst->GetOp1());
@@ -806,7 +1574,7 @@ void Translator::translateFdiv(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs2 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs2, li_reg);
+    auto fmv_inst = new RiscvFmvwxInstruction(rs2, li_reg);
     auto fdiv_inst = new RiscvFDivInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
     block->InsertInstruction(1, fmv_inst);
@@ -819,7 +1587,7 @@ void Translator::translateFdiv(Instruction inst, RiscvBlock *block) {
     auto li_reg = createVirtualReg();
     auto rs1 = createVirtualReg();
     auto li_inst = new RiscvLiInstruction(li_reg, imm->GetFloatVal());
-    auto fmv_inst = new RiscvFmvInstruction(rs1, li_reg);
+    auto fmv_inst = new RiscvFmvwxInstruction(rs1, li_reg);
     auto fdiv_inst = new RiscvFDivInstruction(result, rs1, rs2);
     block->InsertInstruction(1, li_inst);
     block->InsertInstruction(1, fmv_inst);
@@ -842,12 +1610,11 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
   RiscvRegOperand *base_addr = nullptr;
   RiscvRegOperand *offset_reg = createVirtualReg();
   int offset = 0; // 偏移量初始化为0
-  auto type = inst->GetType();
   auto indexes = inst->GetIndexes();
   auto dim = inst->GetDims();
-  for (int i = 1; i < indexes.size(); ++i) {
+  for (size_t i = 1; i < indexes.size(); ++i) {
     int size = 1;
-    for (int j = i; j < dim.size(); ++j)
+    for (size_t j = i; j < dim.size(); ++j)
       size *= dim[j];
     auto index = indexes[i];
     if (index->GetOperandType() == BasicOperand::IMMI32) {
@@ -856,7 +1623,6 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
           new RiscvLiInstruction(offset_reg, imm_op->GetIntImmVal() * size);
       block->InsertInstruction(1, li_inst);
     } else if (index->GetOperandType() == BasicOperand::REG) {
-      auto reg_op = dynamic_cast<RegOperand *>(index);
       auto tmp_reg = createVirtualReg();
       auto li_inst = new RiscvLiInstruction(tmp_reg, size);
       auto mul_inst =
@@ -931,7 +1697,6 @@ void Translator::translateBr_cond(BrCondInstruction *inst, RiscvBlock *block) {
 }
 
 void Translator::translateAnd(ArithmeticInstruction *inst, RiscvBlock *block) {
-  // TODO: 实现AND指令的翻译
   if (!inst)
     return;
   auto result = translateOperand(inst->GetResult());
@@ -948,12 +1713,85 @@ void Translator::translateAnd(ArithmeticInstruction *inst, RiscvBlock *block) {
       // 如果第一个操作数是0，结果也是0
       auto li_inst = new RiscvLiInstruction(result, 0);
       block->InsertInstruction(1, li_inst);
+    } else {
+      auto rs2 = translateOperand(inst->GetOp2());
+      auto snez_inst =
+          new RiscvSnezInstruction(result, rs2); // 如果第一个操作数是非0立即数
+      block->InsertInstruction(1, snez_inst);
     }
+  } else if (inst->GetOp2()->isIMM()) {
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(inst->GetOp2());
+    if (imm->GetIntImmVal() == 0) {
+      // 如果第二个操作数是0，结果也是0
+      auto li_inst = new RiscvLiInstruction(result, 0);
+      block->InsertInstruction(1, li_inst);
+    } else {
+      auto rs1 = translateOperand(inst->GetOp1());
+      auto snez_inst =
+          new RiscvSnezInstruction(result, rs1); // 如果第二个操作数是非0立即数
+      block->InsertInstruction(1, snez_inst);
+    }
+  } else {
+    // 否则使用AND指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto op1 = createVirtualReg();
+    auto op2 = createVirtualReg();
+    auto snez_inst = new RiscvSnezInstruction(op1, rs1);
+    auto snez_inst2 = new RiscvSnezInstruction(op2, rs2);
+    auto and_inst = new RiscvAndInstruction(result, op1, op2);
+    block->InsertInstruction(1, snez_inst);
+    block->InsertInstruction(2, snez_inst2);
+    block->InsertInstruction(3, and_inst);
   }
 }
 
 void Translator::translateOr(ArithmeticInstruction *inst, RiscvBlock *block) {
-  // TODO: 实现OR指令的翻译
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto imm1 = dynamic_cast<RiscvImmI32Operand *>(inst->GetOp1());
+    auto imm2 = dynamic_cast<RiscvImmI32Operand *>(inst->GetOp2());
+    auto li_inst = new RiscvLiInstruction(result, imm1->GetIntImmVal() ||
+                                                      imm2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(inst->GetOp1());
+    if (imm->GetIntImmVal() != 0) {
+      auto li_inst = new RiscvLiInstruction(result, 1);
+      block->InsertInstruction(1, li_inst);
+    } else {
+      auto rs2 = translateOperand(inst->GetOp2());
+      auto snez_inst =
+          new RiscvSnezInstruction(result, rs2); // 如果第一个操作数是非0立即数
+      block->InsertInstruction(1, snez_inst);
+    }
+  } else if (inst->GetOp2()->isIMM()) {
+    auto imm = dynamic_cast<RiscvImmI32Operand *>(inst->GetOp2());
+    if (imm->GetIntImmVal() != 0) {
+      auto li_inst = new RiscvLiInstruction(result, 1);
+      block->InsertInstruction(1, li_inst);
+    } else {
+      auto rs1 = translateOperand(inst->GetOp1());
+      auto snez_inst =
+          new RiscvSnezInstruction(result, rs1); // 如果第二个操作数是非0立即数
+      block->InsertInstruction(1, snez_inst);
+    }
+  } else {
+    // 否则使用AND指令
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto op1 = createVirtualReg();
+    auto op2 = createVirtualReg();
+    auto snez_inst = new RiscvSnezInstruction(op1, rs1);
+    auto snez_inst2 = new RiscvSnezInstruction(op2, rs2);
+    auto and_inst = new RiscvOrInstruction(result, op1, op2);
+    block->InsertInstruction(1, snez_inst);
+    block->InsertInstruction(2, snez_inst2);
+    block->InsertInstruction(3, and_inst);
+  }
 }
 
 RiscvRegOperand *Translator::createVirtualReg() {
@@ -982,6 +1820,10 @@ RiscvRegOperand *Translator::getA0Reg() {
 
 RiscvRegOperand *Translator::getZeroReg() {
   return new RiscvRegOperand(-1); // zero寄存器
+}
+
+RiscvRegOperand *Translator::getFa0Reg() {
+  return new RiscvRegOperand(-43); // fa0寄存器作为帧指针
 }
 
 RiscvOperand *Translator::translateOperand(Operand op) {
@@ -1022,7 +1864,9 @@ void Translator::initFunctionStackFrame(const std::string &func_name) {
 int Translator::getTypeSize(LLVMType type) {
   switch (type) {
   case LLVMType::I32:
+    return 4;
   case LLVMType::FLOAT32:
+    return 4;
   case LLVMType::I1:
     return 1; // 布尔类型1字节
   case LLVMType::I64:
@@ -1055,7 +1899,6 @@ void Translator::addLocalArray(int virtual_reg, LLVMType type,
   int total_elements = 1;
   for (int dim : dims)
     total_elements *= dim;
-
   int array_size = element_size * total_elements;
   int offset = current_stack_frame->local_vars_size + array_size;
 
@@ -1090,10 +1933,8 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
     return;
   auto s0 = getS0Reg();
   auto sp = getSpReg();
-  auto save_s0_addr =
-      new RiscvAddiInstruction(s0->CopyOperand(), sp->CopyOperand(),
-                               current_stack_frame->total_frame_size);
-  entry_block->InsertInstruction(0, save_s0_addr);
+  insertAddiInstruction(s0, sp, -current_stack_frame->total_frame_size,
+                        entry_block);
 
   auto ra = getRaReg();
   auto sp_2 = getSpReg();
@@ -1112,10 +1953,8 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
   // 生成栈帧分配代码
   // addi sp, sp, -frame_size
   auto sp_3 = getSpReg();
-  auto alloc_inst =
-      new RiscvAddiInstruction(sp_3->CopyOperand(), sp_3->CopyOperand(),
-                               -current_stack_frame->total_frame_size);
-  entry_block->InsertInstruction(0, alloc_inst);
+  insertAddiInstruction(sp_3->CopyOperand(), sp_3->CopyOperand(),
+                        -current_stack_frame->total_frame_size, entry_block);
 }
 
 void Translator::generateStackFrameEpilog(RiscvBlock *exit_block) {
@@ -1138,9 +1977,8 @@ void Translator::generateStackFrameEpilog(RiscvBlock *exit_block) {
   // 生成栈帧释放代码
   // addi sp, sp, frame_size
   auto sp_2 = getSpReg();
-  auto dealloc_inst = new RiscvAddiInstruction(
-      sp_2, sp_2, current_stack_frame->total_frame_size);
-  exit_block->InsertInstruction(1, dealloc_inst);
+  insertAddiInstruction(sp_2->CopyOperand(), sp_2->CopyOperand(),
+                        current_stack_frame->total_frame_size, exit_block);
 }
 
 int Translator::getLocalVariableOffset(int virtual_reg) {
@@ -1164,4 +2002,20 @@ int Translator::getCurrentFrameSize() const {
   if (current_stack_frame)
     return current_stack_frame->total_frame_size;
   return 0;
+}
+
+void Translator::insertAddiInstruction(RiscvOperand *dest, RiscvOperand *src,
+                                       int imm, RiscvBlock *block) {
+  if (imm < -2048 || imm > 2047) {
+    // 如果立即数超出范围，使用LI指令加载到寄存器
+    auto list_reg = createVirtualReg();
+    auto li_inst = new RiscvLiInstruction(list_reg, imm);
+    block->InsertInstruction(1, li_inst);
+    auto addi_inst = new RiscvAddInstruction(dest, src, list_reg);
+    block->InsertInstruction(1, addi_inst);
+  } else {
+    // 否则使用ADDI指令
+    auto addi_inst = new RiscvAddiInstruction(dest, src, imm);
+    block->InsertInstruction(1, addi_inst);
+  }
 }

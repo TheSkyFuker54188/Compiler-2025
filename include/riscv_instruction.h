@@ -18,6 +18,8 @@ enum class RiscvOpcode {
   FMUL,
   FDIV,
   FMV,
+  FMVWX,
+  FADXW,
   SD,
   LI,
   LD,
@@ -31,6 +33,15 @@ enum class RiscvOpcode {
   JR,
   BNEZ,
   SNEZ,
+  SEQZ,
+  AND,
+  OR,
+  XOR,
+  XORI,
+  SLT,
+  FEQ,
+  FLT,
+  FLE,
   FCVTSW,
   FCVTWS,
   GLOBAL_VAR,
@@ -660,5 +671,167 @@ public:
   }
   void PrintIR(std::ostream &s) override {
     s << "  snez  " << rs1->GetFullName() << "," << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvSeqzInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rs1, *rs2;
+  RiscvSeqzInstruction(RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SEQZ; // 使用SEQZ伪指令
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  seqz  " << rs1->GetFullName() << "," << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvFmvxwInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  RiscvFmvxwInstruction(RiscvOperand *rd, RiscvOperand *rs1) {
+    opcode = RiscvOpcode::FMVWX; // 使用FMVWX伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  fmv.x.w  " << rd->GetFullName() << "," << rs1->GetFullName()
+      << "\n";
+  }
+};
+
+class RiscvFmvwxInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  RiscvFmvwxInstruction(RiscvOperand *rd, RiscvOperand *rs1) {
+    opcode = RiscvOpcode::FADXW; // 使用FADXW伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  fmv.w.x  " << rd->GetFullName() << "," << rs1->GetFullName()
+      << "\n";
+  }
+};
+
+class RiscvAndInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvAndInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::AND;
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  and  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvOrInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvOrInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::OR;
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  or  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvXorInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvXorInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::XOR;
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  xor  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvSltInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvSltInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SLT; // 使用SLT伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  slt  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvXoriInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvXoriInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::XORI; // 使用XORI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  xori  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
+  }
+};
+
+class RiscvFeqInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvFeqInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::FEQ; // 使用FEQ伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvFltInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvFltInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::FLT; // 使用FLT伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  flt.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvFleInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvFleInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::FLE; // 使用FLE伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  fle.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
   }
 };
