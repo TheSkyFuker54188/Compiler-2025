@@ -685,7 +685,7 @@ int RegisterAllocator::selectVictimRegister(int current_pos) {
 void RegisterAllocator::spillRegister(int physical_reg, int current_pos) {
   auto phys_it = physical_to_virtual.find(physical_reg);
   if (phys_it == physical_to_virtual.end()) {
-    return; // 物理寄存器没有映射，无需溢出
+    return; // 
   }
 
   int virtual_reg = phys_it->second;
@@ -709,58 +709,8 @@ void RegisterAllocator::spillRegister(int physical_reg, int current_pos) {
 
 void RegisterAllocator::insertSpillCode(
     std::map<int, RiscvBlock *> &blocks) {
-  // 为每个溢出的虚拟寄存器插入load/store代码
-  for (int virtual_reg : spilled_virtuals) {
-    int offset = getSpillOffset(virtual_reg);
-    
-    // 遍历所有基本块
-    for (auto &block_pair : blocks) {
-      auto &block = block_pair.second;
-      
-      // 新的指令列表，用于构建插入load/store后的结果
-      std::deque<RiscvInstruction*> new_instructions;
-      
-      // 遍历原指令列表
-      for (size_t i = 0; i < block->instruction_list.size(); i++) {
-        auto &inst = block->instruction_list[i];
-        
-        bool uses_reg = usesVirtualRegister(inst, virtual_reg);
-        bool defines_reg = definesVirtualRegister(inst, virtual_reg);
-        
-        // 如果指令使用这个虚拟寄存器，在前面插入load
-        if (uses_reg && !defines_reg) {
-          // 创建load指令：ld t6, offset(sp)
-          auto sp_reg = new RiscvRegOperand(-2); // sp寄存器
-          auto addr = new RiscvPtrOperand(offset, sp_reg);
-          auto temp_reg_operand = new RiscvRegOperand(-31); // t6
-          auto load_inst = new RiscvLdInstruction(temp_reg_operand, addr);
-          new_instructions.push_back(load_inst);
-        }
-        
-        // 添加原指令
-        new_instructions.push_back(inst);
-        
-        // 如果指令定义这个虚拟寄存器，在后面插入store
-        if (defines_reg) {
-          // 创建store指令：sd t6, offset(sp)
-          auto sp_reg = new RiscvRegOperand(-2); // sp寄存器
-          auto addr = new RiscvPtrOperand(offset, sp_reg);
-          auto temp_reg_operand = new RiscvRegOperand(-31); // t6
-          auto store_inst = new RiscvSdInstruction(temp_reg_operand, addr);
-          new_instructions.push_back(store_inst);
-        }
-        
-        // 特殊情况：指令既使用又定义同一寄存器（如 add %r1, %r1, %r2）
-        if (uses_reg && defines_reg) {
-          // 已经在前面插入了load，在后面插入store
-          // 这种情况上面的逻辑已经处理了
-        }
-      }
-      
-      // 替换指令列表
-      block->instruction_list = new_instructions;
-    }
-  }
+  // 此函数的逻辑已移至 rewriteInstructions，以更精细地处理溢出。
+  // 保留空函数体以维持现有调用结构。
 }
 
 // 辅助函数：检查指令是否使用虚拟寄存器
@@ -986,180 +936,204 @@ void RegisterAllocationPass::applyToTranslator(Translator &translator) {
 
 void RegisterAllocator::rewriteInstructions(
     std::map<int, RiscvBlock *> &blocks) {
-  // 第一步：创建虚拟寄存器到新操作数的映射
-  std::map<int, RiscvOperand*> virtual_to_new_operand;
-  
-  // 为每个虚拟寄存器创建对应的新操作数
-  for (const auto &mapping : virtual_to_physical) {
-    int virtual_reg = mapping.first;
-    int physical_reg = mapping.second;
-    virtual_to_new_operand[virtual_reg] = new RiscvRegOperand(-physical_reg);
-  }
-  
-  // 为溢出的虚拟寄存器创建t6操作数
-  for (int virtual_reg : spilled_virtuals) {
-    virtual_to_new_operand[virtual_reg] = new RiscvRegOperand(-31); // t6
-  }
-
   for (auto &block_pair : blocks) {
     auto &block = block_pair.second;
+    auto &instruction_list = block->instruction_list;
+    std::deque<RiscvInstruction *> new_instruction_list;
 
-    for (size_t i = 0; i < block->instruction_list.size(); i++) {
-      auto &inst = block->instruction_list[i];
-      
-      if (!inst) {
-        continue;
-      }
-      
-      // 根据指令类型重写操作数
+    for (auto &inst : instruction_list) {
+      if (!inst) continue;
+
+      std::vector<RiscvOperand **> operands_to_rewrite;
+      // 收集所有需要重写的操作数指针
       if (auto *add_inst = dynamic_cast<RiscvAddInstruction *>(inst)) {
-        rewriteOperandNew(add_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(add_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(add_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&add_inst->rd);
+        operands_to_rewrite.push_back(&add_inst->rs1);
+        operands_to_rewrite.push_back(&add_inst->rs2);
       } else if (auto *sub_inst = dynamic_cast<RiscvSubInstruction *>(inst)) {
-        rewriteOperandNew(sub_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(sub_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(sub_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&sub_inst->rd);
+        operands_to_rewrite.push_back(&sub_inst->rs1);
+        operands_to_rewrite.push_back(&sub_inst->rs2);
       } else if (auto *mul_inst = dynamic_cast<RiscvMulInstruction *>(inst)) {
-        rewriteOperandNew(mul_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(mul_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(mul_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&mul_inst->rd);
+        operands_to_rewrite.push_back(&mul_inst->rs1);
+        operands_to_rewrite.push_back(&mul_inst->rs2);
       } else if (auto *div_inst = dynamic_cast<RiscvDivInstruction *>(inst)) {
-        rewriteOperandNew(div_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(div_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(div_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&div_inst->rd);
+        operands_to_rewrite.push_back(&div_inst->rs1);
+        operands_to_rewrite.push_back(&div_inst->rs2);
       } else if (auto *addi_inst = dynamic_cast<RiscvAddiInstruction *>(inst)) {
-        rewriteOperandNew(addi_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(addi_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&addi_inst->rd);
+        operands_to_rewrite.push_back(&addi_inst->rs1);
       } else if (auto *li_inst = dynamic_cast<RiscvLiInstruction *>(inst)) {
-        rewriteOperandNew(li_inst->rd, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&li_inst->rd);
       } else if (auto *ld_inst = dynamic_cast<RiscvLdInstruction *>(inst)) {
-        rewriteOperandNew(ld_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(ld_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&ld_inst->rd);
+        operands_to_rewrite.push_back(&ld_inst->address);
       } else if (auto *sd_inst = dynamic_cast<RiscvSdInstruction *>(inst)) {
-        rewriteOperandNew(sd_inst->reg, virtual_to_new_operand);
-        rewriteOperandNew(sd_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&sd_inst->reg);
+        operands_to_rewrite.push_back(&sd_inst->address);
       } else if (auto *branch_inst = dynamic_cast<RiscvBranchInstruction *>(inst)) {
-        rewriteOperandNew(branch_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(branch_inst->rs2, virtual_to_new_operand);
-        // label不需要重写
+        operands_to_rewrite.push_back(&branch_inst->rs1);
+        operands_to_rewrite.push_back(&branch_inst->rs2);
       } else if (auto *jump_inst = dynamic_cast<RiscvJumpInstruction *>(inst)) {
-        rewriteOperandNew(jump_inst->rd, virtual_to_new_operand);
-        // target不需要重写（是label）
+        operands_to_rewrite.push_back(&jump_inst->rd);
       } else if (auto *call_inst = dynamic_cast<RiscvCallInstruction *>(inst)) {
-        // 函数调用的参数重写
         for (auto &arg : call_inst->args) {
-          rewriteOperandNew(arg, virtual_to_new_operand);
+          operands_to_rewrite.push_back(&arg);
         }
       } else if (auto *fadd_inst = dynamic_cast<RiscvFAddInstruction *>(inst)) {
-        rewriteOperandNew(fadd_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fadd_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(fadd_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fadd_inst->rd);
+        operands_to_rewrite.push_back(&fadd_inst->rs1);
+        operands_to_rewrite.push_back(&fadd_inst->rs2);
       } else if (auto *fsub_inst = dynamic_cast<RiscvFSubInstruction *>(inst)) {
-        rewriteOperandNew(fsub_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fsub_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(fsub_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fsub_inst->rd);
+        operands_to_rewrite.push_back(&fsub_inst->rs1);
+        operands_to_rewrite.push_back(&fsub_inst->rs2);
       } else if (auto *fmul_inst = dynamic_cast<RiscvFMulInstruction *>(inst)) {
-        rewriteOperandNew(fmul_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fmul_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(fmul_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fmul_inst->rd);
+        operands_to_rewrite.push_back(&fmul_inst->rs1);
+        operands_to_rewrite.push_back(&fmul_inst->rs2);
       } else if (auto *fdiv_inst = dynamic_cast<RiscvFDivInstruction *>(inst)) {
-        rewriteOperandNew(fdiv_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fdiv_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(fdiv_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fdiv_inst->rd);
+        operands_to_rewrite.push_back(&fdiv_inst->rs1);
+        operands_to_rewrite.push_back(&fdiv_inst->rs2);
       } else if (auto *mod_inst = dynamic_cast<RiscvModInstruction *>(inst)) {
-        rewriteOperandNew(mod_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(mod_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(mod_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&mod_inst->rd);
+        operands_to_rewrite.push_back(&mod_inst->rs1);
+        operands_to_rewrite.push_back(&mod_inst->rs2);
       } else if (auto *jr_inst = dynamic_cast<RiscvJrInstruction *>(inst)) {
-        rewriteOperandNew(jr_inst->rd, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&jr_inst->rd);
       } else if (auto *sw_inst = dynamic_cast<RiscvSwInstruction *>(inst)) {
-        rewriteOperandNew(sw_inst->rs, virtual_to_new_operand);
-        rewriteOperandNew(sw_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&sw_inst->rs);
+        operands_to_rewrite.push_back(&sw_inst->address);
       } else if (auto *lw_inst = dynamic_cast<RiscvLwInstruction *>(inst)) {
-        rewriteOperandNew(lw_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(lw_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&lw_inst->rd);
+        operands_to_rewrite.push_back(&lw_inst->address);
       } else if (auto *mv_inst = dynamic_cast<RiscvMvInstruction *>(inst)) {
-        rewriteOperandNew(mv_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(mv_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&mv_inst->rd);
+        operands_to_rewrite.push_back(&mv_inst->rs1);
       } else if (auto *la_inst = dynamic_cast<RiscvLaInstruction *>(inst)) {
-        rewriteOperandNew(la_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(la_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&la_inst->rd);
+        operands_to_rewrite.push_back(&la_inst->address);
       } else if (auto *fmv_inst = dynamic_cast<RiscvFmvInstruction *>(inst)) {
-        rewriteOperandNew(fmv_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fmv_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fmv_inst->rd);
+        operands_to_rewrite.push_back(&fmv_inst->rs1);
       } else if (auto *flw_inst = dynamic_cast<RiscvFlwInstruction *>(inst)) {
-        rewriteOperandNew(flw_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(flw_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&flw_inst->rd);
+        operands_to_rewrite.push_back(&flw_inst->address);
       } else if (auto *fsw_inst = dynamic_cast<RiscvFswInstruction *>(inst)) {
-        rewriteOperandNew(fsw_inst->rs, virtual_to_new_operand);
-        rewriteOperandNew(fsw_inst->address, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fsw_inst->rs);
+        operands_to_rewrite.push_back(&fsw_inst->address);
       } else if (auto *fcvtsw_inst = dynamic_cast<RiscvFcvtswInstruction *>(inst)) {
-        rewriteOperandNew(fcvtsw_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fcvtsw_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fcvtsw_inst->rd);
+        operands_to_rewrite.push_back(&fcvtsw_inst->rs1);
       } else if (auto *fcvtws_inst = dynamic_cast<RiscvFcvtwsInstruction *>(inst)) {
-        rewriteOperandNew(fcvtws_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fcvtws_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fcvtws_inst->rd);
+        operands_to_rewrite.push_back(&fcvtws_inst->rs1);
       } else if (auto *bnez_inst = dynamic_cast<RiscvBnezInstruction *>(inst)) {
-        rewriteOperandNew(bnez_inst->rs1, virtual_to_new_operand);
-        // label不需要重写
+        operands_to_rewrite.push_back(&bnez_inst->rs1);
       } else if (auto *snez_inst = dynamic_cast<RiscvSnezInstruction *>(inst)) {
-        rewriteOperandNew(snez_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(snez_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&snez_inst->rs1);
+        operands_to_rewrite.push_back(&snez_inst->rs2);
       } else if (auto *xor_inst = dynamic_cast<RiscvXorInstruction *>(inst)) {
-        rewriteOperandNew(xor_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(xor_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(xor_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&xor_inst->rd);
+        operands_to_rewrite.push_back(&xor_inst->rs1);
+        operands_to_rewrite.push_back(&xor_inst->rs2);
       } else if (auto *seqz_inst = dynamic_cast<RiscvSeqzInstruction *>(inst)) {
-        rewriteOperandNew(seqz_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(seqz_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&seqz_inst->rs1);
+        operands_to_rewrite.push_back(&seqz_inst->rs2);
       } else if (auto *and_inst = dynamic_cast<RiscvAndInstruction *>(inst)) {
-        rewriteOperandNew(and_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(and_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(and_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&and_inst->rd);
+        operands_to_rewrite.push_back(&and_inst->rs1);
+        operands_to_rewrite.push_back(&and_inst->rs2);
       } else if (auto *or_inst = dynamic_cast<RiscvOrInstruction *>(inst)) {
-        rewriteOperandNew(or_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(or_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(or_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&or_inst->rd);
+        operands_to_rewrite.push_back(&or_inst->rs1);
+        operands_to_rewrite.push_back(&or_inst->rs2);
       } else if (auto *slt_inst = dynamic_cast<RiscvSltInstruction *>(inst)) {
-        rewriteOperandNew(slt_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(slt_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(slt_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&slt_inst->rd);
+        operands_to_rewrite.push_back(&slt_inst->rs1);
+        operands_to_rewrite.push_back(&slt_inst->rs2);
       } else if (auto *xori_inst = dynamic_cast<RiscvXoriInstruction *>(inst)) {
-        rewriteOperandNew(xori_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(xori_inst->rs1, virtual_to_new_operand);
-        // imm不需要重写
+        operands_to_rewrite.push_back(&xori_inst->rd);
+        operands_to_rewrite.push_back(&xori_inst->rs1);
       } else if (auto *andi_inst = dynamic_cast<RiscvAndiInstruction *>(inst)) {
-        rewriteOperandNew(andi_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(andi_inst->rs1, virtual_to_new_operand);
-        // imm不需要重写
+        operands_to_rewrite.push_back(&andi_inst->rd);
+        operands_to_rewrite.push_back(&andi_inst->rs1);
       } else if (auto *fmvxw_inst = dynamic_cast<RiscvFmvxwInstruction *>(inst)) {
-        rewriteOperandNew(fmvxw_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fmvxw_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fmvxw_inst->rd);
+        operands_to_rewrite.push_back(&fmvxw_inst->rs1);
       } else if (auto *fmvwx_inst = dynamic_cast<RiscvFmvwxInstruction *>(inst)) {
-        rewriteOperandNew(fmvwx_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fmvwx_inst->rs1, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&fmvwx_inst->rd);
+        operands_to_rewrite.push_back(&fmvwx_inst->rs1);
       } else if (auto *feq_inst = dynamic_cast<RiscvFeqInstruction *>(inst)) {
-        rewriteOperandNew(feq_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(feq_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(feq_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&feq_inst->rd);
+        operands_to_rewrite.push_back(&feq_inst->rs1);
+        operands_to_rewrite.push_back(&feq_inst->rs2);
       } else if (auto *flt_inst = dynamic_cast<RiscvFltInstruction *>(inst)) {
-        rewriteOperandNew(flt_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(flt_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(flt_inst->rs2, virtual_to_new_operand);
+        operands_to_rewrite.push_back(&flt_inst->rd);
+        operands_to_rewrite.push_back(&flt_inst->rs1);
+        operands_to_rewrite.push_back(&flt_inst->rs2);
       } else if (auto *fle_inst = dynamic_cast<RiscvFleInstruction *>(inst)) {
-        rewriteOperandNew(fle_inst->rd, virtual_to_new_operand);
-        rewriteOperandNew(fle_inst->rs1, virtual_to_new_operand);
-        rewriteOperandNew(fle_inst->rs2, virtual_to_new_operand);
-      } else if (auto *j_inst = dynamic_cast<RiscvJInstruction *>(inst)) {
-        // J指令没有寄存器操作数需要重写
+        operands_to_rewrite.push_back(&fle_inst->rd);
+        operands_to_rewrite.push_back(&fle_inst->rs1);
+        operands_to_rewrite.push_back(&fle_inst->rs2);
+      }
+
+      std::vector<int> used_spilled_vregs;
+      int defined_spilled_vreg = -1;
+      int temp_reg_idx = 0; // 0 for t5 (-30), 1 for t6 (-31)
+      std::map<int, int> vreg_to_temp_phys_reg;
+
+      // 预处理：为溢出的操作数生成加载指令
+      for (auto &operand_ptr : operands_to_rewrite) {
+        if (auto *reg_op = dynamic_cast<RiscvRegOperand *>(*operand_ptr)) {
+          int vreg = reg_op->GetRegNo();
+          if (vreg >= 0 && isSpilled(vreg)) {
+            bool is_def = definesVirtualRegister(inst, vreg);
+            if (!is_def) { // 只为使用的寄存器加载
+              if (vreg_to_temp_phys_reg.find(vreg) == vreg_to_temp_phys_reg.end()) {
+                int temp_phys_reg = (temp_reg_idx++ == 0) ? -30 : -31;
+                vreg_to_temp_phys_reg[vreg] = temp_phys_reg;
+                int offset = getSpillOffset(vreg);
+                auto sp_reg = new RiscvRegOperand(-2);
+                auto addr = new RiscvPtrOperand(offset, sp_reg);
+                auto temp_reg_operand = new RiscvRegOperand(temp_phys_reg);
+                new_instruction_list.push_back(new RiscvLdInstruction(temp_reg_operand, addr));
+              }
+            } else {
+                defined_spilled_vreg = vreg;
+                if (vreg_to_temp_phys_reg.find(vreg) == vreg_to_temp_phys_reg.end()) {
+                    int temp_phys_reg = (temp_reg_idx++ == 0) ? -30 : -31;
+                    vreg_to_temp_phys_reg[vreg] = temp_phys_reg;
+                }
+            }
+          }
+        }
+      }
+
+      // 重写指令本身
+      for (auto &operand_ptr : operands_to_rewrite) {
+        rewriteOperandNew(*operand_ptr, vreg_to_temp_phys_reg);
+      }
+      new_instruction_list.push_back(inst);
+
+      // 后处理：为溢出的定义寄存器生成存储指令
+      if (defined_spilled_vreg != -1) {
+        int temp_phys_reg = vreg_to_temp_phys_reg[defined_spilled_vreg];
+        int offset = getSpillOffset(defined_spilled_vreg);
+        auto sp_reg = new RiscvRegOperand(-2);
+        auto addr = new RiscvPtrOperand(offset, sp_reg);
+        auto temp_reg_operand = new RiscvRegOperand(temp_phys_reg);
+        new_instruction_list.push_back(new RiscvSdInstruction(temp_reg_operand, addr));
       }
     }
+    block->instruction_list = new_instruction_list;
   }
 }
 
-void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand, 
-                                         const std::map<int, RiscvOperand*> &virtual_to_new_operand) {
+void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand, const std::map<int, int> &vreg_to_temp_phys_reg) {
   if (!operand) {
     return;
   }
@@ -1167,18 +1141,23 @@ void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand,
   if (auto *reg_operand = dynamic_cast<RiscvRegOperand *>(operand)) {
     int virtual_reg = reg_operand->GetRegNo();
     
-    // 如果是虚拟寄存器（非负数）
     if (virtual_reg >= 0) {
-      auto it = virtual_to_new_operand.find(virtual_reg);
-      if (it != virtual_to_new_operand.end()) {
-        if (auto *new_reg_operand = dynamic_cast<RiscvRegOperand *>(it->second)) {
-          operand = new RiscvRegOperand(new_reg_operand->GetRegNo());
+      auto it_phys = virtual_to_physical.find(virtual_reg);
+      if (it_phys != virtual_to_physical.end()) {
+        // 分配到物理寄存器
+        // delete operand;
+        operand = new RiscvRegOperand(-it_phys->second);
+      } else if (isSpilled(virtual_reg)) {
+        // 溢出，使用临时物理寄存器
+        auto it_temp = vreg_to_temp_phys_reg.find(virtual_reg);
+        if (it_temp != vreg_to_temp_phys_reg.end()) {
+          // delete operand;
+          operand = new RiscvRegOperand(it_temp->second);
         }
       }
     }
   } else if (auto *ptr_operand = dynamic_cast<RiscvPtrOperand *>(operand)) {
-    // 递归处理指针操作数的基址寄存器
-    rewriteOperandNew(ptr_operand->base_reg, virtual_to_new_operand);
+    rewriteOperandNew(ptr_operand->base_reg, vreg_to_temp_phys_reg);
   }
 }
 

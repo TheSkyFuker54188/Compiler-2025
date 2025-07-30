@@ -83,7 +83,7 @@ public:
   std::vector<int> extractVirtualRegisters(RiscvInstruction* inst);
   void rewriteOperand(RiscvOperand*& operand);
   void rewriteOperandSafe(RiscvOperand*& operand, std::set<RiscvOperand*>& rewritten_operands);
-  void rewriteOperandNew(RiscvOperand*& operand, const std::map<int, RiscvOperand*>& virtual_to_new_operand);
+  void rewriteOperandNew(RiscvOperand*& operand, const std::map<int, int>& vreg_to_temp_phys_reg);
   bool usesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   bool definesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   
