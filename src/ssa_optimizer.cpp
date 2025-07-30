@@ -67,6 +67,14 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
     std::cout << "  Running loop invariant code motion..." << std::endl;
     loopInvariantCodeMotion(optimized_ir);
 
+    // 12. 条件常量传播
+    std::cout << "  Running conditional constant propagation..." << std::endl;
+    conditionalConstantPropagation(optimized_ir);
+
+    // 13. 全局值编号
+    std::cout << "  Running global value numbering..." << std::endl;
+    globalValueNumbering(optimized_ir);
+
     size_t after_count = countInstructions(optimized_ir);
 
     if (after_count < before_count) {
@@ -2801,5 +2809,297 @@ void SSAOptimizer::moveInstructionsToPreheader(
         ++it;
       }
     }
+  }
+}
+
+// ============================================================================
+// 新增的高级优化算法实现
+// ============================================================================
+
+void SSAOptimizer::conditionalConstantPropagation(LLVMIR &ir) {
+  // 条件常量传播：基于控制流的常量传播
+  std::cout << "  Applying conditional constant propagation..." << std::endl;
+
+  for (auto &func_pair : ir.function_block_map) {
+    std::map<int, LLVMBlock> &blocks = func_pair.second;
+
+    // 对每个基本块进行条件常量分析
+    std::unordered_map<int, std::unordered_map<int, ConstantValue>>
+        block_constants;
+    std::unordered_set<int> visited_blocks;
+    std::queue<int> work_list;
+
+    // 从入口块开始
+    if (!blocks.empty()) {
+      int entry_block = blocks.begin()->first;
+      work_list.push(entry_block);
+
+      while (!work_list.empty()) {
+        int current_block = work_list.front();
+        work_list.pop();
+
+        if (visited_blocks.count(current_block))
+          continue;
+        visited_blocks.insert(current_block);
+
+        auto block_it = blocks.find(current_block);
+        if (block_it == blocks.end())
+          continue;
+
+        LLVMBlock block = block_it->second;
+        std::unordered_map<int, ConstantValue> &current_constants =
+            block_constants[current_block];
+
+        // 分析当前块的指令
+        for (auto &inst : block->Instruction_list) {
+          if (!inst)
+            continue;
+
+          int opcode = inst->GetOpcode();
+          int result_reg = getInstructionResultRegister(inst);
+
+          // 处理常量定义
+          if (result_reg != -1) {
+            if (isArithmeticInstruction(inst)) {
+              std::vector<Operand> operands = getInstructionOperands(inst);
+              if (operands.size() >= 2) {
+                ConstantValue left = getConstantFromOperand(operands[0]);
+                ConstantValue right = getConstantFromOperand(operands[1]);
+
+                // 如果操作数在当前上下文中是常量，更新它们
+                if (!left.isConstant() && isRegisterOperand(operands[0])) {
+                  int reg = getRegisterFromOperand(operands[0]);
+                  if (current_constants.count(reg)) {
+                    left = current_constants[reg];
+                  }
+                }
+                if (!right.isConstant() && isRegisterOperand(operands[1])) {
+                  int reg = getRegisterFromOperand(operands[1]);
+                  if (current_constants.count(reg)) {
+                    right = current_constants[reg];
+                  }
+                }
+
+                if (left.isConstant() && right.isConstant()) {
+                  ConstantValue result = evaluateArithmeticOp(
+                      static_cast<LLVMIROpcode>(opcode), left, right);
+                  if (result.isConstant()) {
+                    current_constants[result_reg] = result;
+                  }
+                }
+              }
+            }
+          }
+
+          // 处理条件分支
+          if (opcode == BR_COND) {
+            std::vector<Operand> operands = getInstructionOperands(inst);
+            if (!operands.empty()) {
+              ConstantValue cond = getConstantFromOperand(operands[0]);
+              if (!cond.isConstant() && isRegisterOperand(operands[0])) {
+                int reg = getRegisterFromOperand(operands[0]);
+                if (current_constants.count(reg)) {
+                  cond = current_constants[reg];
+                }
+              }
+
+              // 如果条件是常量，只添加一个分支到工作列表
+              if (cond.isConstant()) {
+                std::vector<int> targets = getBranchTargets(inst);
+                if (targets.size() >= 2) {
+                  int target = (cond.int_val != 0) ? targets[0] : targets[1];
+                  if (!visited_blocks.count(target)) {
+                    work_list.push(target);
+                    // 传播常量到目标块
+                    block_constants[target] = current_constants;
+                  }
+                }
+                continue;
+              }
+            }
+          }
+
+          // 添加后继块到工作列表
+          std::vector<int> targets = getBranchTargets(inst);
+          for (int target : targets) {
+            if (!visited_blocks.count(target)) {
+              work_list.push(target);
+              // 传播常量
+              if (block_constants[target].empty()) {
+                block_constants[target] = current_constants;
+              } else {
+                // 合并常量信息
+                auto &target_constants = block_constants[target];
+                for (auto it = target_constants.begin();
+                     it != target_constants.end();) {
+                  if (current_constants.count(it->first) == 0 ||
+                      !constantEquals(current_constants[it->first],
+                                      it->second)) {
+                    it = target_constants.erase(it);
+                  } else {
+                    ++it;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 应用发现的常量
+    for (const auto &block_pair : block_constants) {
+      int block_id = block_pair.first;
+      const auto &constants = block_pair.second;
+
+      auto block_it = blocks.find(block_id);
+      if (block_it == blocks.end())
+        continue;
+
+      LLVMBlock block = block_it->second;
+      for (auto &inst : block->Instruction_list) {
+        if (!inst)
+          continue;
+
+        std::vector<Operand> operands = getInstructionOperands(inst);
+        for (auto &operand : operands) {
+          if (isRegisterOperand(operand)) {
+            int reg = getRegisterFromOperand(operand);
+            if (constants.count(reg)) {
+              replaceOperandWithConstant(operand, constants.at(reg));
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void SSAOptimizer::globalValueNumbering(LLVMIR &ir) {
+  // 全局值编号：为表达式分配唯一编号，识别等价表达式
+  std::cout << "  Applying global value numbering..." << std::endl;
+
+  for (auto &func_pair : ir.function_block_map) {
+    std::map<int, LLVMBlock> &blocks = func_pair.second;
+
+    // 值编号映射
+    std::unordered_map<std::string, int> expression_to_vn; // 表达式 -> 值编号
+    std::unordered_map<int, int> register_to_vn;           // 寄存器 -> 值编号
+    std::unordered_map<int, int> vn_to_register; // 值编号 -> 代表寄存器
+    int next_vn = 1;
+
+    // 按支配顺序处理基本块（简化：按ID顺序）
+    for (const auto &block_pair : blocks) {
+      LLVMBlock block = block_pair.second;
+
+      for (auto &inst : block->Instruction_list) {
+        if (!inst)
+          continue;
+
+        int result_reg = getInstructionResultRegister(inst);
+
+        if (isPureFunctionalInstruction(inst)) {
+          // 生成表达式的规范化字符串
+          std::string expr = generateCanonicalExpression(inst);
+
+          if (!expr.empty()) {
+            auto it = expression_to_vn.find(expr);
+            if (it != expression_to_vn.end()) {
+              // 找到相同的表达式
+              int existing_vn = it->second;
+              register_to_vn[result_reg] = existing_vn;
+
+              // 用已有的寄存器替换
+              if (vn_to_register.count(existing_vn)) {
+                int existing_reg = vn_to_register[existing_vn];
+                replaceInstructionWithCopy(inst, existing_reg);
+                std::cout << "    GVN: Replaced expression " << expr
+                          << " with existing value %" << existing_reg
+                          << std::endl;
+              }
+            } else {
+              // 新表达式
+              int new_vn = next_vn++;
+              expression_to_vn[expr] = new_vn;
+              register_to_vn[result_reg] = new_vn;
+              vn_to_register[new_vn] = result_reg;
+            }
+          }
+        } else if (result_reg != -1) {
+          // 为非表达式结果分配新的值编号
+          int new_vn = next_vn++;
+          register_to_vn[result_reg] = new_vn;
+          vn_to_register[new_vn] = result_reg;
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 辅助函数实现
+// ============================================================================
+
+bool SSAOptimizer::constantEquals(const ConstantValue &a,
+                                  const ConstantValue &b) {
+  if (a.type != b.type)
+    return false;
+  if (!a.isConstant() || !b.isConstant())
+    return false;
+
+  switch (a.type) {
+  case ConstantValue::INT:
+    return a.int_val == b.int_val;
+  case ConstantValue::FLOAT:
+    return a.float_val == b.float_val;
+  default:
+    return false;
+  }
+}
+
+std::string SSAOptimizer::generateCanonicalExpression(const Instruction &inst) {
+  if (!inst)
+    return "";
+
+  int opcode = inst->GetOpcode();
+  std::vector<Operand> operands = getInstructionOperands(inst);
+
+  std::ostringstream oss;
+  oss << opcode;
+
+  // 对于交换律的操作，对操作数排序以生成规范形式
+  if (isCommutativeOperation(opcode) && operands.size() >= 2) {
+    std::string op1_str = getOperandString(operands[0]);
+    std::string op2_str = getOperandString(operands[1]);
+
+    if (op1_str > op2_str) {
+      std::swap(op1_str, op2_str);
+    }
+
+    oss << "_" << op1_str << "_" << op2_str;
+  } else {
+    for (const auto &operand : operands) {
+      oss << "_" << getOperandString(operand);
+    }
+  }
+
+  return oss.str();
+}
+
+bool SSAOptimizer::isCommutativeOperation(int opcode) {
+  return opcode == ADD || opcode == MUL_OP || opcode == FADD ||
+         opcode == FMUL || opcode == BITAND || opcode == BITOR ||
+         opcode == BITXOR;
+}
+
+std::string SSAOptimizer::getOperandString(const Operand &operand) {
+  if (!operand)
+    return "null";
+
+  if (isRegisterOperand(operand)) {
+    return "r" + std::to_string(getRegisterFromOperand(operand));
+  } else {
+    // 立即数操作数
+    return operand->GetFullName();
   }
 }

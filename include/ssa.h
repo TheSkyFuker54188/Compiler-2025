@@ -245,6 +245,26 @@ private:
    */
   void loopInvariantCodeMotion(LLVMIR &ir);
 
+  /**
+   * 条件常量传播
+   */
+  void conditionalConstantPropagation(LLVMIR &ir);
+
+  /**
+   * 全局值编号
+   */
+  void globalValueNumbering(LLVMIR &ir);
+
+  /**
+   * 循环展开
+   */
+  void loopUnrolling(LLVMIR &ir);
+
+  /**
+   * 内联小函数
+   */
+  void functionInlining(LLVMIR &ir);
+
   // 除法优化
   bool isPowerOfTwo(int n);
   int log2_upper(int x);
@@ -336,6 +356,12 @@ private:
   void moveInstructionsToPreheader(
       const std::unordered_set<Instruction> &instructions, int preheader_id,
       std::map<int, LLVMBlock> &blocks);
+
+  // 新增的高级优化辅助函数
+  bool constantEquals(const ConstantValue &a, const ConstantValue &b);
+  std::string generateCanonicalExpression(const Instruction &inst);
+  bool isCommutativeOperation(int opcode);
+  std::string getOperandString(const Operand &operand);
 };
 
 /**
