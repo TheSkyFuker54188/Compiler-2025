@@ -87,7 +87,7 @@ void RegisterAllocator::allocateRegistersForFunction(
 
     // 6. 更新栈帧大小（考虑溢出）
   if (!spilled_virtuals.empty()) {
-    int spill_area_size = next_spill_slot * 4; // 每个溢出槽4字节
+    int spill_area_size = next_spill_slot * 8; // 每个溢出槽4字节
     current_frame->local_vars_size += spill_area_size;
     current_frame->calculateTotalSize();
       
@@ -896,7 +896,7 @@ bool RegisterAllocator::isSpilled(int virtual_reg) {
 int RegisterAllocator::getSpillOffset(int virtual_reg) {
   auto it = spill_slots.find(virtual_reg);
   if (it != spill_slots.end()) {
-    return current_frame->local_vars_size + it->second * 4;
+    return current_frame->local_vars_size + it->second * 8;  // 修复：每个溢出槽8字节，确保64位对齐
   }
   return -1;
 }
