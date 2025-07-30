@@ -12,11 +12,30 @@
 // SSA变换相关的数据结构
 
 /**
+ * 常量值表示 - 前置声明
+ */
+struct ConstantValue {
+  enum Type { INT, FLOAT, UNDEF } type;
+  union {
+    int int_val;
+    float float_val;
+  };
+
+  ConstantValue() : type(UNDEF) {}
+  ConstantValue(int val) : type(INT), int_val(val) {}
+  ConstantValue(float val) : type(FLOAT), float_val(val) {}
+
+  bool isConstant() const { return type != UNDEF; }
+  bool isInt() const { return type == INT; }
+  bool isFloat() const { return type == FLOAT; }
+};
+
+/**
  * SSA变换器 - 将非SSA的LLVM IR转换为SSA形式
  */
 class SSATransformer {
 public:
-  // 支配边界计算
+  // 支配信息结构体
   struct DominanceInfo {
     std::unordered_map<int, std::unordered_set<int>> dominators;   // 支配关系
     std::unordered_map<int, std::unordered_set<int>> dom_frontier; // 支配边界
@@ -154,25 +173,6 @@ private:
 };
 
 /**
- * 常量值表示
- */
-struct ConstantValue {
-  enum Type { INT, FLOAT, UNDEF } type;
-  union {
-    int int_val;
-    float float_val;
-  };
-
-  ConstantValue() : type(UNDEF) {}
-  ConstantValue(int val) : type(INT), int_val(val) {}
-  ConstantValue(float val) : type(FLOAT), float_val(val) {}
-
-  bool isConstant() const { return type != UNDEF; }
-  bool isInt() const { return type == INT; }
-  bool isFloat() const { return type == FLOAT; }
-};
-
-/**
  * SSA优化器 - 在SSA形式上进行各种优化
  */
 class SSAOptimizer {
@@ -186,6 +186,14 @@ private:
   // 常量传播相关
   std::unordered_map<int, ConstantValue> constants_map;
   std::unordered_set<Instruction> useful_instructions;
+
+  // 循环信息结构体
+  struct LoopInfo {
+    int header;              // 循环头基本块ID
+    int latch;               // 循环尾基本块ID
+    int preheader;           // 循环前置块ID
+    std::vector<int> blocks; // 循环体包含的所有基本块ID
+  };
 
   /**
    * 死代码消除
@@ -212,6 +220,31 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
+  /**
+   * 代数化简
+   */
+  void algebraicSimplification(LLVMIR &ir);
+
+  /**
+   * φ函数简化
+   */
+  void simplifyPhiFunctions(LLVMIR &ir);
+
+  /**
+   * 不可达代码消除
+   */
+  void eliminateUnreachableCode(LLVMIR &ir);
+
+  /**
+   * 强度削减
+   */
+  void strengthReduction(LLVMIR &ir);
+
+  /**
+   * 循环不变量外提
+   */
+  void loopInvariantCodeMotion(LLVMIR &ir);
+
   // 除法优化
   bool isPowerOfTwo(int n);
   int log2_upper(int x);
@@ -235,7 +268,6 @@ private:
                             int &src_reg);
   bool replaceCopyUsages(Instruction &inst,
                          const std::unordered_map<int, int> &copies);
-  std::string generateExpressionString(const Instruction &inst);
   void replaceWithExistingResult(Instruction &inst, int existing_reg);
   int getInstructionResultRegister(const Instruction &inst);
 
@@ -276,6 +308,34 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
+
+  // 代数化简辅助函数
+  void replaceWithIdentity(Instruction &inst, const Operand &source);
+  void replaceWithConstant(Instruction &inst, const ConstantValue &constant);
+  bool operandEquals(const Operand &op1, const Operand &op2);
+  std::vector<int> getBranchTargets(const Instruction &inst);
+  RegOperand *GetNewRegOperand(int reg_num);
+
+  // 高级优化辅助函数
+  bool isPureFunctionalInstruction(const Instruction &inst);
+  std::string generateExpressionString(const Instruction &inst);
+  void replaceInstructionWithCopy(Instruction &inst, int source_reg);
+  int log2_floor(int x);
+  void replaceWithShift(Instruction &inst, const Operand &operand,
+                        int shift_amount, LLVMIROpcode shift_op);
+  void replaceWithBitwise(Instruction &inst, const Operand &operand,
+                          int mask_value, LLVMIROpcode bitwise_op);
+
+  // 循环分析相关
+  std::vector<LoopInfo> detectLoops(const std::map<int, LLVMBlock> &blocks);
+  bool isLoopInvariant(const Instruction &inst, const LoopInfo &loop,
+                       const std::map<int, LLVMBlock> &blocks,
+                       const std::unordered_set<Instruction> &known_invariants);
+  bool isInstructionInLoop(const Instruction &inst, const LoopInfo &loop,
+                           const std::map<int, LLVMBlock> &blocks);
+  void moveInstructionsToPreheader(
+      const std::unordered_set<Instruction> &instructions, int preheader_id,
+      std::map<int, LLVMBlock> &blocks);
 };
 
 /**

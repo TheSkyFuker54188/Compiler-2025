@@ -1,0 +1,77 @@
+// 增强SSA优化测试
+// 测试各种优化：常量传播、常量折叠、死代码消除、代数化简、强度削减等
+
+int main() {
+    // 1. 常量传播和折叠测试
+    int a = 5;
+    int b = 10;
+    int c = a + b;        // 应该被优化为 c = 15
+    int d = c * 2;        // 应该被优化为 d = 30
+    
+    // 2. 代数化简测试
+    int x = 42;
+    int y1 = x + 0;       // 应该被优化为 y1 = x
+    int y2 = x * 1;       // 应该被优化为 y2 = x
+    int y3 = x - 0;       // 应该被优化为 y3 = x
+    int y4 = x / 1;       // 应该被优化为 y4 = x
+    
+    // 3. 强度削减测试
+    int z1 = x * 4;       // 应该被优化为 z1 = x << 2
+    int z2 = x * 8;       // 应该被优化为 z2 = x << 3
+    int z3 = x / 4;       // 应该被优化为算术右移
+    
+    // 4. 死代码消除测试
+    int dead1 = 100;      // 如果未使用，应该被删除
+    int dead2 = dead1 + 50; // 如果未使用，应该被删除
+    
+    // 5. 公共子表达式消除测试
+    int common1 = a + b;
+    int common2 = a + b;  // 应该复用 common1 的结果
+    
+    // 6. 循环优化测试
+    int sum = 0;
+    int invariant = a + b; // 循环不变量
+    int i = 0;
+    
+    while (i < 10) {
+        int temp = invariant * 2; // invariant * 2 应该被外提
+        sum = sum + temp + i;
+        i = i + 1;
+    }
+    
+    // 7. 条件优化测试
+    int result;
+    if (1 == 1) {         // 常量条件，应该被简化
+        result = sum;
+    } else {
+        result = 0;       // 死代码，应该被删除
+    }
+    
+    // 8. φ函数简化测试（通过条件分支）
+    int phi_test;
+    if (a > 0) {
+        phi_test = 100;
+    } else {
+        phi_test = 100;   // 相同值，φ函数应该被简化
+    }
+    
+    putint(result);
+    return result;
+}
+
+// 辅助函数测试
+int test_function(int param) {
+    // 测试函数内的优化
+    int local = param * 2;
+    int optimizable = local + 0; // 应该被优化为 optimizable = local
+    return optimizable;
+}
+
+// 全局变量测试
+int global_var = 42;
+
+int test_global() {
+    int local_copy = global_var;
+    int redundant = local_copy + 0; // 应该被优化
+    return redundant;
+}

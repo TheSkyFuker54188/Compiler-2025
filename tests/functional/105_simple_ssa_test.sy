@@ -1,0 +1,19 @@
+// 简单的SSA优化效果测试
+int main() {
+    // 常量传播和折叠
+    int a = 5;
+    int b = 10;
+    int c = a + b;  // 应该变成 c = 15
+    
+    // 代数化简
+    int x = 42;
+    int y = x + 0;  // 应该变成 y = x
+    int z = x * 1;  // 应该变成 z = x
+    
+    // 死代码
+    int dead = 999; // 未使用，应该被删除
+    
+    // 使用结果
+    putint(c + y + z);
+    return 0;
+}

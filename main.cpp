@@ -4,6 +4,7 @@
 #include "include/irtranslater.h"
 #include "include/register_allocator.h"
 #include "include/semantic.h"
+#include "include/ssa.h"
 #include "parser/parser.tab.h"
 #include <fstream>
 #include <iostream>
@@ -106,6 +107,16 @@ bool compileFile(const std::string &filename, bool verbose = true,
     // }
   }
 
+  // 阶段4: SSA优化
+  if (semantic_success && generate_ir && optimize) {
+    if (verbose)
+      std::cout << "阶段4: SSA优化..." << std::endl;
+    SSAOptimizer optimizer;
+    ir = optimizer.optimize(ir);
+    if (verbose)
+      std::cout << "SSA优化完成!" << std::endl;
+  }
+
   if (semantic_success && generate_asm) {
     if (verbose)
       std::cout << "阶段5: RISC-V汇编代码生成..." << std::endl;
@@ -114,7 +125,6 @@ bool compileFile(const std::string &filename, bool verbose = true,
     translator.translate(ir);
 
     RegisterAllocationPass::applyToTranslator(translator);
-
 
     // 输出汇编代码到文件
     std::ofstream asm_file(output_file);
