@@ -55,6 +55,7 @@ void Translator::translateGlobal(const std::vector<Instruction> &global_def) {
         auto riscv_global = new RiscvGlobalVarInstruction(
             global_var->GetName(), getLLVMTypeString(global_var->GetType()));
         const auto &attr = global_var->GetAttr();
+        riscv_global->dim = attr.dims;
         riscv_global->init_vals = attr.IntInitVals;
         riscv_global->init_float_vals = attr.FloatInitVals;
         riscv.global_def.push_back(riscv_global);
@@ -223,6 +224,15 @@ void Translator::translateInstruction(Instruction inst,
     break;
   case LLVMIROpcode::ZEXT:
     translateZext(dynamic_cast<ZextInstruction *>(inst), riscv_block);
+    break;
+  case LLVMIROpcode::ASHR:
+    translateAshr(dynamic_cast<ArithmeticInstruction *>(inst), riscv_block);
+    break;
+  case LLVMIROpcode::LSHR:
+    translateLshr(dynamic_cast<ArithmeticInstruction *>(inst), riscv_block);
+    break;
+  case LLVMIROpcode::TRUNC:
+    translateTrunc(dynamic_cast<TruncInstruction *>(inst), riscv_block);
     break;
   default:
     std::cerr << "Unsupported instruction opcode: " << inst->GetOpcode()
@@ -1825,6 +1835,117 @@ void Translator::translateZext(ZextInstruction *inst, RiscvBlock *block) {
   auto value = translateOperand(inst->value);
   auto andi_inst = new RiscvAndiInstruction(result, value, 1);
   block->InsertInstruction(1, andi_inst);
+}
+
+void Translator::translateAshr(ArithmeticInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto imm1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto imm2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(result, imm1->GetIntImmVal() >>
+                                                      imm2->GetIntImmVal());
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    if (imm->GetIntImmVal() == 0) {
+      // 如果第一个操作数是0，结果也是0
+      auto li_inst = new RiscvLiInstruction(result, 0);
+      block->InsertInstruction(1, li_inst);
+    } else {
+      auto rs2 = translateOperand(inst->GetOp2());
+      auto rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      auto srai_inst = new RiscvSraInstruction(result, rs1, rs2);
+      block->InsertInstruction(1, li_inst);
+      block->InsertInstruction(1, srai_inst);
+    }
+  } else if (inst->GetOp2()->isIMM()) {
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    if (imm->GetIntImmVal() == 0) {
+      // 如果第二个操作数是0，结果也是0
+      auto rs1 = translateOperand(inst->GetOp1());
+      auto mv_inst = new RiscvMvInstruction(result, rs1);
+      block->InsertInstruction(1, mv_inst);
+    } else {
+      auto rs1 = translateOperand(inst->GetOp1());
+      auto srai_inst =
+          new RiscvSraiInstruction(result, rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, srai_inst);
+    }
+  } else {
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto srai_inst = new RiscvSraInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, srai_inst);
+  }
+}
+
+void Translator::translateLshr(ArithmeticInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->GetResult());
+  if (inst->GetOp1()->isIMM() && inst->GetOp2()->isIMM()) {
+    // 如果两个操作数都是立即数，直接计算结果
+    auto imm1 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    auto imm2 =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    auto li_inst = new RiscvLiInstruction(
+        result,
+        (int)(((unsigned int)imm1->GetIntImmVal()) >> imm2->GetIntImmVal()));
+    block->InsertInstruction(1, li_inst);
+  } else if (inst->GetOp1()->isIMM()) {
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp1()));
+    if (imm->GetIntImmVal() == 0) {
+      // 如果第一个操作数是0，结果也是0
+      auto li_inst = new RiscvLiInstruction(result, 0);
+      block->InsertInstruction(1, li_inst);
+    } else {
+      auto rs2 = translateOperand(inst->GetOp2());
+      auto rs1 = createVirtualReg();
+      auto li_inst = new RiscvLiInstruction(rs1, imm->GetIntImmVal());
+      auto srli_inst = new RiscvSrlInstruction(result, rs1, rs2);
+      block->InsertInstruction(1, li_inst);
+      block->InsertInstruction(1, srli_inst);
+    }
+  } else if (inst->GetOp2()->isIMM()) {
+    auto imm =
+        dynamic_cast<RiscvImmI32Operand *>(translateOperand(inst->GetOp2()));
+    if (imm->GetIntImmVal() == 0) {
+      auto rs1 = translateOperand(inst->GetOp1());
+      auto mv_inst = new RiscvMvInstruction(result, rs1);
+      block->InsertInstruction(1, mv_inst);
+    } else {
+      auto rs1 = translateOperand(inst->GetOp1());
+      auto srli_inst =
+          new RiscvSrliInstruction(result, rs1, imm->GetIntImmVal());
+      block->InsertInstruction(1, srli_inst);
+    }
+  } else {
+    auto rs1 = translateOperand(inst->GetOp1());
+    auto rs2 = translateOperand(inst->GetOp2());
+    auto srl_inst = new RiscvSrlInstruction(result, rs1, rs2);
+    block->InsertInstruction(1, srl_inst);
+  }
+}
+
+void Translator::translateTrunc(TruncInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  auto result = translateOperand(inst->result);
+  auto value = translateOperand(inst->value);
+  auto slli_inst = new RiscvSlliInstruction(result, value, 32);
+  block->InsertInstruction(1, slli_inst);
+  auto srli_inst = new RiscvSrliInstruction(result, result, 32);
+  block->InsertInstruction(1, srli_inst);
 }
 
 RiscvRegOperand *Translator::createVirtualReg() {

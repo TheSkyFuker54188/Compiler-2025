@@ -48,6 +48,11 @@ enum class RiscvOpcode {
   FCVTWS,
   GLOBAL_VAR,
   GLOBAL_STR,
+  SRL,
+  SRLI,
+  SRA,
+  SRAI,
+  SLLI,
 };
 
 class RiscvOperand {
@@ -553,6 +558,7 @@ class RiscvGlobalVarInstruction : public RiscvInstruction {
 public:
   std::string var_name;
   std::string var_type;
+  std::vector<size_t> dim;
   std::vector<int> init_vals;
   std::vector<float> init_float_vals;
   RiscvGlobalVarInstruction(std::string name, std::string type) {
@@ -564,29 +570,27 @@ public:
     s << "  .globl " << var_name << "\n";
     s << "  .type " << var_name << ", @object\n";
     s << var_name << ":\n";
-    if (var_type == "i32") {
-      if (init_vals.empty())
-        s << "  .word 0\n";
-      else {
-        for (int val : init_vals)
-          s << "  .word " << val << "\n";
+    if (dim.empty()) {
+      if (var_type == "i32" && !init_vals.empty())
+        s << "  .word " << init_vals[0] << "\n";
+      else if (var_type == "f32" && !init_float_vals.empty())
+        s << "  .word " << Float_to_Byte(init_float_vals[0]) << "\n";
+      else
+        s << "  .zero 4";
+    } else {
+      if (var_type == "i32" && !init_vals.empty()) {
+        for (size_t i = 0; i < init_vals.size(); ++i)
+          s << "  .word " << init_vals[i] << '\n';
+      } else if (var_type == "float" && !init_float_vals.empty()) {
+        for (size_t i = 0; i < init_float_vals.size(); ++i)
+          s << "  .word " << Float_to_Byte(init_float_vals[i]) << '\n';
+      } else {
+        int d = 1;
+        for (size_t i = 0; i < dim.size(); ++i)
+          d *= dim[i];
+        s << "  .zero " << d * 4 << '\n';
       }
-    } else if (var_type == "float") {
-      if (init_float_vals.empty())
-        s << "  .word 0\n";
-      else {
-        for (float val : init_float_vals) {
-          // 将浮点数转换为字节表示
-          union {
-            float f;
-            uint32_t i;
-          } converter;
-          converter.f = val;
-          s << "  .word 0x" << std::hex << converter.i << std::dec << "\n";
-        }
-      }
-    } else if (var_type == "string")
-      s << "  .asciz \"" << var_name << "\"\n";
+    }
   }
 };
 
@@ -600,7 +604,10 @@ public:
     str_value = std::move(value);
   }
   void PrintIR(std::ostream &s) override {
-    s << str_name << ": .string \"" << str_value << "\"\n";
+    s << "  .globl " << str_name << "\n";
+    s << "  .type " << str_name << ", @object\n";
+    s << str_name << ":\n";
+    s << "  .string \"" << str_value << "\"\n";
   }
 };
 
@@ -863,5 +870,83 @@ public:
   }
   void PrintIR(std::ostream &s) override {
     s << "  j  " << label->GetFullName() << "\n";
+  }
+};
+
+class RiscvSrlInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvSrlInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SRL; // 使用SRL伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  srl  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvSrliInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvSrliInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::SRLI; // 使用SRLI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  srli  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
+  }
+};
+
+class RiscvSraInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvSraInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SRA; // 使用SRA伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  sra  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvSraiInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvSraiInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::SRAI; // 使用SRAI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  srai  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
+  }
+};
+
+class RiscvSlliInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvSlliInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::SLLI; // 使用SLLI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  slli  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
   }
 };

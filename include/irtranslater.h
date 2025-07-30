@@ -125,6 +125,9 @@ private:
   void translateAnd(ArithmeticInstruction *inst, RiscvBlock *block);
   void translateOr(ArithmeticInstruction *inst, RiscvBlock *block);
   void translateZext(ZextInstruction *inst, RiscvBlock *block);
+  void translateAshr(ArithmeticInstruction *inst, RiscvBlock *block);
+  void translateLshr(ArithmeticInstruction *inst, RiscvBlock *block);
+  void translateTrunc(TruncInstruction *inst, RiscvBlock *block);
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
