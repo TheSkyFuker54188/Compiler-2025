@@ -88,10 +88,10 @@ run_tests_in_dir() {
         actual_exit_code=$?
 
         # 4. 读取期望退出码
-        expected_exit_code=$(cat "$out_file")
+        expected_exit_code=$(cat "$out_file" | tr -d '\n\r' | xargs)
 
         # 5. 比较结果
-        if [ "$actual_exit_code" -eq "$expected_exit_code" ]; then
+        if [[ "$actual_exit_code" =~ ^-?[0-9]+$ ]] && [[ "$expected_exit_code" =~ ^-?[0-9]+$ ]] && [ "$actual_exit_code" -eq "$expected_exit_code" ]; then
             echo -e "\e[32m通过\e[0m"
             ((passed++))
         else
