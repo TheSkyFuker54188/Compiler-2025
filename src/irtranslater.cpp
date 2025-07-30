@@ -55,6 +55,7 @@ void Translator::translateGlobal(const std::vector<Instruction> &global_def) {
         auto riscv_global = new RiscvGlobalVarInstruction(
             global_var->GetName(), getLLVMTypeString(global_var->GetType()));
         const auto &attr = global_var->GetAttr();
+        riscv_global->dim = attr.dims;
         riscv_global->init_vals = attr.IntInitVals;
         riscv_global->init_float_vals = attr.FloatInitVals;
         riscv.global_def.push_back(riscv_global);

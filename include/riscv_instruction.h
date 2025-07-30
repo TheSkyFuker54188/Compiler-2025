@@ -558,6 +558,7 @@ class RiscvGlobalVarInstruction : public RiscvInstruction {
 public:
   std::string var_name;
   std::string var_type;
+  std::vector<size_t> dim;
   std::vector<int> init_vals;
   std::vector<float> init_float_vals;
   RiscvGlobalVarInstruction(std::string name, std::string type) {
@@ -569,29 +570,27 @@ public:
     s << "  .globl " << var_name << "\n";
     s << "  .type " << var_name << ", @object\n";
     s << var_name << ":\n";
-    if (var_type == "i32") {
-      if (init_vals.empty())
-        s << "  .word 0\n";
-      else {
-        for (int val : init_vals)
-          s << "  .word " << val << "\n";
+    if (dim.empty()) {
+      if (var_type == "i32" && !init_vals.empty())
+        s << "  .word " << init_vals[0] << "\n";
+      else if (var_type == "f32" && !init_float_vals.empty())
+        s << "  .word " << Float_to_Byte(init_float_vals[0]) << "\n";
+      else
+        s << "  .zero 4";
+    } else {
+      if (var_type == "i32" && !init_vals.empty()) {
+        for (size_t i = 0; i < init_vals.size(); ++i)
+          s << "  .word " << init_vals[i] << '\n';
+      } else if (var_type == "float" && !init_float_vals.empty()) {
+        for (size_t i = 0; i < init_float_vals.size(); ++i)
+          s << "  .word " << Float_to_Byte(init_float_vals[i]) << '\n';
+      } else {
+        int d = 1;
+        for (size_t i = 0; i < dim.size(); ++i)
+          d *= dim[i];
+        s << "  .zero " << d * 4 << '\n';
       }
-    } else if (var_type == "float") {
-      if (init_float_vals.empty())
-        s << "  .word 0\n";
-      else {
-        for (float val : init_float_vals) {
-          // 将浮点数转换为字节表示
-          union {
-            float f;
-            uint32_t i;
-          } converter;
-          converter.f = val;
-          s << "  .word 0x" << std::hex << converter.i << std::dec << "\n";
-        }
-      }
-    } else if (var_type == "string")
-      s << "  .asciz \"" << var_name << "\"\n";
+    }
   }
 };
 
@@ -605,7 +604,10 @@ public:
     str_value = std::move(value);
   }
   void PrintIR(std::ostream &s) override {
-    s << str_name << ": .string \"" << str_value << "\"\n";
+    s << "  .globl " << str_name << "\n";
+    s << "  .type " << str_name << ", @object\n";
+    s << str_name << ":\n";
+    s << "  .string \"" << str_value << "\"\n";
   }
 };
 
