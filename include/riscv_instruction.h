@@ -48,6 +48,11 @@ enum class RiscvOpcode {
   FCVTWS,
   GLOBAL_VAR,
   GLOBAL_STR,
+  SRL,
+  SRLI,
+  SRA,
+  SRAI,
+  SLLI,
 };
 
 class RiscvOperand {
@@ -863,5 +868,83 @@ public:
   }
   void PrintIR(std::ostream &s) override {
     s << "  j  " << label->GetFullName() << "\n";
+  }
+};
+
+class RiscvSrlInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvSrlInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SRL; // 使用SRL伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  srl  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvSrliInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvSrliInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::SRLI; // 使用SRLI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  srli  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
+  }
+};
+
+class RiscvSraInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1, *rs2;
+  RiscvSraInstruction(RiscvOperand *rd, RiscvOperand *rs1, RiscvOperand *rs2) {
+    opcode = RiscvOpcode::SRA; // 使用SRA伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->rs2 = rs2;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  sra  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << rs2->GetFullName() << "\n";
+  }
+};
+
+class RiscvSraiInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvSraiInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::SRAI; // 使用SRAI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  srai  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
+  }
+};
+
+class RiscvSlliInstruction : public RiscvInstruction {
+public:
+  RiscvOperand *rd, *rs1;
+  int immediate;
+  RiscvSlliInstruction(RiscvOperand *rd, RiscvOperand *rs1, int imm) {
+    opcode = RiscvOpcode::SLLI; // 使用SLLI伪指令
+    this->rd = rd;
+    this->rs1 = rs1;
+    this->immediate = imm;
+  }
+  void PrintIR(std::ostream &s) override {
+    s << "  slli  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+      << immediate << "\n";
   }
 };
