@@ -56,6 +56,9 @@ enum LLVMIROpcode {
   TRUNC = 44
 };
 
+// 全局变量声明
+extern std::map<std::string, int> function_name_to_maxreg;
+
 // @Operand datatypes
 enum LLVMType {
   I32 = 1,

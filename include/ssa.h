@@ -16,14 +16,6 @@
  */
 class SSATransformer {
 public:
-  /**
-   * 将LLVM IR转换为SSA形式
-   * @param ir 输入的LLVM IR
-   * @return 转换后的SSA形式IR
-   */
-  LLVMIR transform(const LLVMIR &ir);
-
-private:
   // 支配边界计算
   struct DominanceInfo {
     std::unordered_map<int, std::unordered_set<int>> dominators;   // 支配关系
@@ -44,71 +36,79 @@ private:
   };
 
   /**
+   * 将LLVM IR转换为SSA形式
+   * @param ir 输入的LLVM IR
+   * @return 转换后的SSA形式IR
+   */
+  LLVMIR transform(const LLVMIR &ir);
+
+private:
+  /**
    * 构建控制流图
    */
   ControlFlowGraph
-  buildControlFlowGraph(const std::map<int, LLVMBlock> &blocks);
+  buildControlFlowGraph(const std::map<int, BasicBlock *> &blocks);
 
   /**
    * 基于控制流图计算支配信息
    */
   DominanceInfo
-  computeDominanceInfoFromCFG(const std::map<int, LLVMBlock> &blocks,
+  computeDominanceInfoFromCFG(const std::map<int, BasicBlock *> &blocks,
                               const ControlFlowGraph &cfg);
 
   /**
    * 计算控制流图的支配信息
    */
-  DominanceInfo computeDominanceInfo(const std::map<int, LLVMBlock> &blocks);
+  DominanceInfo computeDominanceInfo(const std::map<int, BasicBlock *> &blocks);
 
   /**
    * 插入φ函数
    */
-  void insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
+  void insertPhiFunctions(std::map<int, BasicBlock *> &blocks,
                           const DominanceInfo &dom_info);
 
   /**
    * 变量重命名
    */
-  void renameVariables(std::map<int, LLVMBlock> &blocks,
+  void renameVariables(std::map<int, BasicBlock *> &blocks,
                        const DominanceInfo &dom_info);
 
   /**
    * 收集函数中定义的所有变量
    */
   std::unordered_set<std::string>
-  collectDefinedVariables(const std::map<int, LLVMBlock> &blocks);
+  collectDefinedVariables(const std::map<int, BasicBlock *> &blocks);
 
   /**
    * 计算直接支配者
    */
   void computeImmediateDominators(DominanceInfo &info,
-                                  const std::map<int, LLVMBlock> &blocks);
+                                  const std::map<int, BasicBlock *> &blocks);
 
   /**
    * 计算支配边界
    */
   void computeDominanceFrontier(DominanceInfo &info,
-                                const std::map<int, LLVMBlock> &blocks,
+                                const std::map<int, BasicBlock *> &blocks,
                                 const ControlFlowGraph &cfg);
 
   /**
    * 获取基本块的前驱
    */
   std::vector<int> getPredecessors(int block_id,
-                                   const std::map<int, LLVMBlock> &blocks);
+                                   const std::map<int, BasicBlock *> &blocks);
 
   /**
    * 获取基本块的后继
    */
   std::vector<int> getSuccessors(int block_id,
-                                 const std::map<int, LLVMBlock> &blocks);
+                                 const std::map<int, BasicBlock *> &blocks);
 
   /**
    * 递归重命名变量 - DFS遍历支配树
    */
   void renameVariablesRecursive(int block_id,
-                                const std::map<int, LLVMBlock> &blocks,
+                                const std::map<int, BasicBlock *> &blocks,
                                 const DominanceInfo &dom_info,
                                 RenameInfo &rename_info);
 
@@ -123,6 +123,34 @@ private:
    */
   std::string getCurrentVariableVersion(const std::string &var_name,
                                         const RenameInfo &rename_info);
+
+  /**
+   * 计算快速支配信息（用于大型CFG的优化算法）
+   */
+  DominanceInfo
+  computeFastDominanceInfo(const std::map<int, BasicBlock *> &blocks,
+                           const ControlFlowGraph &cfg);
+
+  /**
+   * 更新φ函数的参数
+   */
+  void updatePhiArguments(std::map<int, BasicBlock *> &blocks,
+                          const ControlFlowGraph &cfg,
+                          const RenameInfo &rename_info);
+
+  /**
+   * 找到两个基本块的公共支配者
+   */
+  int findCommonDominator(int block1, int block2,
+                          const std::unordered_map<int, int> &idom);
+
+  /**
+   * 计算简化的支配边界（优化版本）
+   */
+  void
+  computeSimplifiedDominanceFrontier(DominanceInfo &info,
+                                     const std::map<int, BasicBlock *> &blocks,
+                                     const ControlFlowGraph &cfg);
 };
 
 /**
@@ -184,11 +212,11 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
-    //除法优化
-    bool isPowerOfTwo(int n);
-    int log2_upper(int x);
-    std::tuple<long long, int, int> choose_multiplier(int d, int prec);
-    void optimizeDivision(LLVMIR &ir);
+  // 除法优化
+  bool isPowerOfTwo(int n);
+  int log2_upper(int x);
+  std::tuple<long long, int, int> choose_multiplier(int d, int prec);
+  void optimizeDivision(LLVMIR &ir);
 
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);

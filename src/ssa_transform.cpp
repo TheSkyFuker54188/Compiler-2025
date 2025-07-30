@@ -731,7 +731,7 @@ SSATransformer::getCurrentVariableVersion(const std::string &var_name,
   return var_name + "_0"; // 默认版本
 }
 
-void SSATransformer::updatePhiArguments(std::map<int, LLVMBlock> &blocks,
+void SSATransformer::updatePhiArguments(std::map<int, BasicBlock *> &blocks,
                                         const ControlFlowGraph &cfg,
                                         const RenameInfo &rename_info) {
   std::cout << "  Updating phi function arguments..." << std::endl;
@@ -781,9 +781,8 @@ void SSATransformer::updatePhiArguments(std::map<int, LLVMBlock> &blocks,
  * 快速支配算法 - 适用于大型控制流图
  * 使用简化的迭代算法，减少复杂集合运算
  */
-SSATransformer::DominanceInfo
-SSATransformer::computeFastDominanceInfo(const std::map<int, LLVMBlock> &blocks,
-                                         const ControlFlowGraph &cfg) {
+SSATransformer::DominanceInfo SSATransformer::computeFastDominanceInfo(
+    const std::map<int, BasicBlock *> &blocks, const ControlFlowGraph &cfg) {
   std::cout << "Using fast dominance algorithm for " << blocks.size()
             << " blocks" << std::endl;
 
@@ -926,7 +925,7 @@ int SSATransformer::findCommonDominator(
  * 简化的支配边界计算
  */
 void SSATransformer::computeSimplifiedDominanceFrontier(
-    DominanceInfo &info, const std::map<int, LLVMBlock> &blocks,
+    DominanceInfo &info, const std::map<int, BasicBlock *> &blocks,
     const ControlFlowGraph &cfg) {
 
   // 简化版本：只计算必要的支配边界
