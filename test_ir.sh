@@ -16,7 +16,7 @@ failed=0
 for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./compiler --ast "$file"; then
+        if ./compiler "$file" -S -o "${file%.sy}.s" > /dev/null 2>&1; then
             echo "通过"
             ((passed++))
         else
@@ -32,7 +32,7 @@ done
 for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./compiler --ast "$file"; then
+        if ./compiler "$file" -S -o "${file%.sy}.s" > /dev/null 2>&1; then
             echo "通过"
             ((passed++))
         else
@@ -60,8 +60,8 @@ for file in tests/h_functional/*.ll; do
     echo "验证 $file ... " >> test_logs/ir_validation.log
     
     # 运行验证并将输出重定向到日志文件
-    if opt -p=verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
-    #if opt -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    if opt-15 --verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    #if opt-15 -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
         echo "测试 $file 通过" | tee -a test_logs/ir_validation.log
         ((true++))
     else
@@ -83,8 +83,8 @@ for file in tests/functional/*.ll; do
     echo "验证 $file ... " >> test_logs/ir_validation.log
     
     # 运行验证并将输出重定向到日志文件
-    if opt -p=verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
-    #if opt -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    if opt-15 --verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
+    #if opt-15 -opaque-pointers -verify "$file" -S >> test_logs/ir_validation.log 2>&1; then
         echo "测试 $file 通过" | tee -a test_logs/ir_validation.log
         ((true++))
     else
@@ -129,8 +129,8 @@ process_dir() {
         fi
         
         # 执行LLVM IR文件并捕获返回值
-        echo "执行命令: lli-17 $ll_file" >> test_logs/execution_test.log
-        lli-17 "$ll_file" >> test_logs/execution_test.log 2>&1
+        echo "执行命令: lli-15 $ll_file" >> test_logs/execution_test.log
+        lli-15 "$ll_file" >> test_logs/execution_test.log 2>&1
         actual_exit_code=$?
         
         # 读取期望的退出代码
@@ -172,7 +172,7 @@ echo "  失败: $false"
 echo "  详细日志: test_logs/ir_validation.log"
 
 echo
-echo "执行测试验证 (lli-17 返回值 vs .out文件):"
+echo "执行测试验证 (lli-15 返回值 vs .out文件):"
 echo "  通过: $exec_passed"
 echo "  失败: $exec_failed"
 echo "  详细日志: test_logs/execution_test.log"

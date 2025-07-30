@@ -114,8 +114,8 @@ public:
   Operand current_ptr;
   LLVMType current_llvm_type;
   BaseType current_type;
-  int current_reg_counter = 0;
-  int max_label = 1;
+  int current_reg_counter = -1;
+  int max_label = 0;
   int now_label = 1;
   int before_label = 1;
   int cond_label = 1;

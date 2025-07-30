@@ -102,6 +102,15 @@ std::ostream &operator<<(std::ostream &s, LLVMIROpcode type) {
   case SHL:
     s << "shl";
     break;
+  case ASHR:
+    s << "ashr";
+    break;
+  case LSHR:
+    s << "lshr";
+    break;
+  case TRUNC:
+    s << "trunc";
+    break;
   }
   return s;
 }
@@ -332,41 +341,13 @@ int IRgenerator::newLabel() { return (++max_label); }
 bool IRgenerator::isGlobalScope() { return function_now == nullptr; }
 
 long long Float_to_Byte(float f) {
-  float rawFloat = f;
-  unsigned long long rawFloatByte = *((int *)&rawFloat);
-  unsigned long long signBit = rawFloatByte >> 31;
-  unsigned long long expBits = (rawFloatByte >> 23) & ((1 << 8) - 1);
-  unsigned long long part1 = rawFloatByte & ((1 << 23) - 1);
-
-  unsigned long long out_signBit = signBit << 63;
-  unsigned long long out_sigBits = part1 << 29;
-  unsigned long long expBits_highestBit = (expBits & (1 << 7)) << 3;
-  unsigned long long expBits_lowerBit = (expBits & (1 << 7) - 1);
-  unsigned long long expBits_lowerBit_highestBit = expBits_lowerBit & (1 << 6);
-  unsigned long long expBits_lowerBit_ext =
-      (expBits_lowerBit_highestBit) | (expBits_lowerBit_highestBit << 1) |
-      (expBits_lowerBit_highestBit << 2) | (expBits_lowerBit_highestBit << 3);
-  unsigned long long expBits_full =
-      expBits_highestBit | expBits_lowerBit | expBits_lowerBit_ext;
-  unsigned long long out_expBits = expBits_full << 52;
-  unsigned long long out_rawFloatByte = out_signBit | out_expBits | out_sigBits;
-  /*
-      Example: Float Value 114.514
-
-      llvm Double:
-          0                               ---1 bit    (sign bit)
-          1000 0000 101                   ---11 bits  (exp bits)
-          1100 1010 0000 1110 0101 011    ---23 bits  (part 1)
-          00000000000000000000000000000   ---29 bits  (part 2 All zero)
-
-      IEEE Float:
-          0                               ---1 bit    (sign bit)
-          1    0000 101                   ---8 bits   (exp bits)
-          1100 1010 0000 1110 0101 011    ---23 bits  (part 1)
-
-  */
-
-  return out_rawFloatByte;
+  unsigned int int_representation;
+  // Ensure that float and unsigned int are both 32 bits.
+  static_assert(sizeof(float) == sizeof(unsigned int),
+                "Float and unsigned int must be the same size for this "
+                "conversion to be valid.");
+  memcpy(&int_representation, &f, sizeof(float));
+  return int_representation;
 }
 
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
@@ -2133,10 +2114,13 @@ void IRgenerator::visit(FuncDef &node) {
   function_returntype = node.return_type;
   llvmIR.NewFunction(function_now);
   now_label = 0;
-  current_reg_counter = 0; // Reset register counter
-  max_label = 0;           // 重置标签计数器
+  current_reg_counter = -1; // Reset register counter
+  //max_label = 0;            // 重置标签计数器
   // max_reg = -1;
   // llvmIR.NewBlock(function_now, now_label);
+  if(max_label!=0){
+    max_label++;
+  }
   llvmIR.NewBlock(function_now, max_label);
   now_label = max_label;
 
@@ -2429,6 +2413,25 @@ void IRgenerator::visit(WhileStmt &node) {
 
   // 6. 恢复外层状态
   now_label = end_label;
+  // before_label = old_before_label;
+  // cond_label = old_cond_label;
+  // body_label = end_label;
+  // end_label = old_end_label;
+  // loop_start_label = old_loop_start;
+  // loop_end_label = old_loop_end;
+
+  end_label_temp = end_label;
+  LLVMBlock B_end = llvmIR.GetBlock(function_now, end_label_temp);
+  end_label_temp = end_label;
+
+  if (end_label != max_label) {
+    int end_end_label = newLabel();
+    int end_end_label_temp = end_end_label;
+    llvmIR.NewBlock(function_now, end_end_label_temp);
+    end_end_label_temp = end_end_label;
+    now_label = end_end_label;
+    IRgenBRUnCond(B_end, end_end_label_temp);
+  }
   before_label = old_before_label;
   cond_label = old_cond_label;
   body_label = end_label;
@@ -2538,26 +2541,37 @@ void IRgenerator::visit(ReturnStmt &node) {
       if (ret_type == LLVMType::FLOAT32) {
         // IRgenRetImmFloat(getCurrentBlock(), ret_type, 0.0f);
         //  处理浮点返回类型：将整数常量转换为浮点数
-        int temp_reg = newReg();
+        //int temp_reg = newReg();
         LLVMBlock B = getCurrentBlock();
 
         // 创建临时寄存器存储整数常量
-        B->InsertInstruction(1, new ArithmeticInstruction(
-                                    ADD, LLVMType::I32, new ImmI32Operand(0),
-                                    new ImmI32Operand(ret_attr.IntInitVals[0]),
-                                    GetNewRegOperand(temp_reg)));
+        // B->InsertInstruction(1, new ArithmeticInstruction(
+        //                             ADD, LLVMType::I32, new ImmI32Operand(0),
+        //                             new ImmI32Operand(ret_attr.IntInitVals[0]),
+        //                             GetNewRegOperand(temp_reg)));
 
         // 将整数转换为浮点数
         int float_reg = newReg();
-        IRgenSitofp(B, temp_reg, float_reg);
+        //IRgenSitofp(B, temp_reg, float_reg);
+        IRgenSitofp(B, ret_reg, float_reg);
 
         // 返回浮点数
         IRgenRetReg(B, ret_type, float_reg);
       } else {
-        IRgenRetImmInt(getCurrentBlock(), ret_type, ret_attr.IntInitVals[0]);
+        //IRgenRetImmInt(getCurrentBlock(), ret_type, ret_attr.IntInitVals[0]);
+        IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
       }
     } else if (ret_attr.FloatInitVals.size() > 0) {
-      IRgenRetImmFloat(getCurrentBlock(), ret_type, ret_attr.FloatInitVals[0]);
+      if(ret_type == LLVMType::I32){
+        int temp_reg = newReg();
+        LLVMBlock B = getCurrentBlock();
+        IRgenFptosi(B, ret_reg, temp_reg);
+        IRgenRetReg(B, ret_type, temp_reg);
+      }
+      else{
+        IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
+      }
+      //IRgenRetImmFloat(getCurrentBlock(), ret_type, ret_attr.FloatInitVals[0]);
     } else if (node.expression.has_value() &&
                dynamic_cast<FunctionCall *>((*node.expression).get())) {
       IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);

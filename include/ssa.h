@@ -123,13 +123,6 @@ private:
    */
   std::string getCurrentVariableVersion(const std::string &var_name,
                                         const RenameInfo &rename_info);
-
-  /**
-   * 更新φ函数的参数
-   */
-  void updatePhiArguments(std::map<int, LLVMBlock> &blocks,
-                          const ControlFlowGraph &cfg,
-                          const RenameInfo &rename_info);
 };
 
 /**
@@ -191,20 +184,11 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
-  /**
-   * 代数化简
-   */
-  void algebraicSimplification(LLVMIR &ir);
-
-  /**
-   * φ函数简化
-   */
-  void simplifyPhiFunctions(LLVMIR &ir);
-
-  /**
-   * 无用代码消除
-   */
-  void eliminateUnreachableCode(LLVMIR &ir);
+    //除法优化
+    bool isPowerOfTwo(int n);
+    int log2_upper(int x);
+    std::tuple<long long, int, int> choose_multiplier(int d, int prec);
+    void optimizeDivision(LLVMIR &ir);
 
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
@@ -264,30 +248,6 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
-
-  // 新增的增强优化函数
-  bool simplifyArithmeticInstruction(Instruction &inst);
-  bool simplifyBitwiseInstruction(Instruction &inst);
-  bool isRedundantPhiFunction(const Instruction &inst);
-  void replaceRegisterUsages(std::map<int, LLVMBlock> &blocks, int old_reg,
-                             int new_reg);
-  bool tryConstantPropagation(Instruction &inst);
-  void replaceInstructionWithOperand(Instruction &inst, const Operand &operand);
-  void convertMultiplyByTwoToAdd(Instruction &inst, const Operand &operand);
-  bool isSameRegisterOperand(const Operand &op1, const Operand &op2);
-
-  // 代数化简辅助函数
-  bool isZero(const ConstantValue &const_val);
-  bool isOne(const ConstantValue &const_val);
-  bool isTwo(const ConstantValue &const_val);
-  bool isAllOnes(const ConstantValue &const_val);
-
-  // 不可达代码消除辅助函数
-  int getUnconditionalBranchTarget(const Instruction &inst);
-  std::pair<int, int> getConditionalBranchTargets(const Instruction &inst);
-
-  // 公共子表达式消除辅助函数
-  bool canPerformCSE(const Instruction &inst);
 };
 
 /**

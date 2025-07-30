@@ -51,6 +51,9 @@ enum LLVMIROpcode {
   BITOR = 39,
   FPEXT = 40,
   SELECT = 41,
+  ASHR = 42,
+  LSHR = 43,
+  TRUNC = 44
 };
 
 // @Operand datatypes
@@ -422,6 +425,14 @@ public:
       s << result->GetFullName() << " = " << opcode << " " << type << " "
         << format_float_operand(op1) << ", " << format_float_operand(op2)
         << "\n";
+      return;
+    } else if (opcode == ASHR) {
+      s << result->GetFullName() << " = ashr " << type << " "
+        << op1->GetFullName() << ", " << op2->GetFullName() << "\n";
+      return;
+    } else if (opcode == LSHR) {
+      s << result->GetFullName() << " = lshr " << type << " "
+        << op1->GetFullName() << ", " << op2->GetFullName() << "\n";
       return;
     }
     s << result->GetFullName() << " = " << opcode << " " << type << " "
@@ -1076,6 +1087,26 @@ public:
   void PrintIR(std::ostream &s) {
     // s << "zextinstruction print\n";
     s << result->GetFullName() << " = zext " << from_type << " "
+      << value->GetFullName() << " to " << to_type << "\n";
+  }
+};
+
+class TruncInstruction : public BasicInstruction {
+public:
+  LLVMType from_type;
+  LLVMType to_type;
+  Operand value;
+  Operand result;
+
+public:
+  TruncInstruction(LLVMType from_type, Operand value_for_cast, LLVMType to_type,
+                   Operand result_receiver)
+      : from_type(from_type), to_type(to_type), value(value_for_cast),
+        result(result_receiver) {
+    this->opcode = TRUNC;
+  }
+  void PrintIR(std::ostream &s) {
+    s << result->GetFullName() << " = trunc " << from_type << " "
       << value->GetFullName() << " to " << to_type << "\n";
   }
 };

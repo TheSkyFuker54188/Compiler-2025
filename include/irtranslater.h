@@ -59,6 +59,7 @@ public:
 private:
   // 当前正在翻译的函数
   std::string current_function;
+  LLVMType current_function_return_type = LLVMType::VOID_TYPE;
   // 栈帧管理
   std::map<std::string, StackFrameInfo>
       function_stack_frames;                     // 每个函数的栈帧信息
@@ -84,15 +85,30 @@ private:
   RiscvRegOperand *getSpReg();
   RiscvRegOperand *getRaReg();
   RiscvRegOperand *getA0Reg();
+  RiscvRegOperand *getZeroReg();
+  RiscvRegOperand *getFa0Reg();
 
   // 指令翻译
   void translateLoad(LoadInstruction *inst, RiscvBlock *block);
   void translateStore(StoreInstruction *inst, RiscvBlock *block);
-  void translateBranch(Instruction inst, RiscvBlock *block);
+  void translateBr_uncond(BrUncondInstruction *inst, RiscvBlock *block);
+  void translateBr_cond(BrCondInstruction *inst, RiscvBlock *block);
   void translateCall(CallInstruction *inst, RiscvBlock *block);
   void translateReturn(RetInstruction *inst, RiscvBlock *block);
   void translateIcmp(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIeq(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIne(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIgt(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIge(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIlt(IcmpInstruction *inst, RiscvBlock *block);
+  void translateIle(IcmpInstruction *inst, RiscvBlock *block);
   void translateFcmp(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFeq(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFne(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFgt(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFge(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFlt(FcmpInstruction *inst, RiscvBlock *block);
+  void translateFle(FcmpInstruction *inst, RiscvBlock *block);
   void translateAdd(Instruction inst, RiscvBlock *block);
   void translateSub(Instruction inst, RiscvBlock *block);
   void translateMul(Instruction inst, RiscvBlock *block);
@@ -106,9 +122,20 @@ private:
                               RiscvBlock *block);
   void translateFptosi(FptosiInstruction *inst, RiscvBlock *block);
   void translateSitofp(SitofpInstruction *inst, RiscvBlock *block);
+  void translateAnd(ArithmeticInstruction *inst, RiscvBlock *block);
+  void translateOr(ArithmeticInstruction *inst, RiscvBlock *block);
+  void translateZext(ZextInstruction *inst, RiscvBlock *block);
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
+  void insertAddiInstruction(RiscvOperand *dest, RiscvOperand *src, int imm,
+                             RiscvBlock *block, int pos = 1);
+  void insertLwInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
+  void insertLdInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
+  void insertSdInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
 
   // 栈帧管理方法
   void initFunctionStackFrame(const std::string &func_name);
