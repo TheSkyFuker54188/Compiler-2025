@@ -70,6 +70,9 @@ public:
   // 寄存器分配算法
   void preAllocateSpecialRegisters(const std::map<int, RiscvBlock*>& blocks);
   void performLinearScanAllocation();
+  void allocateByCategory(); // 新增：按类型分配
+  bool isLocalVariable(int virtual_reg); // 新增：判断是否为局部变量
+  void allocateRangesWithRegisters(std::vector<LiveRange*>& ranges, std::set<int>& reg_set); // 新增：为特定范围分配寄存器
   void insertSpillCode(std::map<int, RiscvBlock*>& blocks);
   
   // 指令重写
