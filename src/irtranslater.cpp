@@ -1446,6 +1446,20 @@ void Translator::translateCall(CallInstruction *inst, RiscvBlock *block) {
     return;
   auto call_inst = new RiscvCallInstruction(inst->GetFuncName());
   block->InsertInstruction(1, call_inst);
+  
+  // 处理函数返回值
+  if (inst->result && inst->ret_type != LLVMType::VOID_TYPE) {
+    auto result_operand = translateOperand(inst->result);
+    if (inst->ret_type == LLVMType::FLOAT32) {
+      // 浮点返回值从fa0移动到目标寄存器
+      auto fmv_inst = new RiscvFmvInstruction(result_operand, getFa0Reg());
+      block->InsertInstruction(1, fmv_inst);
+    } else {
+      // 整数返回值从a0移动到目标寄存器
+      auto mv_inst = new RiscvMvInstruction(result_operand, getA0Reg());
+      block->InsertInstruction(1, mv_inst);
+    }
+  }
 }
 
 void Translator::translateReturn(RetInstruction *inst, RiscvBlock *block) {

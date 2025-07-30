@@ -12,13 +12,20 @@ mkdir -p test_logs
 
 passed=0
 failed=0
+timeout=0
+
+# 设置超时时间(秒)
+TIMEOUT=30  # 5分钟
 
 for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./compiler "$file" -S -o "${file%.sy}.s" > /dev/null 2>&1; then
+        if timeout $TIMEOUT ./compiler "$file" -S -o "${file%.sy}.s" > /dev/null 2>&1; then
             echo "通过"
             ((passed++))
+        elif [ $? -eq 124 ]; then  # 124是timeout命令超时的返回值
+            echo "超时"
+            ((timeout++))
         else
             echo "失败"
             ((failed++))
@@ -32,9 +39,12 @@ done
 for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        if ./compiler "$file" -S -o "${file%.sy}.s" > /dev/null 2>&1; then
+        if timeout $TIMEOUT ./compiler "$file" -S -o "${file%.sy}.s" > /dev/null 2>&1; then
             echo "通过"
             ((passed++))
+        elif [ $? -eq 124 ]; then
+            echo "超时"
+            ((timeout++))
         else
             echo "失败"
             ((failed++))
