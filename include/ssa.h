@@ -57,12 +57,6 @@ private:
                               const ControlFlowGraph &cfg);
 
   /**
-   * 快速支配算法 - 适用于大型控制流图
-   */
-  DominanceInfo computeFastDominanceInfo(const std::map<int, LLVMBlock> &blocks,
-                                         const ControlFlowGraph &cfg);
-
-  /**
    * 计算控制流图的支配信息
    */
   DominanceInfo computeDominanceInfo(const std::map<int, LLVMBlock> &blocks);
@@ -97,20 +91,6 @@ private:
   void computeDominanceFrontier(DominanceInfo &info,
                                 const std::map<int, LLVMBlock> &blocks,
                                 const ControlFlowGraph &cfg);
-
-  /**
-   * 找到两个块的公共支配者（快速算法辅助函数）
-   */
-  int findCommonDominator(int b1, int b2,
-                          const std::unordered_map<int, int> &idom);
-
-  /**
-   * 简化的支配边界计算（快速算法辅助函数）
-   */
-  void
-  computeSimplifiedDominanceFrontier(DominanceInfo &info,
-                                     const std::map<int, LLVMBlock> &blocks,
-                                     const ControlFlowGraph &cfg);
 
   /**
    * 获取基本块的前驱
