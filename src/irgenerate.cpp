@@ -213,6 +213,7 @@ public:
   // std::map<std::string, int> name_to_reg;
   // IRgenTable() {}
   std::vector<std::map<std::string, int>> name_to_reg;
+  std::map<std::string, int> name_to_value;
   // std::map<std::string, int> global_name_to_reg;  // 新增全局变量映射
 
   IRgenTable() {
@@ -1473,6 +1474,9 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr) {
         return *val;
       }
     }
+    if(sym && irgen_table.name_to_value[lval->name]){
+      return irgen_table.name_to_value[lval->name];
+    }
   }
   return std::nullopt;
 }
@@ -1979,14 +1983,25 @@ void IRgenerator::visit(VarDef &node) {
             }
           }
         }
+        if(attr.dims.empty()){
+          if(current_type == BaseType::INT){
+            irgen_table.name_to_value[node.name]=attr.IntInitVals[0];
+          }
+          else{
+            irgen_table.name_to_value[node.name]=attr.FloatInitVals[0];
+          }
+        
+       }
       } else {
         // 单个初始化表达式
         auto init_val = evaluateGlobalInitializer(node.initializer->get());
         if (init_val.has_value()) {
           if (current_type == BaseType::INT) {
             attr.IntInitVals.push_back(static_cast<int>(init_val.value()));
+            irgen_table.name_to_value[node.name] = static_cast<int>(init_val.value());
           } else if (current_type == BaseType::FLOAT) {
             attr.FloatInitVals.push_back(static_cast<float>(init_val.value()));
+            irgen_table.name_to_value[node.name] = static_cast<float>(init_val.value());
           }
         }
       }
@@ -2052,8 +2067,10 @@ void IRgenerator::visit(VarDef &node) {
         // else
         if (init_attr.IntInitVals.size() > 0) {
           value = new ImmI32Operand(init_attr.IntInitVals[0]);
+          irgen_table.name_to_value[node.name] = init_attr.IntInitVals[0];
         } else if (init_attr.FloatInitVals.size() > 0) {
           value = new ImmF32Operand(init_attr.FloatInitVals[0]);
+          irgen_table.name_to_value[node.name] = init_attr.FloatInitVals[0];
         } else if (isPointer(init_reg)) {
           int value_reg = newReg();
           // IRgenLoad(getCurrentBlock(),
