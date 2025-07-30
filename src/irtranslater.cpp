@@ -1966,7 +1966,7 @@ void Translator::generateStackFrameProlog(RiscvBlock *entry_block) {
     return;
   auto s0 = getS0Reg();
   auto sp = getSpReg();
-  insertAddiInstruction(s0, sp, -current_stack_frame->total_frame_size,
+  insertAddiInstruction(s0, sp, current_stack_frame->total_frame_size,
                         entry_block, 0);
 
   auto ra = getRaReg();
