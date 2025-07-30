@@ -15,7 +15,7 @@ QEMU_LD_PREFIX=/usr/riscv64-linux-gnu
 cleanup() {
     echo -e "\n测试被中断，正在清理..."
     pkill -f "./compiler" 2>/dev/null
-    pkill -f "qemu-riscv64" 2>/dev/null
+    pkill -f "qemu-riscv64-static" 2>/dev/null
     rm -f tests/functional/*.o tests/functional/*.exe
     rm -f tests/h_functional/*.o tests/h_functional/*.exe
     echo "清理完成"
@@ -24,15 +24,15 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # 检查qemu-riscv64是否存在
-if ! command -v qemu-riscv64 &> /dev/null; then
-    echo "错误: 'qemu-riscv64' 未找到。"
+if ! command -v qemu-riscv64-static &> /dev/null; then
+    echo "错误: 'qemu-riscv64-static' 未找到。"
     echo "请确保QEMU已安装并且在您的PATH中。"
     exit 1
 fi
 
-# 检查riscv64-unknown-elf-gcc是否存在
-if ! command -v riscv64-unknown-elf-gcc &> /dev/null; then
-    echo "错误: 'riscv64-unknown-elf-gcc' 未找到。"
+# 检查riscv64-linux-gnu-gcc是否存在
+if ! command -v riscv64-linux-gnu-gcc &> /dev/null; then
+    echo "错误: 'riscv64-linux-gnu-gcc' 未找到。"
     echo "请确保RISC-V GCC工具链已安装并且在您的PATH中。"
     exit 1
 fi
@@ -76,7 +76,7 @@ run_tests_in_dir() {
         fi
 
         # 2. 链接 .s -> .exe
-        riscv64-unknown-elf-gcc -o "$exe_file" "$s_file" -L./lib -lsysy_riscv
+        riscv64-linux-gnu-gcc -o "$exe_file" "$s_file" -L./lib -lsysy_riscv
         if [ $? -ne 0 ]; then
             echo -e "\e[31m链接失败\e[0m"
             ((failed++))
@@ -84,7 +84,7 @@ run_tests_in_dir() {
         fi
 
         # 3. 运行 .exe 并获取退出码
-        qemu-riscv64 -L "$QEMU_LD_PREFIX" "$exe_file"
+        qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file"
         actual_exit_code=$?
 
         # 4. 读取期望退出码
