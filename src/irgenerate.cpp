@@ -2127,7 +2127,15 @@ void IRgenerator::visit(FuncDef &node) {
   // Symbol table setup
   std::vector<std::shared_ptr<Type>> param_types;
   for (const auto &param : node.parameters) {
-    param_types.push_back(makeBasicType(param->type));
+    if (param->is_array_pointer || !param->array_dimensions.empty()) {
+      // Array parameter decays to a pointer
+      auto element_type = makeBasicType(param->type);
+      // Use empty dimensions to indicate a pointer type
+      param_types.push_back(makeArrayType(element_type, {}));
+    } else {
+      // Scalar parameter
+      param_types.push_back(makeBasicType(param->type));
+    }
   }
   auto func_type =
       makeFunctionType(makeBasicType(node.return_type), param_types);
@@ -2184,6 +2192,8 @@ void IRgenerator::visit(FuncDef &node) {
     node.body->accept(*this);
   }
   AddNoReturnBlock();
+  max_reg_map[function_now] = current_reg_counter;
+  max_label_map[function_now] = max_label;
   function_now = nullptr;
   RegOperandMap.clear();        // 清除函数寄存器映射
   LabelOperandMap.clear();      // 清除标签映射
@@ -3548,11 +3558,11 @@ void IRgenerator::visit(FunctionCall &node) {
   // 准备参数
   std::vector<std::pair<enum LLVMType, Operand>> args;
   for (size_t i = 0; i < node.arguments.size(); i++) {
-    if (param_types[i] == BaseType::STRING) {
-      require_address = true; // 如果是指针类型，设置为需要地址
-    } else {
-      require_address = false;
-    }
+    // if (param_types[i] == BaseType::STRING) {
+    //   require_address = true; // 如果是指针类型，设置为需要地址
+    // } else {
+    //   require_address = false;
+    // }
     require_address =
         (i < is_pointer_param.size()) ? is_pointer_param[i] : false;
     // require_address = false;
@@ -3564,7 +3574,9 @@ void IRgenerator::visit(FunctionCall &node) {
     BaseType expected_type =
         (i < param_types.size()) ? param_types[i] : arg_attr.type;
     LLVMType llvm_type = Type2LLvm.at(expected_type);
-
+    if(require_address){
+      llvm_type=PTR;
+    }
     LLVMType arg_type;
     Operand arg_operand;
     if (require_address) {
