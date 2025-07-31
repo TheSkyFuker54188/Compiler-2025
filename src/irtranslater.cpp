@@ -2275,6 +2275,6 @@ void Translator::insertSwInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
   } else {
     // 否则使用SW指令
     auto sw_inst = new RiscvSwInstruction(dest, addr);
-    block->InsertInstruction(0, sw_inst);
+    block->InsertInstruction(1, sw_inst);
   }
 }
