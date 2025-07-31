@@ -140,8 +140,8 @@ void RegisterAllocator::allocateRegistersForFunction(
     }
   
   } catch (const std::exception& e) {
-    std::cerr << "Error in register allocation for function " << func_name 
-              << ": " << e.what() << std::endl;
+    // std::cerr << "Error in register allocation for function " << func_name 
+    //           << ": " << e.what() << std::endl;
     throw;
   }
 }
@@ -384,7 +384,7 @@ void RegisterAllocator::computeLiveRanges(
         const auto &inst = block->instruction_list[i];
         
         if (!inst) {
-          std::cerr << "错误: 基本块 " << block_id << " 中第 " << i << " 条指令为空!" << std::endl;
+          // std::cerr << "错误: 基本块 " << block_id << " 中第 " << i << " 条指令为空!" << std::endl;
           continue;
         }
         
@@ -459,7 +459,7 @@ void RegisterAllocator::computeLiveRanges(
       const auto &inst = block->instruction_list[i];
       
       if (!inst) {
-        std::cerr << "错误: 在生存期计算中发现空指令!" << std::endl;
+        // std::cerr << "错误: 在生存期计算中发现空指令!" << std::endl;
         position++;
         continue;
       }
@@ -553,7 +553,7 @@ RegisterAllocator::extractVirtualRegisters(RiscvInstruction *inst) {
   std::vector<int> virtuals;
 
   if (!inst) {
-    std::cerr << "错误: 空指令指针!" << std::endl;
+    // std::cerr << "错误: 空指令指针!" << std::endl;
     return virtuals;
   }
 
@@ -891,7 +891,7 @@ bool RegisterAllocator::usesVirtualRegister(RiscvInstruction* inst, int virtual_
 // 辅助函数：检查指令是否定义虚拟寄存器
 bool RegisterAllocator::definesVirtualRegister(RiscvInstruction* inst, int virtual_reg) {
   if (!inst) {
-    std::cerr << "错误: definesVirtualRegister 收到空指令指针!" << std::endl;
+    // std::cerr << "错误: definesVirtualRegister 收到空指令指针!" << std::endl;
     return false;
   }
   
@@ -1073,24 +1073,24 @@ int RegisterAllocator::getSpillOffset(int virtual_reg) {
 }
 
 void RegisterAllocator::printAllocationResult() {
-  std::cout << "=== 寄存器分配结果 ===" << std::endl;
-  std::cout << "虚拟寄存器到物理寄存器映射:" << std::endl;
+  // std::cout << "=== 寄存器分配结果 ===" << std::endl;
+  // std::cout << "虚拟寄存器到物理寄存器映射:" << std::endl;
   for (const auto &pair : virtual_to_physical) {
-    std::cout << "  %r" << pair.first << " -> x" << pair.second << std::endl;
+    // std::cout << "  %r" << pair.first << " -> x" << pair.second << std::endl;
   }
   
-  std::cout << "溢出的虚拟寄存器:" << std::endl;
+  // std::cout << "溢出的虚拟寄存器:" << std::endl;
   for (int vreg : spilled_virtuals) {
     auto slot_it = spill_slots.find(vreg);
     if (slot_it != spill_slots.end()) {
-      std::cout << "  %r" << vreg << " -> 溢出槽 " << slot_it->second << std::endl;
+      // std::cout << "  %r" << vreg << " -> 溢出槽 " << slot_it->second << std::endl;
     }
   }
   
-  std::cout << "生存期信息:" << std::endl;
+  // std::cout << "生存期信息:" << std::endl;
   for (const auto &range : live_ranges) {
-    std::cout << "  %r" << range.virtual_reg << ": [" << range.start_pos 
-              << ", " << range.end_pos << "]" << std::endl;
+    // std::cout << "  %r" << range.virtual_reg << ": [" << range.start_pos 
+    //           << ", " << range.end_pos << "]" << std::endl;
   }
 }
 
@@ -1101,7 +1101,7 @@ void RegisterAllocator::printLiveRanges() {
 
 // 集成接口
 void RegisterAllocationPass::applyToTranslator(Translator &translator) {
-  std::cout << "\n=== 开始寄存器分配阶段 ===" << std::endl;
+  // std::cout << "\n=== 开始寄存器分配阶段 ===" << std::endl;
 
   RegisterAllocator allocator;
 
@@ -1110,18 +1110,18 @@ void RegisterAllocationPass::applyToTranslator(Translator &translator) {
     const std::string &func_name = func_pair.first;
     auto &blocks = func_pair.second;
 
-    std::cout << "为函数 " << func_name << " 分配寄存器..." << std::endl;
+    // std::cout << "为函数 " << func_name << " 分配寄存器..." << std::endl;
 
     // 获取函数的栈帧信息
     const StackFrameInfo *frame_info = translator.getFunctionStackFrame(func_name);
     if (frame_info) {
       allocator.allocateRegistersForFunction(func_name, blocks, const_cast<StackFrameInfo*>(frame_info));
     } else {
-      std::cerr << "Warning: No stack frame info found for function: " << func_name << std::endl;
+      // std::cerr << "Warning: No stack frame info found for function: " << func_name << std::endl;
     }
   }
 
-  std::cout << "寄存器分配完成！" << std::endl;
+  // std::cout << "寄存器分配完成！" << std::endl;
 }
 
 void RegisterAllocator::rewriteInstructions(
@@ -1335,14 +1335,14 @@ void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand, const std::map
       auto it_phys = virtual_to_physical.find(virtual_reg);
       if (it_phys != virtual_to_physical.end()) {
         // 分配到物理寄存器，使用负数表示物理寄存器
-        std::cout << "重写 %r" << virtual_reg << " -> x" << it_phys->second << " (负数:" << (-it_phys->second) << ")" << std::endl;
+        // std::cout << "重写 %r" << virtual_reg << " -> x" << it_phys->second << " (负数:" << (-it_phys->second) << ")" << std::endl;
         // delete operand;
         operand = new RiscvRegOperand(-it_phys->second);
       } else if (isSpilled(virtual_reg)) {
         // 溢出，使用临时物理寄存器
         auto it_temp = vreg_to_temp_phys_reg.find(virtual_reg);
         if (it_temp != vreg_to_temp_phys_reg.end()) {
-          std::cout << "重写溢出 %r" << virtual_reg << " -> 临时寄存器 x" << (-it_temp->second) << std::endl;
+          // std::cout << "重写溢出 %r" << virtual_reg << " -> 临时寄存器 x" << (-it_temp->second) << std::endl;
           // delete operand;
           operand = new RiscvRegOperand(it_temp->second);
         }
