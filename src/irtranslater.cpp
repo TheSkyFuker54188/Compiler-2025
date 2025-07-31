@@ -369,8 +369,7 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
       }
     }
     auto riscv_inst = new RiscvPtrOperand(-offset, s0);
-    auto riscv_store_inst = new RiscvSwInstruction(rs, riscv_inst);
-    block->InsertInstruction(1, riscv_store_inst);
+    insertSwInstruction(rs, riscv_inst, block);
   }
 }
 
@@ -2256,5 +2255,26 @@ void Translator::insertSdInstruction(RiscvOperand *src, RiscvPtrOperand *addr,
     // 否则使用SD指令
     auto sd_inst = new RiscvSdInstruction(src, addr);
     block->InsertInstruction(0, sd_inst);
+  }
+}
+
+void Translator::insertSwInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                                     RiscvBlock *block) {
+  int offset = addr->offset;
+  if (offset < -2048 || offset > 2047) {
+    // 如果偏移量超出范围，使用LI指令加载到寄存器
+    auto list_reg = createVirtualReg();
+    auto li_inst = new RiscvLiInstruction(list_reg, offset);
+    block->InsertInstruction(1, li_inst);
+    auto add_reg = createVirtualReg();
+    auto addi_inst = new RiscvAddInstruction(add_reg, addr->base_reg, list_reg);
+    block->InsertInstruction(1, addi_inst);
+    auto ptr = new RiscvPtrOperand(0, add_reg); // 创建新的指针操作数
+    auto sw_inst = new RiscvSwInstruction(dest, ptr);
+    block->InsertInstruction(1, sw_inst);
+  } else {
+    // 否则使用SW指令
+    auto sw_inst = new RiscvSwInstruction(dest, addr);
+    block->InsertInstruction(0, sw_inst);
   }
 }

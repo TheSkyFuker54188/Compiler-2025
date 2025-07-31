@@ -140,6 +140,8 @@ private:
                            RiscvBlock *block);
   void insertSdInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
                            RiscvBlock *block);
+  void insertSwInstruction(RiscvOperand *dest, RiscvPtrOperand *addr,
+                           RiscvBlock *block);
 
   // 栈帧管理方法
   void initFunctionStackFrame(const std::string &func_name);

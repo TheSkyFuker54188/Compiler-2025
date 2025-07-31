@@ -576,7 +576,7 @@ public:
       else if (var_type == "f32" && !init_float_vals.empty())
         s << "  .word " << Float_to_Byte(init_float_vals[0]) << "\n";
       else
-        s << "  .zero 4";
+        s << "  .zero 4\n";
     } else {
       if (var_type == "i32" && !init_vals.empty()) {
         for (size_t i = 0; i < init_vals.size(); ++i)
