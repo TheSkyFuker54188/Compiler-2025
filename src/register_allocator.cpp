@@ -720,6 +720,30 @@ RegisterAllocator::extractVirtualRegisters(RiscvInstruction *inst) {
     extractFromOperand(fle_inst->rs2);
   } else if (auto *j_inst = dynamic_cast<RiscvJInstruction *>(inst)) {
     // J: unconditional jump, no registers to extract
+  } else if (auto *srl_inst = dynamic_cast<RiscvSrlInstruction *>(inst)) {
+    extractFromOperand(srl_inst->rd);
+    extractFromOperand(srl_inst->rs1);
+    extractFromOperand(srl_inst->rs2);
+  } else if (auto *srli_inst = dynamic_cast<RiscvSrliInstruction *>(inst)) {
+    extractFromOperand(srli_inst->rd);
+    extractFromOperand(srli_inst->rs1);
+    // shamt不需要提取
+  } else if (auto *sra_inst = dynamic_cast<RiscvSraInstruction *>(inst)) {
+    extractFromOperand(sra_inst->rd);
+    extractFromOperand(sra_inst->rs1);
+    extractFromOperand(sra_inst->rs2);
+  } else if (auto *srai_inst = dynamic_cast<RiscvSraiInstruction *>(inst)) {
+    extractFromOperand(srai_inst->rd);
+    extractFromOperand(srai_inst->rs1);
+    // shamt不需要提取
+  } else if (auto *slli_inst = dynamic_cast<RiscvSlliInstruction *>(inst)) {
+    extractFromOperand(slli_inst->rd);
+    extractFromOperand(slli_inst->rs1);
+    // shamt不需要提取
+  } else if (auto *global_var_inst = dynamic_cast<RiscvGlobalVarInstruction *>(inst)) {
+    // 全局变量定义指令，通常不涉及虚拟寄存器
+  } else if (auto *string_const_inst = dynamic_cast<RiscvStringConstInstruction *>(inst)) {
+    // 字符串常量定义指令，通常不涉及虚拟寄存器
   }
 
   return virtuals;
@@ -1049,6 +1073,32 @@ bool RegisterAllocator::definesVirtualRegister(RiscvInstruction* inst, int virtu
   } else if (auto *j_inst = dynamic_cast<RiscvJInstruction *>(inst)) {
     // J指令不定义寄存器
     return false;
+  } else if (auto *srl_inst = dynamic_cast<RiscvSrlInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(srl_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *srli_inst = dynamic_cast<RiscvSrliInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(srli_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *sra_inst = dynamic_cast<RiscvSraInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(sra_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *srai_inst = dynamic_cast<RiscvSraiInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(srai_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *slli_inst = dynamic_cast<RiscvSlliInstruction *>(inst)) {
+    if (auto *rd_reg = dynamic_cast<RiscvRegOperand *>(slli_inst->rd)) {
+      return rd_reg->GetRegNo() == virtual_reg;
+    }
+  } else if (auto *global_var_inst = dynamic_cast<RiscvGlobalVarInstruction *>(inst)) {
+    // 全局变量定义指令不定义寄存器
+    return false;
+  } else if (auto *string_const_inst = dynamic_cast<RiscvStringConstInstruction *>(inst)) {
+    // 字符串常量定义指令不定义寄存器
+    return false;
   }
   return false;
 }
@@ -1269,7 +1319,25 @@ void RegisterAllocator::rewriteInstructions(
         operands_to_rewrite.push_back(&fle_inst->rd);
         operands_to_rewrite.push_back(&fle_inst->rs1);
         operands_to_rewrite.push_back(&fle_inst->rs2);
+      } else if (auto *srl_inst = dynamic_cast<RiscvSrlInstruction *>(inst)) {
+        operands_to_rewrite.push_back(&srl_inst->rd);
+        operands_to_rewrite.push_back(&srl_inst->rs1);
+        operands_to_rewrite.push_back(&srl_inst->rs2);
+      } else if (auto *srli_inst = dynamic_cast<RiscvSrliInstruction *>(inst)) {
+        operands_to_rewrite.push_back(&srli_inst->rd);
+        operands_to_rewrite.push_back(&srli_inst->rs1);
+      } else if (auto *sra_inst = dynamic_cast<RiscvSraInstruction *>(inst)) {
+        operands_to_rewrite.push_back(&sra_inst->rd);
+        operands_to_rewrite.push_back(&sra_inst->rs1);
+        operands_to_rewrite.push_back(&sra_inst->rs2);
+      } else if (auto *srai_inst = dynamic_cast<RiscvSraiInstruction *>(inst)) {
+        operands_to_rewrite.push_back(&srai_inst->rd);
+        operands_to_rewrite.push_back(&srai_inst->rs1);
+      } else if (auto *slli_inst = dynamic_cast<RiscvSlliInstruction *>(inst)) {
+        operands_to_rewrite.push_back(&slli_inst->rd);
+        operands_to_rewrite.push_back(&slli_inst->rs1);
       }
+      // 注意：RiscvGlobalVarInstruction 和 RiscvStringConstInstruction 通常不需要重写操作数
 
       std::vector<int> used_spilled_vregs;
       int defined_spilled_vreg = -1;
