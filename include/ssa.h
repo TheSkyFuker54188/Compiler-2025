@@ -23,26 +23,37 @@ public:
    */
   LLVMIR transform(const LLVMIR &ir);
 
-private:
-  // 支配边界计算
+  // ====== 公开数据结构声明 ======
   struct DominanceInfo {
-    std::unordered_map<int, std::unordered_set<int>> dominators;   // 支配关系
-    std::unordered_map<int, std::unordered_set<int>> dom_frontier; // 支配边界
-    std::unordered_map<int, int> idom;                             // 直接支配者
+    std::unordered_map<int, std::unordered_set<int>> dominators;
+    std::unordered_map<int, std::unordered_set<int>> dom_frontier;
+    std::unordered_map<int, int> idom;
   };
 
-  // 控制流图
   struct ControlFlowGraph {
-    std::unordered_map<int, std::vector<int>> predecessors; // 前驱
-    std::unordered_map<int, std::vector<int>> successors;   // 后继
+    std::unordered_map<int, std::vector<int>> predecessors;
+    std::unordered_map<int, std::vector<int>> successors;
   };
 
-  // 变量重命名信息
   struct RenameInfo {
-    std::unordered_map<std::string, std::vector<int>> var_stack; // 变量版本栈
-    std::unordered_map<std::string, int> var_counter; // 变量版本计数器
+    std::unordered_map<std::string, std::vector<int>> var_stack;
+    std::unordered_map<std::string, int> var_counter;
   };
 
+  // 如果需要，补充如下辅助函数声明（如你的实现文件用到了）：
+  DominanceInfo computeFastDominanceInfo(const std::map<int, LLVMBlock> &blocks,
+                                         const ControlFlowGraph &cfg);
+  void updatePhiArguments(std::map<int, LLVMBlock> &blocks,
+                          const ControlFlowGraph &cfg,
+                          const RenameInfo &rename_info);
+  int findCommonDominator(int a, int b,
+                          const std::unordered_map<int, int> &idom);
+  void
+  computeSimplifiedDominanceFrontier(DominanceInfo &info,
+                                     const std::map<int, LLVMBlock> &blocks,
+                                     const ControlFlowGraph &cfg);
+
+private:
   /**
    * 构建控制流图
    */
@@ -221,11 +232,11 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
-    //除法优化
-    bool isPowerOfTwo(int n);
-    int log2_upper(int x);
-    std::tuple<long long, int, int> choose_multiplier(int d, int prec);
-    void optimizeDivision(LLVMIR &ir);
+  // 除法优化
+  bool isPowerOfTwo(int n);
+  int log2_upper(int x);
+  std::tuple<long long, int, int> choose_multiplier(int d, int prec);
+  void optimizeDivision(LLVMIR &ir);
 
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
@@ -248,7 +259,6 @@ private:
   void replaceWithExistingResult(Instruction &inst, int existing_reg);
   int getInstructionResultRegister(const Instruction &inst);
 
-  // 新增的具体实现函数
   int getRegisterFromOperand(const Operand operand);
   ConstantValue getConstantFromOperand(const Operand operand);
   void replaceOperandWithConstant(Operand &operand,
@@ -285,8 +295,6 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
-<<<<<<< HEAD
-=======
 
   // 新增的增强优化函数
   bool simplifyArithmeticInstruction(Instruction &inst);
@@ -312,43 +320,19 @@ private:
   // 公共子表达式消除辅助函数
   bool canPerformCSE(const Instruction &inst);
 
-  // ============================================================================
-  // 缺失函数声明 - 代数化简相关
-  // ============================================================================
-
   void replaceWithIdentity(Instruction &inst, const Operand &source);
   void replaceWithConstant(Instruction &inst, const ConstantValue &constant);
   bool operandEquals(const Operand &op1, const Operand &op2);
 
-  // ============================================================================
-  // 缺失函数声明 - 公共子表达式消除相关
-  // ============================================================================
-
   bool isPureFunctionalInstruction(const Instruction &inst);
   void replaceInstructionWithCopy(Instruction &inst, int existing_reg);
 
-  // ============================================================================
-  // 缺失函数声明 - 除法优化相关
-  // ============================================================================
-
   RegOperand *GetNewRegOperand(int reg_num);
-  bool isPowerOfTwo(int n);
-  int log2_upper(int x);
-  int log2_floor(int x);
-  std::tuple<long long, int, int> choose_multiplier(int d, int precision);
-
-  // ============================================================================
-  // 缺失函数声明 - 强度削减相关
-  // ============================================================================
 
   void replaceWithShift(Instruction &inst, const Operand &operand,
                         int shift_amount, LLVMIROpcode opcode);
   void replaceWithBitwise(Instruction &inst, const Operand &operand, int mask,
                           LLVMIROpcode opcode);
-
-  // ============================================================================
-  // 缺失函数声明 - 循环不变量外提相关
-  // ============================================================================
 
   bool isLoopInvariant(
       const Instruction &inst, const LoopInfo &loop,
@@ -360,15 +344,7 @@ private:
       const std::unordered_set<Instruction> &instructions, int preheader_block,
       std::map<int, LLVMBlock> &blocks);
 
-  // ============================================================================
-  // 缺失函数声明 - 条件常量传播相关
-  // ============================================================================
-
   bool constantEquals(const ConstantValue &a, const ConstantValue &b);
-
-  // ============================================================================
-  // 缺失函数声明 - 全局值编号相关
-  // ============================================================================
 
   std::string generateCanonicalExpression(const Instruction &inst);
   bool isCommutativeOperation(int opcode);
@@ -377,11 +353,6 @@ private:
   // ============================================================================
   // 高级优化算法声明
   // ============================================================================
-
-  /**
-   * 除法优化
-   */
-  void optimizeDivision(LLVMIR &ir);
 
   /**
    * 强度削减
@@ -413,9 +384,11 @@ private:
    */
   void functionInlining(LLVMIR &ir);
 
-  // ============================================================================
-  // 循环分析相关数据结构和函数
-  // ============================================================================
+  void algebraicSimplification(LLVMIR &ir);
+  void simplifyPhiFunctions(LLVMIR &ir);
+  void eliminateUnreachableCode(LLVMIR &ir);
+
+  int log2_floor(int x);
 
   // 循环分析和识别
   std::vector<LoopInfo> detectLoops(const std::map<int, LLVMBlock> &blocks);
@@ -468,7 +441,6 @@ private:
   std::vector<int> getBranchTargets(const Instruction &inst);
   bool dominates(int dominator, int dominated,
                  const std::map<int, LLVMBlock> &blocks);
->>>>>>> feature/old_pig
 };
 
 /**
