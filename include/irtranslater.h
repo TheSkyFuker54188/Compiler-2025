@@ -52,7 +52,7 @@ public:
 
 class Translator {
 public:
-  Translator();
+  Translator() = default; // 新增默认构造函数
   Translator(std::string file) { riscv.file_name = std::move(file); }
   Riscv riscv;
   void translate(const LLVMIR &llvmir);
