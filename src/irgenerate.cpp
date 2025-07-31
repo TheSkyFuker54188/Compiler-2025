@@ -1883,10 +1883,10 @@ void IRgenerator::visit(ConstDef &node) {
           total_elements *= d;
 
         // 填充初始化值
-        for (size_t i = start_index + 1; i <= total_elements; i++) {
+        for (size_t i = start_index; i < total_elements; i++) {
           LLVMType type = Type2LLvm.at(attr.type);
           // 计算当前元素的线性位置
-          size_t pos = start_index;
+          size_t pos = i;
           std::vector<Operand> indices;
           indices.push_back(new ImmI32Operand(0)); // 数组基址
 
@@ -2157,7 +2157,7 @@ void IRgenerator::visit(VarDef &node) {
         for (auto d : dims)
           total_elements *= d;
 
-        for (size_t i = start_index + 1; i <= total_elements; i++) {
+        for (size_t i = start_index; i < total_elements; i++) {
           LLVMType type = Type2LLvm.at(attr.type);
           // 计算当前元素的线性位置
           size_t pos = i;
