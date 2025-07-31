@@ -51,6 +51,9 @@ enum LLVMIROpcode {
   BITOR = 39,
   FPEXT = 40,
   SELECT = 41,
+  ASHR = 42,  // 算术右移
+  LSHR = 43,  // 逻辑右移
+  TRUNC = 44, // 截断
 };
 
 // @Operand datatypes
@@ -1076,6 +1079,26 @@ public:
   void PrintIR(std::ostream &s) {
     // s << "zextinstruction print\n";
     s << result->GetFullName() << " = zext " << from_type << " "
+      << value->GetFullName() << " to " << to_type << "\n";
+  }
+};
+
+class TruncInstruction : public BasicInstruction {
+public:
+  LLVMType from_type;
+  LLVMType to_type;
+  Operand result;
+  Operand value;
+
+public:
+  TruncInstruction(LLVMType from_type, Operand value_for_cast, LLVMType to_type,
+                   Operand result_receiver)
+      : from_type(from_type), to_type(to_type), result(result_receiver),
+        value(value_for_cast) {
+    this->opcode = TRUNC;
+  }
+  void PrintIR(std::ostream &s) {
+    s << result->GetFullName() << " = trunc " << from_type << " "
       << value->GetFullName() << " to " << to_type << "\n";
   }
 };
