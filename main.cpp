@@ -206,7 +206,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
   // 汇编生成
   if (generate_asm) {
     if (verbose)
-      std::cout << "7. 汇编生成..." << std::endl;
+      std::cout << "7. IR到汇编翻译..." << std::endl;
 
     try {
       // 确定输出文件名
@@ -240,12 +240,19 @@ bool compileFile(const std::string &filename, bool verbose = true,
       Translator translator(asm_filename);
       translator.translate(ir_for_asm);
 
+      // 8. 寄存器分配
+      if (verbose)
+        std::cout << "8. 寄存器分配..." << std::endl;
+      RegisterAllocationPass::applyToTranslator(translator);
+      if (verbose)
+        std::cout << "寄存器分配完成" << std::endl;
+
       std::ofstream asm_out(asm_filename);
       if (asm_out.is_open()) {
         translator.riscv.print(asm_out);
         asm_out.close();
         if (verbose)
-          std::cout << "汇编代码已输出到: " << asm_filename << std::endl;
+          std::cout << "9. 汇编代码已输出到: " << asm_filename << std::endl;
       } else {
         std::cerr << "无法创建汇编输出文件: " << asm_filename << std::endl;
         return false;
