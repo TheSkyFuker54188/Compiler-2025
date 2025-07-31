@@ -1679,6 +1679,9 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
       return;
     }
   }
+  auto slli_inst = new RiscvSlliInstruction(offset_reg, offset_reg,
+                                            2); // 假设每个元素大小为4字节
+  block->InsertInstruction(1, slli_inst);
   if (inst->GetPtrVal()->GetOperandType() == BasicOperand::GLOBAL) {
     auto ptrval = dynamic_cast<GlobalOperand *>(inst->GetPtrVal());
     auto global_op = new RiscvGlobalOperand(ptrval->GetName());
@@ -2254,3 +2257,4 @@ void Translator::insertSdInstruction(RiscvOperand *src, RiscvPtrOperand *addr,
     auto sd_inst = new RiscvSdInstruction(src, addr);
     block->InsertInstruction(0, sd_inst);
   }
+}

@@ -622,7 +622,7 @@ public:
   }
   void AddArg(RiscvOperand *arg) { args.push_back(arg); }
   void PrintIR(std::ostream &s) override {
-    s << "    call  " << function_name << "\n";
+    s << "  call  " << function_name << "\n";
   }
 };
 

@@ -56,7 +56,6 @@ public:
   Translator(std::string file) { riscv.file_name = std::move(file); }
   Riscv riscv;
   void translate(const LLVMIR &llvmir);
-  std::string translateToAssembly(const CompUnit &root);
 
 private:
   // 当前正在翻译的函数
