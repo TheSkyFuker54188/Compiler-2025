@@ -14,8 +14,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <future>
-#include <chrono>
 
 // 外部变量声明
 extern std::unique_ptr<CompUnit> root;
@@ -89,60 +87,13 @@ bool compileFile(const std::string &filename, bool verbose = true,
     if (verbose)
       std::cout << "3. 语义分析..." << std::endl;
 
-  // 阶段4: SSA优化
-  if (semantic_success && generate_ir && optimize) {
-    if (verbose)
-      std::cout << "阶段4: SSA优化..." << std::endl;
-    SSAOptimizer optimizer;
-    ir = optimizer.optimize(ir);
-    if (verbose)
-      std::cout << "SSA优化完成!" << std::endl;
-  }
-
-  if (semantic_success && generate_asm) {
-    if (verbose)
-      std::cout << "阶段5: RISC-V汇编代码生成..." << std::endl;
-    Translator translator(output_file);
-    // 执行翻译
-    translator.translate(ir);
-
-    // 寄存器分配带超时机制（60秒）
-    bool register_allocation_success = false;
+    SemanticAnalyzer analyzer;
     try {
-      auto future = std::async(std::launch::async, [&translator]() {
-        RegisterAllocationPass::applyToTranslator(translator);
-      });
-      
-      auto status = future.wait_for(std::chrono::seconds(60));
-      if (status == std::future_status::ready) {
-        future.get(); // 获取结果，如果有异常会重新抛出
-        register_allocation_success = true;
-        if (verbose)
-          std::cout << "寄存器分配完成!" << std::endl;
-      } else {
-        if (verbose)
-          std::cout << "警告: 寄存器分配超时，跳过此步骤" << std::endl;
-        register_allocation_success = false;
-      }
-    } catch (const std::exception& e) {
+      root->accept(analyzer);
       if (verbose)
-        std::cout << "警告: 寄存器分配失败，跳过此步骤: " << e.what() << std::endl;
-      register_allocation_success = false;
-    }
-
-    // 输出汇编代码到文件
-    std::ofstream asm_file(output_file);
-    if (asm_file.is_open()) {
-      translator.riscv.print(asm_file);
-      asm_file.close();
-      if (verbose) {
-        std::cout << "RISC-V汇编代码已生成到 " << output_file << std::endl;
-        if (!register_allocation_success) {
-          std::cout << "注意: 汇编代码可能包含虚拟寄存器（寄存器分配未完成）" << std::endl;
-        }
-      }
-    } else {
-      std::cerr << "无法创建汇编文件 " << output_file << std::endl;
+        std::cout << "语义分析完成" << std::endl;
+    } catch (const std::exception &e) {
+      std::cerr << "语义分析失败: " << e.what() << std::endl;
       return false;
     }
   }
