@@ -630,7 +630,7 @@ void Translator::translateIgt(IcmpInstruction *inst, RiscvBlock *block) {
       auto li_inst = new RiscvLiInstruction(rs2, imm->GetIntImmVal());
       block->InsertInstruction(1, li_inst);
     }
-    auto slt_inst = new RiscvSltInstruction(result, rs1, rs2);
+    auto slt_inst = new RiscvSltInstruction(result, rs2, rs1);
     block->InsertInstruction(1, slt_inst);
   } else {
     // 否则使用SLT指令
