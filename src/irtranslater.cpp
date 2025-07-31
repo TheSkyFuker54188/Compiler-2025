@@ -1996,7 +1996,7 @@ RiscvRegOperand *Translator::getRaReg() {
 }
 
 RiscvRegOperand *Translator::getA0Reg() {
-  return new RiscvRegOperand(-11); // a0寄存器作为帧指针
+  return new RiscvRegOperand(-10); // a0寄存器 (x10)
 }
 
 RiscvRegOperand *Translator::getZeroReg() {
