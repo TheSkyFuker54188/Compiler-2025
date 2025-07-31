@@ -1474,7 +1474,7 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr) {
         return *val;
       }
     }
-    if(sym && irgen_table.name_to_value[lval->name]){
+    if (sym && irgen_table.name_to_value[lval->name]) {
       return irgen_table.name_to_value[lval->name];
     }
   }
@@ -1876,6 +1876,54 @@ void IRgenerator::visit(ConstDef &node) {
             0,          // 从第一个维度开始
             start_index // 当前索引位置
         );
+
+        // 计算总元素数量
+        size_t total_elements = 1;
+        for (auto d : attr.dims)
+          total_elements *= d;
+
+        // 填充初始化值
+        for (size_t i = start_index + 1; i <= total_elements; i++) {
+          LLVMType type = Type2LLvm.at(attr.type);
+          // 计算当前元素的线性位置
+          size_t pos = start_index;
+          std::vector<Operand> indices;
+          indices.push_back(new ImmI32Operand(0)); // 数组基址
+
+          // 转换为多维索引
+          size_t temp = pos;
+          for (size_t i = 0;
+               i < std::vector<int>(attr.dims.begin(), attr.dims.end()).size();
+               i++) {
+            size_t stride = 1;
+            for (size_t j = i + 1;
+                 j <
+                 std::vector<int>(attr.dims.begin(), attr.dims.end()).size();
+                 j++) {
+              stride *= std::vector<int>(attr.dims.begin(), attr.dims.end())[j];
+            }
+            size_t idx = temp / stride;
+            temp %= stride;
+            indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
+          }
+
+          // 生成GEP指令
+          int ptr_reg = newReg();
+          IRgenGetElementptr(
+              getCurrentBlock(), type, ptr_reg, GetNewRegOperand(reg),
+              std::vector<int>(attr.dims.begin(), attr.dims.end()), indices);
+
+          // 存储值
+          if (attr.type == BaseType::INT) {
+            int value = 0;
+            IRgenStore(getCurrentBlock(), type, new ImmI32Operand(value),
+                       GetNewRegOperand(ptr_reg));
+          } else {
+            float value = 0.0f;
+            IRgenStore(getCurrentBlock(), type, new ImmF32Operand(value),
+                       GetNewRegOperand(ptr_reg));
+          }
+        }
       }
     }
 
@@ -1983,25 +2031,25 @@ void IRgenerator::visit(VarDef &node) {
             }
           }
         }
-        if(attr.dims.empty()){
-          if(current_type == BaseType::INT){
-            irgen_table.name_to_value[node.name]=attr.IntInitVals[0];
+        if (attr.dims.empty()) {
+          if (current_type == BaseType::INT) {
+            irgen_table.name_to_value[node.name] = attr.IntInitVals[0];
+          } else {
+            irgen_table.name_to_value[node.name] = attr.FloatInitVals[0];
           }
-          else{
-            irgen_table.name_to_value[node.name]=attr.FloatInitVals[0];
-          }
-        
-       }
+        }
       } else {
         // 单个初始化表达式
         auto init_val = evaluateGlobalInitializer(node.initializer->get());
         if (init_val.has_value()) {
           if (current_type == BaseType::INT) {
             attr.IntInitVals.push_back(static_cast<int>(init_val.value()));
-            irgen_table.name_to_value[node.name] = static_cast<int>(init_val.value());
+            irgen_table.name_to_value[node.name] =
+                static_cast<int>(init_val.value());
           } else if (current_type == BaseType::FLOAT) {
             attr.FloatInitVals.push_back(static_cast<float>(init_val.value()));
-            irgen_table.name_to_value[node.name] = static_cast<float>(init_val.value());
+            irgen_table.name_to_value[node.name] =
+                static_cast<float>(init_val.value());
           }
         }
       }
@@ -2105,6 +2153,47 @@ void IRgenerator::visit(VarDef &node) {
             0,          // 从第一个维度开始
             start_index // 当前索引位置
         );
+        size_t total_elements = 1;
+        for (auto d : dims)
+          total_elements *= d;
+
+        for (size_t i = start_index + 1; i <= total_elements; i++) {
+          LLVMType type = Type2LLvm.at(attr.type);
+          // 计算当前元素的线性位置
+          size_t pos = i;
+          std::vector<Operand> indices;
+          indices.push_back(new ImmI32Operand(0)); // 数组基址
+
+          // 转换为多维索引
+          size_t temp = pos;
+          for (size_t i = 0; i < dims.size(); i++) {
+            size_t stride = 1;
+            for (size_t j = i + 1; j < dims.size(); j++) {
+              stride *= dims[j];
+            }
+            size_t idx = temp / stride;
+            temp %= stride;
+            indices.push_back(new ImmI32Operand(static_cast<int>(idx)));
+          }
+
+          // 生成GEP指令
+          int ptr_reg = newReg();
+          IRgenGetElementptr(getCurrentBlock(), type, ptr_reg,
+                             GetNewRegOperand(reg), dims, indices);
+
+          // 存储值
+          if (attr.type == BaseType::INT) {
+            int value = 0;
+            IRgenStore(getCurrentBlock(), type, new ImmI32Operand(value),
+                       GetNewRegOperand(ptr_reg));
+          } else {
+            float value = 0.0f;
+            IRgenStore(getCurrentBlock(), type, new ImmF32Operand(value),
+                       GetNewRegOperand(ptr_reg));
+          }
+          // IRgenStore(B, type, new ImmF32Operand(value),
+          // GetNewRegOperand(ptr_reg));
+        }
       }
     }
 
@@ -2132,10 +2221,10 @@ void IRgenerator::visit(FuncDef &node) {
   llvmIR.NewFunction(function_now);
   now_label = 0;
   current_reg_counter = -1; // Reset register counter
-  //max_label = 0;            // 重置标签计数器
-  // max_reg = -1;
-  // llvmIR.NewBlock(function_now, now_label);
-  if(max_label!=0){
+  // max_label = 0;            // 重置标签计数器
+  //  max_reg = -1;
+  //  llvmIR.NewBlock(function_now, now_label);
+  if (max_label != 0) {
     max_label++;
   }
   llvmIR.NewBlock(function_now, max_label);
@@ -2568,37 +2657,38 @@ void IRgenerator::visit(ReturnStmt &node) {
       if (ret_type == LLVMType::FLOAT32) {
         // IRgenRetImmFloat(getCurrentBlock(), ret_type, 0.0f);
         //  处理浮点返回类型：将整数常量转换为浮点数
-        //int temp_reg = newReg();
+        // int temp_reg = newReg();
         LLVMBlock B = getCurrentBlock();
 
         // 创建临时寄存器存储整数常量
         // B->InsertInstruction(1, new ArithmeticInstruction(
         //                             ADD, LLVMType::I32, new ImmI32Operand(0),
-        //                             new ImmI32Operand(ret_attr.IntInitVals[0]),
+        //                             new
+        //                             ImmI32Operand(ret_attr.IntInitVals[0]),
         //                             GetNewRegOperand(temp_reg)));
 
         // 将整数转换为浮点数
         int float_reg = newReg();
-        //IRgenSitofp(B, temp_reg, float_reg);
+        // IRgenSitofp(B, temp_reg, float_reg);
         IRgenSitofp(B, ret_reg, float_reg);
 
         // 返回浮点数
         IRgenRetReg(B, ret_type, float_reg);
       } else {
-        //IRgenRetImmInt(getCurrentBlock(), ret_type, ret_attr.IntInitVals[0]);
+        // IRgenRetImmInt(getCurrentBlock(), ret_type, ret_attr.IntInitVals[0]);
         IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
       }
     } else if (ret_attr.FloatInitVals.size() > 0) {
-      if(ret_type == LLVMType::I32){
+      if (ret_type == LLVMType::I32) {
         int temp_reg = newReg();
         LLVMBlock B = getCurrentBlock();
         IRgenFptosi(B, ret_reg, temp_reg);
         IRgenRetReg(B, ret_type, temp_reg);
-      }
-      else{
+      } else {
         IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
       }
-      //IRgenRetImmFloat(getCurrentBlock(), ret_type, ret_attr.FloatInitVals[0]);
+      // IRgenRetImmFloat(getCurrentBlock(), ret_type,
+      // ret_attr.FloatInitVals[0]);
     } else if (node.expression.has_value() &&
                dynamic_cast<FunctionCall *>((*node.expression).get())) {
       IRgenRetReg(getCurrentBlock(), ret_type, ret_reg);
@@ -3571,7 +3661,6 @@ void IRgenerator::visit(FunctionCall &node) {
       }
     }
   }
-
   // 准备参数
   std::vector<std::pair<enum LLVMType, Operand>> args;
   for (size_t i = 0; i < node.arguments.size(); i++) {
@@ -3591,8 +3680,8 @@ void IRgenerator::visit(FunctionCall &node) {
     BaseType expected_type =
         (i < param_types.size()) ? param_types[i] : arg_attr.type;
     LLVMType llvm_type = Type2LLvm.at(expected_type);
-    if(require_address){
-      llvm_type=PTR;
+    if (require_address) {
+      llvm_type = PTR;
     }
     LLVMType arg_type;
     Operand arg_operand;
@@ -3642,7 +3731,6 @@ void IRgenerator::visit(FunctionCall &node) {
     arg_operand = GetNewRegOperand(value_reg);
     args.push_back(std::make_pair(llvm_type, arg_operand));
   }
-
   // 生成调用指令
   if (return_type == BaseType::VOID) {
     // void函数：无返回值
