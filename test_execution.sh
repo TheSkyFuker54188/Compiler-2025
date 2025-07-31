@@ -61,9 +61,14 @@ run_tests_in_dir() {
 
         echo -n "测试 $base_name ... "
 
-        # 1. 编译 .sy -> .s
-        ./compiler "$sy_file" -S -o "$s_file" > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
+        # 1. 编译 .sy -> .s (3分钟超时)
+        timeout 180 ./compiler "$sy_file" -S -o "$s_file" > /dev/null 2>&1
+        compile_result=$?
+        if [ $compile_result -eq 124 ]; then
+            echo -e "\e[31m编译超时\e[0m"
+            ((failed++))
+            continue
+        elif [ $compile_result -ne 0 ]; then
             echo -e "\e[31m编译失败\e[0m"
             ((failed++))
             continue
@@ -75,17 +80,27 @@ run_tests_in_dir() {
             continue
         fi
 
-        # 2. 链接 .s -> .exe
-        riscv64-linux-gnu-gcc -o "$exe_file" "$s_file" -L./lib -lsysy_riscv
-        if [ $? -ne 0 ]; then
+        # 2. 链接 .s -> .exe (3分钟超时)
+        timeout 180 riscv64-linux-gnu-gcc -o "$exe_file" "$s_file" -L./lib -lsysy_riscv
+        link_result=$?
+        if [ $link_result -eq 124 ]; then
+            echo -e "\e[31m链接超时\e[0m"
+            ((failed++))
+            continue
+        elif [ $link_result -ne 0 ]; then
             echo -e "\e[31m链接失败\e[0m"
             ((failed++))
             continue
         fi
 
-        # 3. 运行 .exe 并获取退出码
-        qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file"
+        # 3. 运行 .exe 并获取退出码 (3分钟超时)
+        timeout 180 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file"
         actual_exit_code=$?
+        if [ $actual_exit_code -eq 124 ]; then
+            echo -e "\e[31m运行超时\e[0m"
+            ((failed++))
+            continue
+        fi
 
         # 4. 读取期望退出码
         expected_exit_code=$(cat "$out_file" | tr -d '\n\r' | xargs)
