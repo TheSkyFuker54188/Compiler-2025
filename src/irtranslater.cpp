@@ -1,6 +1,10 @@
 #include "../include/irtranslater.h"
 #include "../include/llvm_instruction.h"
 #include <algorithm>
+#include <iostream>
+#include <memory>
+#include <new>
+#include <utility>
 
 extern std::map<std::string, int> function_name_to_maxreg;
 int next_virtual_reg_no = 0;
@@ -2250,4 +2254,3 @@ void Translator::insertSdInstruction(RiscvOperand *src, RiscvPtrOperand *addr,
     auto sd_inst = new RiscvSdInstruction(src, addr);
     block->InsertInstruction(0, sd_inst);
   }
-}
