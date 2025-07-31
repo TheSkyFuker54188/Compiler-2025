@@ -21,7 +21,7 @@ test_file() {
     ((total_tests++))
     
     # 运行编译
-    ./compiler --ssa "$file" > "test_results/ssa_all/${filename}.log" 2>&1
+    ./compiler --O1 "$file" > "test_results/ssa_all/${filename}.log" 2>&1
     
     # 检查SSA优化是否成功
     if grep -q "SSA optimizations completed" "test_results/ssa_all/${filename}.log"; then
@@ -36,7 +36,7 @@ test_file() {
         echo "    - 消除指令: $eliminated 条"
         echo "    - 消除基本块: $blocks_eliminated 个" 
         echo "    - 代数化简: $algebraic_opts 次"
-
+    else
         echo "  ❌ SSA优化失败"
         ((failed_tests++))
         # 显示错误信息的前几行
@@ -86,6 +86,11 @@ for log_file in test_results/ssa_all/*.log; do
         eliminated=$(grep -o "Eliminated [0-9]* instructions" "$log_file" | head -1 | grep -o "[0-9]*" 2>/dev/null || echo "0")
         blocks=$(grep -c "Eliminating unreachable block" "$log_file" 2>/dev/null || echo "0")
         algebraic=$(grep -c "simplifications applied" "$log_file" 2>/dev/null || echo "0")
+        
+        # 确保数值为有效整数
+        if [[ ! "$eliminated" =~ ^[0-9]+$ ]]; then eliminated=0; fi
+        if [[ ! "$blocks" =~ ^[0-9]+$ ]]; then blocks=0; fi
+        if [[ ! "$algebraic" =~ ^[0-9]+$ ]]; then algebraic=0; fi
         
         total_eliminated=$((total_eliminated + eliminated))
         total_blocks_eliminated=$((total_blocks_eliminated + blocks))

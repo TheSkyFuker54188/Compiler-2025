@@ -149,6 +149,43 @@ struct ConstantValue {
  */
 class SSAOptimizer {
 public:
+  // ============================================================================
+  // 公共数据结构定义
+  // ============================================================================
+
+  // 循环信息结构体
+  struct LoopInfo {
+    int header_block;             // 循环头块
+    int latch_block;              // 循环尾块(回边源)
+    std::vector<int> body_blocks; // 循环体块
+    std::vector<int> exit_blocks; // 循环出口块
+    int induction_var;            // 归纳变量寄存器
+    ConstantValue initial_value;  // 初始值
+    ConstantValue step_value;     // 步长
+    ConstantValue limit_value;    // 循环界限
+    int trip_count;               // 迭代次数(-1表示未知)
+    bool is_simple_loop;          // 是否为简单循环
+
+    // 添加缺失的成员变量
+    int instruction_count;   // 循环体指令数量
+    int header;              // 循环头块（别名）
+    int latch;               // 循环尾块（别名）
+    int preheader;           // 循环前置块
+    std::vector<int> blocks; // 循环体块（别名）
+  };
+
+  // 函数信息结构体
+  struct FunctionInfo {
+    std::string name;                // 函数名
+    std::vector<int> parameter_regs; // 参数寄存器
+    int return_reg;                  // 返回值寄存器(-1表示void)
+    std::map<int, LLVMBlock> blocks; // 函数体基本块
+    int instruction_count;           // 指令数量
+    int call_count;                  // 被调用次数
+    bool is_recursive;               // 是否递归
+    bool is_inline_candidate;        // 是否为内联候选
+  };
+
   /**
    * 对SSA形式的IR进行优化
    */
@@ -248,6 +285,190 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
+<<<<<<< HEAD
+=======
+
+  // 新增的增强优化函数
+  bool simplifyArithmeticInstruction(Instruction &inst);
+  bool simplifyBitwiseInstruction(Instruction &inst);
+  bool isRedundantPhiFunction(const Instruction &inst);
+  void replaceRegisterUsages(std::map<int, LLVMBlock> &blocks, int old_reg,
+                             int new_reg);
+  bool tryConstantPropagation(Instruction &inst);
+  void replaceInstructionWithOperand(Instruction &inst, const Operand &operand);
+  void convertMultiplyByTwoToAdd(Instruction &inst, const Operand &operand);
+  bool isSameRegisterOperand(const Operand &op1, const Operand &op2);
+
+  // 代数化简辅助函数
+  bool isZero(const ConstantValue &const_val);
+  bool isOne(const ConstantValue &const_val);
+  bool isTwo(const ConstantValue &const_val);
+  bool isAllOnes(const ConstantValue &const_val);
+
+  // 不可达代码消除辅助函数
+  int getUnconditionalBranchTarget(const Instruction &inst);
+  std::pair<int, int> getConditionalBranchTargets(const Instruction &inst);
+
+  // 公共子表达式消除辅助函数
+  bool canPerformCSE(const Instruction &inst);
+
+  // ============================================================================
+  // 缺失函数声明 - 代数化简相关
+  // ============================================================================
+
+  void replaceWithIdentity(Instruction &inst, const Operand &source);
+  void replaceWithConstant(Instruction &inst, const ConstantValue &constant);
+  bool operandEquals(const Operand &op1, const Operand &op2);
+
+  // ============================================================================
+  // 缺失函数声明 - 公共子表达式消除相关
+  // ============================================================================
+
+  bool isPureFunctionalInstruction(const Instruction &inst);
+  void replaceInstructionWithCopy(Instruction &inst, int existing_reg);
+
+  // ============================================================================
+  // 缺失函数声明 - 除法优化相关
+  // ============================================================================
+
+  RegOperand *GetNewRegOperand(int reg_num);
+  bool isPowerOfTwo(int n);
+  int log2_upper(int x);
+  int log2_floor(int x);
+  std::tuple<long long, int, int> choose_multiplier(int d, int precision);
+
+  // ============================================================================
+  // 缺失函数声明 - 强度削减相关
+  // ============================================================================
+
+  void replaceWithShift(Instruction &inst, const Operand &operand,
+                        int shift_amount, LLVMIROpcode opcode);
+  void replaceWithBitwise(Instruction &inst, const Operand &operand, int mask,
+                          LLVMIROpcode opcode);
+
+  // ============================================================================
+  // 缺失函数声明 - 循环不变量外提相关
+  // ============================================================================
+
+  bool isLoopInvariant(
+      const Instruction &inst, const LoopInfo &loop,
+      const std::map<int, LLVMBlock> &blocks,
+      const std::unordered_set<Instruction> &invariant_instructions);
+  bool isInstructionInLoop(const Instruction &inst, const LoopInfo &loop,
+                           const std::map<int, LLVMBlock> &blocks);
+  void moveInstructionsToPreheader(
+      const std::unordered_set<Instruction> &instructions, int preheader_block,
+      std::map<int, LLVMBlock> &blocks);
+
+  // ============================================================================
+  // 缺失函数声明 - 条件常量传播相关
+  // ============================================================================
+
+  bool constantEquals(const ConstantValue &a, const ConstantValue &b);
+
+  // ============================================================================
+  // 缺失函数声明 - 全局值编号相关
+  // ============================================================================
+
+  std::string generateCanonicalExpression(const Instruction &inst);
+  bool isCommutativeOperation(int opcode);
+  std::string getOperandString(const Operand &operand);
+
+  // ============================================================================
+  // 高级优化算法声明
+  // ============================================================================
+
+  /**
+   * 除法优化
+   */
+  void optimizeDivision(LLVMIR &ir);
+
+  /**
+   * 强度削减
+   */
+  void strengthReduction(LLVMIR &ir);
+
+  /**
+   * 循环不变量外提
+   */
+  void loopInvariantCodeMotion(LLVMIR &ir);
+
+  /**
+   * 条件常量传播
+   */
+  void conditionalConstantPropagation(LLVMIR &ir);
+
+  /**
+   * 全局值编号
+   */
+  void globalValueNumbering(LLVMIR &ir);
+
+  /**
+   * 循环展开
+   */
+  void loopUnrolling(LLVMIR &ir);
+
+  /**
+   * 函数内联
+   */
+  void functionInlining(LLVMIR &ir);
+
+  // ============================================================================
+  // 循环分析相关数据结构和函数
+  // ============================================================================
+
+  // 循环分析和识别
+  std::vector<LoopInfo> detectLoops(const std::map<int, LLVMBlock> &blocks);
+  bool isBackEdge(int from_block, int to_block,
+                  const std::map<int, LLVMBlock> &blocks);
+  LoopInfo analyzeLoop(int header_block, int latch_block,
+                       const std::map<int, LLVMBlock> &blocks);
+  bool findInductionVariable(const LoopInfo &loop,
+                             const std::map<int, LLVMBlock> &blocks,
+                             LoopInfo &updated_loop);
+  int computeTripCount(const LoopInfo &loop,
+                       const std::map<int, LLVMBlock> &blocks);
+  bool isSimpleLoop(const LoopInfo &loop,
+                    const std::map<int, LLVMBlock> &blocks);
+
+  // 循环展开实现
+  bool canUnrollLoop(const LoopInfo &loop,
+                     const std::map<int, LLVMBlock> &blocks);
+  void performLoopUnrolling(LoopInfo &loop, std::map<int, LLVMBlock> &blocks,
+                            int unroll_factor);
+  void duplicateLoopBody(const LoopInfo &loop, std::map<int, LLVMBlock> &blocks,
+                         int iteration);
+  void updateInductionVariable(const LoopInfo &loop,
+                               std::map<int, LLVMBlock> &blocks, int iteration);
+  void adjustBranchTargets(const LoopInfo &loop,
+                           std::map<int, LLVMBlock> &blocks, int iteration);
+
+  // 函数分析和内联
+  std::map<std::string, FunctionInfo> analyzeFunctions(const LLVMIR &ir);
+  std::vector<Instruction>
+  findFunctionCalls(const std::map<int, LLVMBlock> &blocks);
+  bool canInlineFunction(const FunctionInfo &func,
+                         const Instruction &call_inst);
+  void performFunctionInlining(Instruction &call_inst, const FunctionInfo &func,
+                               std::map<int, LLVMBlock> &blocks);
+  void substituteParameters(const FunctionInfo &func,
+                            const Instruction &call_inst,
+                            std::map<int, LLVMBlock> &inlined_blocks);
+  void renameInlinedRegisters(std::map<int, LLVMBlock> &inlined_blocks,
+                              int base_reg);
+  void insertInlinedBlocks(const Instruction &call_inst,
+                           const std::map<int, LLVMBlock> &inlined_blocks,
+                           std::map<int, LLVMBlock> &target_blocks);
+
+  // 控制流分析辅助函数
+  std::vector<int> getPredecessors(int block_id,
+                                   const std::map<int, LLVMBlock> &blocks);
+  std::vector<int> getSuccessors(int block_id,
+                                 const std::map<int, LLVMBlock> &blocks);
+  std::vector<int> getBranchTargets(const Instruction &inst);
+  bool dominates(int dominator, int dominated,
+                 const std::map<int, LLVMBlock> &blocks);
+>>>>>>> feature/old_pig
 };
 
 /**
