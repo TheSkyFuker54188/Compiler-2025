@@ -376,7 +376,15 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
 void Translator::translateCall(CallInstruction *inst, RiscvBlock *block) {
   if (!inst)
     return;
+  
   auto call_inst = new RiscvCallInstruction(inst->GetFuncName());
+  
+  // 处理函数参数
+  for (const auto& arg_pair : inst->GetArgs()) {
+    auto arg_operand = translateOperand(arg_pair.second);  // second是Operand
+    call_inst->AddArg(arg_operand);
+  }
+  
   block->InsertInstruction(1, call_inst);
 
   // 处理函数返回值
