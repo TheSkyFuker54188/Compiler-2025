@@ -61,12 +61,12 @@ int test_phi_optimization() {
 int main() {
     int result = 0;
     
-    result = result + test_constant_propagation();
-    result = result + test_dead_code_elimination();
-    result = result + test_copy_propagation();
-    result = result + test_arithmetic_folding();
-    result = result + test_comparison_folding();
-    result = result + test_phi_optimization();
+    result += test_constant_propagation();
+    result += test_dead_code_elimination();
+    result += test_copy_propagation();
+    result += test_arithmetic_folding();
+    result += test_comparison_folding();
+    result += test_phi_optimization();
     
     return result;
 }

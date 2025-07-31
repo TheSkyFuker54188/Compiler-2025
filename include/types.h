@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include <memory>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -150,6 +151,7 @@ inline std::shared_ptr<Type>
 makeFunctionType(std::shared_ptr<Type> return_type,
                  std::vector<std::shared_ptr<Type>> parameter_types,
                  bool is_variadic = false) {
-  return std::make_shared<FunctionType>(
-      std::move(return_type), std::move(parameter_types), is_variadic);
+  return std::make_shared<FunctionType>(std::move(return_type),
+                                        std::move(parameter_types),
+                                        static_cast<bool>(is_variadic));
 }

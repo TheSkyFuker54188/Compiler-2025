@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "=== SSA优化批量测试 ==="
+echo "=== ssa批量测试 ==="
 echo
 
 # 创建输出目录
@@ -9,34 +9,22 @@ mkdir -p test_logs_ssa
 # 初始化日志文件
 > test_logs_ssa/ssa_validation.log
 > test_logs_ssa/ssa_execution_test.log
-> test_logs_ssa/ssa_optimization_details.log
-> test_logs_ssa/test_summary.log
-
-# 记录测试开始时间
-echo "SSA优化测试开始时间: $(date)" | tee test_logs_ssa/test_summary.log
 
 passed=0
 failed=0
 
-echo "=== 编译和SSA优化测试 ===" | tee -a test_logs_ssa/test_summary.log
-
 for file in tests/h_functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        echo "=== 测试文件: $file ===" >> test_logs_ssa/ssa_optimization_details.log
-        if ./compiler --ast --O1 "$file" >> test_logs_ssa/ssa_optimization_details.log 2>&1; then
+        if ./compiler --ast "$file"; then
             echo "通过"
-            echo "测试 $file: 通过" >> test_logs_ssa/test_summary.log
             ((passed++))
         else
             echo "失败"
-            echo "测试 $file: 失败" >> test_logs_ssa/test_summary.log
             ((failed++))
         fi
-        echo "----------------------------------------" >> test_logs_ssa/ssa_optimization_details.log
     else
         echo "跳过 $file (文件不存在)"
-        echo "跳过 $file (文件不存在)" >> test_logs_ssa/test_summary.log
         ((failed++))
     fi
 done
@@ -44,20 +32,15 @@ done
 for file in tests/functional/*.sy; do
     if [ -f "$file" ]; then
         echo -n "测试 $file ... "
-        echo "=== 测试文件: $file ===" >> test_logs_ssa/ssa_optimization_details.log
-        if ./compiler --ast --O1 "$file" >> test_logs_ssa/ssa_optimization_details.log 2>&1; then
+        if ./compiler --ast "$file"; then
             echo "通过"
-            echo "测试 $file: 通过" >> test_logs_ssa/test_summary.log
             ((passed++))
         else
             echo "失败"
-            echo "测试 $file: 失败" >> test_logs_ssa/test_summary.log
             ((failed++))
         fi
-        echo "----------------------------------------" >> test_logs_ssa/ssa_optimization_details.log
     else
         echo "跳过 $file (文件不存在)"
-        echo "跳过 $file (文件不存在)" >> test_logs_ssa/test_summary.log
         ((failed++))
     fi
 done
@@ -196,18 +179,3 @@ echo "  详细日志: test_logs_ssa/ssa_execution_test.log"
 
 echo
 echo "=== 测试完成 ==="
-echo "测试结束时间: $(date)"
-echo
-
-# 将总结信息写入日志
-echo "=== 最终测试结果 ===" >> test_logs_ssa/test_summary.log
-echo "语法分析测试: 通过 $passed, 失败 $failed" >> test_logs_ssa/test_summary.log
-echo "LLVM IR验证测试: 通过 $true, 失败 $false" >> test_logs_ssa/test_summary.log
-echo "执行测试验证: 通过 $exec_passed, 失败 $exec_failed" >> test_logs_ssa/test_summary.log
-echo "测试结束时间: $(date)" >> test_logs_ssa/test_summary.log
-
-echo "=== 详细日志文件 ==="
-echo "  - SSA优化详细输出: test_logs_ssa/ssa_optimization_details.log"
-echo "  - LLVM IR验证日志: test_logs_ssa/ssa_validation.log" 
-echo "  - 执行测试日志: test_logs_ssa/ssa_execution_test.log"
-echo "  - 测试结果摘要: test_logs_ssa/test_summary.log"

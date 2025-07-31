@@ -86,11 +86,10 @@ int test_nested_expressions() {
 int test_simple_loop() {
     // 简单的循环测试
     int sum = 0;
-    int i = 0;
-
-    while(i < 5) {
-        sum = sum + i;
-        i = i + 1;
+    int i;
+    
+    for (i = 0; i < 5; i = i + 1) {
+        sum = sum + 1;      // 简单的累加
     }
     
     return sum;             // 应该返回5

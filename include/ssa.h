@@ -12,30 +12,19 @@
 // SSA变换相关的数据结构
 
 /**
- * 常量值表示 - 前置声明
- */
-struct ConstantValue {
-  enum Type { INT, FLOAT, UNDEF } type;
-  union {
-    int int_val;
-    float float_val;
-  };
-
-  ConstantValue() : type(UNDEF) {}
-  ConstantValue(int val) : type(INT), int_val(val) {}
-  ConstantValue(float val) : type(FLOAT), float_val(val) {}
-
-  bool isConstant() const { return type != UNDEF; }
-  bool isInt() const { return type == INT; }
-  bool isFloat() const { return type == FLOAT; }
-};
-
-/**
  * SSA变换器 - 将非SSA的LLVM IR转换为SSA形式
  */
 class SSATransformer {
 public:
-  // 支配信息结构体
+  /**
+   * 将LLVM IR转换为SSA形式
+   * @param ir 输入的LLVM IR
+   * @return 转换后的SSA形式IR
+   */
+  LLVMIR transform(const LLVMIR &ir);
+
+private:
+  // 支配边界计算
   struct DominanceInfo {
     std::unordered_map<int, std::unordered_set<int>> dominators;   // 支配关系
     std::unordered_map<int, std::unordered_set<int>> dom_frontier; // 支配边界
@@ -55,79 +44,71 @@ public:
   };
 
   /**
-   * 将LLVM IR转换为SSA形式
-   * @param ir 输入的LLVM IR
-   * @return 转换后的SSA形式IR
-   */
-  LLVMIR transform(const LLVMIR &ir);
-
-private:
-  /**
    * 构建控制流图
    */
   ControlFlowGraph
-  buildControlFlowGraph(const std::map<int, BasicBlock *> &blocks);
+  buildControlFlowGraph(const std::map<int, LLVMBlock> &blocks);
 
   /**
    * 基于控制流图计算支配信息
    */
   DominanceInfo
-  computeDominanceInfoFromCFG(const std::map<int, BasicBlock *> &blocks,
+  computeDominanceInfoFromCFG(const std::map<int, LLVMBlock> &blocks,
                               const ControlFlowGraph &cfg);
 
   /**
    * 计算控制流图的支配信息
    */
-  DominanceInfo computeDominanceInfo(const std::map<int, BasicBlock *> &blocks);
+  DominanceInfo computeDominanceInfo(const std::map<int, LLVMBlock> &blocks);
 
   /**
    * 插入φ函数
    */
-  void insertPhiFunctions(std::map<int, BasicBlock *> &blocks,
+  void insertPhiFunctions(std::map<int, LLVMBlock> &blocks,
                           const DominanceInfo &dom_info);
 
   /**
    * 变量重命名
    */
-  void renameVariables(std::map<int, BasicBlock *> &blocks,
+  void renameVariables(std::map<int, LLVMBlock> &blocks,
                        const DominanceInfo &dom_info);
 
   /**
    * 收集函数中定义的所有变量
    */
   std::unordered_set<std::string>
-  collectDefinedVariables(const std::map<int, BasicBlock *> &blocks);
+  collectDefinedVariables(const std::map<int, LLVMBlock> &blocks);
 
   /**
    * 计算直接支配者
    */
   void computeImmediateDominators(DominanceInfo &info,
-                                  const std::map<int, BasicBlock *> &blocks);
+                                  const std::map<int, LLVMBlock> &blocks);
 
   /**
    * 计算支配边界
    */
   void computeDominanceFrontier(DominanceInfo &info,
-                                const std::map<int, BasicBlock *> &blocks,
+                                const std::map<int, LLVMBlock> &blocks,
                                 const ControlFlowGraph &cfg);
 
   /**
    * 获取基本块的前驱
    */
   std::vector<int> getPredecessors(int block_id,
-                                   const std::map<int, BasicBlock *> &blocks);
+                                   const std::map<int, LLVMBlock> &blocks);
 
   /**
    * 获取基本块的后继
    */
   std::vector<int> getSuccessors(int block_id,
-                                 const std::map<int, BasicBlock *> &blocks);
+                                 const std::map<int, LLVMBlock> &blocks);
 
   /**
    * 递归重命名变量 - DFS遍历支配树
    */
   void renameVariablesRecursive(int block_id,
-                                const std::map<int, BasicBlock *> &blocks,
+                                const std::map<int, LLVMBlock> &blocks,
                                 const DominanceInfo &dom_info,
                                 RenameInfo &rename_info);
 
@@ -142,34 +123,25 @@ private:
    */
   std::string getCurrentVariableVersion(const std::string &var_name,
                                         const RenameInfo &rename_info);
+};
 
-  /**
-   * 计算快速支配信息（用于大型CFG的优化算法）
-   */
-  DominanceInfo
-  computeFastDominanceInfo(const std::map<int, BasicBlock *> &blocks,
-                           const ControlFlowGraph &cfg);
+/**
+ * 常量值表示
+ */
+struct ConstantValue {
+  enum Type { INT, FLOAT, UNDEF } type;
+  union {
+    int int_val;
+    float float_val;
+  };
 
-  /**
-   * 更新φ函数的参数
-   */
-  void updatePhiArguments(std::map<int, BasicBlock *> &blocks,
-                          const ControlFlowGraph &cfg,
-                          const RenameInfo &rename_info);
+  ConstantValue() : type(UNDEF) {}
+  ConstantValue(int val) : type(INT), int_val(val) {}
+  ConstantValue(float val) : type(FLOAT), float_val(val) {}
 
-  /**
-   * 找到两个基本块的公共支配者
-   */
-  int findCommonDominator(int block1, int block2,
-                          const std::unordered_map<int, int> &idom);
-
-  /**
-   * 计算简化的支配边界（优化版本）
-   */
-  void
-  computeSimplifiedDominanceFrontier(DominanceInfo &info,
-                                     const std::map<int, BasicBlock *> &blocks,
-                                     const ControlFlowGraph &cfg);
+  bool isConstant() const { return type != UNDEF; }
+  bool isInt() const { return type == INT; }
+  bool isFloat() const { return type == FLOAT; }
 };
 
 /**
@@ -186,14 +158,6 @@ private:
   // 常量传播相关
   std::unordered_map<int, ConstantValue> constants_map;
   std::unordered_set<Instruction> useful_instructions;
-
-  // 循环信息结构体
-  struct LoopInfo {
-    int header;              // 循环头基本块ID
-    int latch;               // 循环尾基本块ID
-    int preheader;           // 循环前置块ID
-    std::vector<int> blocks; // 循环体包含的所有基本块ID
-  };
 
   /**
    * 死代码消除
@@ -220,56 +184,11 @@ private:
    */
   void commonSubexpressionElimination(LLVMIR &ir);
 
-  /**
-   * 代数化简
-   */
-  void algebraicSimplification(LLVMIR &ir);
-
-  /**
-   * φ函数简化
-   */
-  void simplifyPhiFunctions(LLVMIR &ir);
-
-  /**
-   * 不可达代码消除
-   */
-  void eliminateUnreachableCode(LLVMIR &ir);
-
-  /**
-   * 强度削减
-   */
-  void strengthReduction(LLVMIR &ir);
-
-  /**
-   * 循环不变量外提
-   */
-  void loopInvariantCodeMotion(LLVMIR &ir);
-
-  /**
-   * 条件常量传播
-   */
-  void conditionalConstantPropagation(LLVMIR &ir);
-
-  /**
-   * 全局值编号
-   */
-  void globalValueNumbering(LLVMIR &ir);
-
-  /**
-   * 循环展开
-   */
-  void loopUnrolling(LLVMIR &ir);
-
-  /**
-   * 内联小函数
-   */
-  void functionInlining(LLVMIR &ir);
-
-  // 除法优化
-  bool isPowerOfTwo(int n);
-  int log2_upper(int x);
-  std::tuple<long long, int, int> choose_multiplier(int d, int prec);
-  void optimizeDivision(LLVMIR &ir);
+    //除法优化
+    bool isPowerOfTwo(int n);
+    int log2_upper(int x);
+    std::tuple<long long, int, int> choose_multiplier(int d, int prec);
+    void optimizeDivision(LLVMIR &ir);
 
   // 辅助函数
   bool isCriticalInstruction(const Instruction &inst);
@@ -288,6 +207,7 @@ private:
                             int &src_reg);
   bool replaceCopyUsages(Instruction &inst,
                          const std::unordered_map<int, int> &copies);
+  std::string generateExpressionString(const Instruction &inst);
   void replaceWithExistingResult(Instruction &inst, int existing_reg);
   int getInstructionResultRegister(const Instruction &inst);
 
@@ -328,40 +248,6 @@ private:
   // 新增的通用指令处理函数
   std::vector<Operand> getGenericInstructionOperands(const Instruction &inst);
   int getGenericInstructionResultRegister(const Instruction &inst);
-
-  // 代数化简辅助函数
-  void replaceWithIdentity(Instruction &inst, const Operand &source);
-  void replaceWithConstant(Instruction &inst, const ConstantValue &constant);
-  bool operandEquals(const Operand &op1, const Operand &op2);
-  std::vector<int> getBranchTargets(const Instruction &inst);
-  RegOperand *GetNewRegOperand(int reg_num);
-
-  // 高级优化辅助函数
-  bool isPureFunctionalInstruction(const Instruction &inst);
-  std::string generateExpressionString(const Instruction &inst);
-  void replaceInstructionWithCopy(Instruction &inst, int source_reg);
-  int log2_floor(int x);
-  void replaceWithShift(Instruction &inst, const Operand &operand,
-                        int shift_amount, LLVMIROpcode shift_op);
-  void replaceWithBitwise(Instruction &inst, const Operand &operand,
-                          int mask_value, LLVMIROpcode bitwise_op);
-
-  // 循环分析相关
-  std::vector<LoopInfo> detectLoops(const std::map<int, LLVMBlock> &blocks);
-  bool isLoopInvariant(const Instruction &inst, const LoopInfo &loop,
-                       const std::map<int, LLVMBlock> &blocks,
-                       const std::unordered_set<Instruction> &known_invariants);
-  bool isInstructionInLoop(const Instruction &inst, const LoopInfo &loop,
-                           const std::map<int, LLVMBlock> &blocks);
-  void moveInstructionsToPreheader(
-      const std::unordered_set<Instruction> &instructions, int preheader_id,
-      std::map<int, LLVMBlock> &blocks);
-
-  // 新增的高级优化辅助函数
-  bool constantEquals(const ConstantValue &a, const ConstantValue &b);
-  std::string generateCanonicalExpression(const Instruction &inst);
-  bool isCommutativeOperation(int opcode);
-  std::string getOperandString(const Operand &operand);
 };
 
 /**

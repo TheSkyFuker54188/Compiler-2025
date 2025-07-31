@@ -1,11 +1,18 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <iosfwd>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
+#include <utility>
+#include <type_traits>
+#include <stdexcept>
 
 // ===--------------------------------------------------------------------=== //
 // 辅助定义
