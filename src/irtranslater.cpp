@@ -315,9 +315,15 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
       auto la_inst = new RiscvLaInstruction(s0, label_op);
       block->InsertInstruction(1, la_inst);
     } else {
-      s0 = getS0Reg(); // 获取s0寄存器
       auto addr = dynamic_cast<RegOperand *>(inst->GetPointer());
-      offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      if (current_stack_frame->var_offsets.find(addr->GetRegNo()) !=
+          current_stack_frame->var_offsets.end()) {
+        s0 = getS0Reg(); // 获取s0寄存器
+        offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      } else {
+        s0 = createVirtualReg(addr->GetRegNo()); // 如果是数组，创建对应的寄存器
+        offset = current_stack_frame->array_offsets[addr->GetRegNo()];
+      }
     }
     auto riscv_inst = new RiscvPtrOperand(-offset, s0);
     auto riscv_store_inst = new RiscvFswInstruction(rs, riscv_inst);
@@ -348,9 +354,15 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
       auto la_inst = new RiscvLaInstruction(s0, label_op);
       block->InsertInstruction(1, la_inst);
     } else {
-      s0 = getS0Reg(); // 获取s0寄存器
       auto addr = dynamic_cast<RegOperand *>(inst->GetPointer());
-      offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      if (current_stack_frame->var_offsets.find(addr->GetRegNo()) !=
+          current_stack_frame->var_offsets.end()) {
+        s0 = getS0Reg(); // 获取s0寄存器
+        offset = current_stack_frame->var_offsets[addr->GetRegNo()];
+      } else {
+        s0 = createVirtualReg(addr->GetRegNo()); // 如果是数组，创建对应的寄存器
+        offset = current_stack_frame->array_offsets[addr->GetRegNo()];
+      }
     }
     auto riscv_inst = new RiscvPtrOperand(-offset, s0);
     auto riscv_store_inst = new RiscvSwInstruction(rs, riscv_inst);
@@ -1638,6 +1650,8 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
   int offset = 0; // 偏移量初始化为0
   auto indexes = inst->GetIndexes();
   auto dim = inst->GetDims();
+  auto li_inst = new RiscvLiInstruction(offset_reg, 0);
+  block->InsertInstruction(1, li_inst);
   for (size_t i = 1; i < indexes.size(); ++i) {
     int size = 1;
     for (size_t j = i; j < dim.size(); ++j)
@@ -1645,9 +1659,8 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
     auto index = indexes[i];
     if (index->GetOperandType() == BasicOperand::IMMI32) {
       auto imm_op = dynamic_cast<ImmI32Operand *>(index);
-      auto li_inst =
-          new RiscvLiInstruction(offset_reg, imm_op->GetIntImmVal() * size);
-      block->InsertInstruction(1, li_inst);
+      insertAddiInstruction(offset_reg, offset_reg,
+                            imm_op->GetIntImmVal() * size, block);
     } else if (index->GetOperandType() == BasicOperand::REG) {
       auto tmp_reg = createVirtualReg();
       auto li_inst = new RiscvLiInstruction(tmp_reg, size);
