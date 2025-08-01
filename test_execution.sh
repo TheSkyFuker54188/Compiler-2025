@@ -108,15 +108,20 @@ run_tests_in_dir() {
 
         # 4. 读取期望的标准输出和退出码
         # 约定：.out文件最后一行是退出码，其余是标准输出
-        expected_stdout=$(head -n -1 "$out_file" 2>/dev/null || echo "")
+        expected_stdout=$(head -n -1 "$out_file" 2>/dev/null | tr -d '\r' || echo "")
         expected_exit_code=$(tail -n 1 "$out_file" | tr -d '\n\r' | xargs)
+        
+        # 处理实际输出，去除可能的回车符
+        actual_stdout=$(echo "$actual_stdout" | tr -d '\r')
 
         # 5. 比较结果
         stdout_ok=false
         exit_code_ok=false
 
-        # 比较标准输出
-        if [ "$actual_stdout" == "$expected_stdout" ]; then
+        # 比较标准输出（去除尾部换行符进行比较）
+        expected_stdout_clean=$(echo "$expected_stdout" | sed 's/[[:space:]]*$//')
+        actual_stdout_clean=$(echo "$actual_stdout" | sed 's/[[:space:]]*$//')
+        if [ "$actual_stdout_clean" == "$expected_stdout_clean" ]; then
             stdout_ok=true
         fi
 
@@ -132,7 +137,9 @@ run_tests_in_dir() {
         else
             echo -e "\e[31m失败\e[0m"
             if ! $stdout_ok; then
-                echo "  - 标准输出不匹配. 期望: '$expected_stdout', 实际: '$actual_stdout'"
+                echo "  - 标准输出不匹配. 期望: '$expected_stdout_clean', 实际: '$actual_stdout_clean'"
+                echo "    期望原始: '$expected_stdout'"
+                echo "    实际原始: '$actual_stdout'"
             fi
             if ! $exit_code_ok; then
                 echo "  - 退出码不匹配. 期望: $expected_exit_code, 实际: $actual_exit_code"
