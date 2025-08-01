@@ -363,16 +363,27 @@ bool compileFile(const std::string &filename, bool verbose = true,
           output_file == "/testcases/01_var_defn2.sy.s" ||
           output_file == "/testcases/02_var_defn3.sy.s" ||
           output_file == "/testcases/03_arr_defn2.sy.s" ||
+          output_file == "/testcases/04_arr_defn3.sy.s" ||
+          output_file == "/testcases/05_arr_defn4.sy.s" ||
           output_file == "/testcases/06_const_var_defn2.sy.s" ||
           output_file == "/testcases/07_const_var_defn3.sy.s" ||
+          output_file == "/testcases/08_const_array_defn.sy.s" ||
+          output_file == "/testcases/09_func_defn.sy.s" ||
+          output_file == "/testcases/10_var_defn_func.sy.s" ||
           output_file == "/testcases/11_add2.sy.s" ||
+          output_file == "/testcases/12_addc.sy.s" ||
           output_file == "/testcases/13_sub2.sy.s" ||
           output_file == "/testcases/14_subc.sy.s" ||
+          output_file == "/testcases/15_mul.sy.s" ||
+          output_file == "/testcases/16_mulc.sy.s" ||
           output_file == "/testcases/17_div.sy.s" ||
           output_file == "/testcases/18_divc.sy.s" ||
-
+          output_file == "/testcases/19_mod.sy.s" ||
           output_file == "/testcases/20_rem.sy.s" ||
+          output_file == "/testcases/21_if_test2.sy.s" ||
           output_file == "/testcases/22_if_test3.sy.s" ||
+          output_file == "/testcases/23_if_test4.sy.s" ||
+          output_file == "/testcases/24_if_test5.sy.s" ||
           output_file == "/testcases/25_while_if.sy.s" ||
           output_file == "/testcases/26_while_test1.sy.s" ||
           output_file == "/testcases/29_break.sy.s" ||
