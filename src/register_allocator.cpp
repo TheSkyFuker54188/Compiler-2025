@@ -45,7 +45,9 @@ void RegisterAllocator::initializePhysicalRegisters() {
   available_registers.emplace_back(26, "s10", true); // x26
   available_registers.emplace_back(27, "s11", true); // x27
 
-  // 参数寄存器a2-a7可以用作临时寄存器（a0,a1保留用于返回值）
+  // 参数寄存器a0-a7（a0,a1也是返回值寄存器）
+  available_registers.emplace_back(10, "a0", false); // x10
+  available_registers.emplace_back(11, "a1", false); // x11
   available_registers.emplace_back(12, "a2", false); // x12
   available_registers.emplace_back(13, "a3", false); // x13
   available_registers.emplace_back(14, "a4", false); // x14
@@ -79,10 +81,16 @@ void RegisterAllocator::allocateRegistersForFunction(
   }
 
   try {
+    std::cout << "=== 调试：寄存器分配开始 ===" << std::endl;
+    
     // 1. 计算生存期
     computeLiveRanges(blocks);
 
-    // 2. 按变量类型分类分配寄存器
+    // 2. 预分配函数调用的参数寄存器
+    std::cout << "=== 调用 preAllocateFunctionCallArguments ===" << std::endl;
+    preAllocateFunctionCallArguments(blocks);
+
+    // 3. 按变量类型分类分配寄存器
     allocateByCategory();
 
     // 3. 插入溢出代码
@@ -163,10 +171,13 @@ void RegisterAllocator::allocateByCategory() {
   
   // 为全局变量分配保存寄存器(s0-s11) - 注意：s0通常用作帧指针，从s1开始
   std::set<int> global_regs = {9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
+  std::cout << "=== 分配全局变量寄存器 ===" << std::endl;
   allocateRangesWithRegisters(global_int_ranges, global_regs);
   
-  // 为局部变量分配临时寄存器(t0-t6)和参数寄存器(a2-a7) - 不包括x5(tp)
+  // 为局部变量分配临时寄存器(t0-t6)和部分参数寄存器(a2-a7) - 不包括x5(tp)
+  // 注意：a0,a1保留用于函数调用的参数传递和返回值
   std::set<int> local_regs = {6, 7, 28, 29, 30, 31, 12, 13, 14, 15, 16, 17};
+  std::cout << "=== 分配局部变量寄存器 ===" << std::endl;
   allocateRangesWithRegisters(local_int_ranges, local_regs);
 }
 
@@ -193,11 +204,31 @@ void RegisterAllocator::allocateRangesWithRegisters(
             });
 
   std::set<LiveRange *, LiveRangeEndPosComparator> active;
-  std::set<int> available_regs = reg_set;
+  std::set<int> available_regs;
+  
+  // 初始化可用寄存器集合，只包含真正可用的寄存器
+  for (int reg_no : reg_set) {
+    bool is_available = true;
+    // 检查该寄存器是否在 available_registers 中被标记为不可用
+    for (const auto &reg : available_registers) {
+      if (reg.reg_no == reg_no && !reg.is_available) {
+        is_available = false;
+        std::cout << "  寄存器 x" << reg_no << " 被标记为不可用，跳过分配" << std::endl;
+        break;
+      }
+    }
+    if (is_available) {
+      available_regs.insert(reg_no);
+    }
+  }
 
   for (auto *range : ranges) {
+    std::cout << "  处理虚拟寄存器 %r" << range->virtual_reg 
+              << " [" << range->start_pos << "-" << range->end_pos << "]" << std::endl;
+              
     // Skip already allocated ranges
     if (virtual_to_physical.find(range->virtual_reg) != virtual_to_physical.end()) {
+      std::cout << "    已分配，跳过" << std::endl;
       continue;
     }
     
@@ -222,6 +253,7 @@ void RegisterAllocator::allocateRangesWithRegisters(
       virtual_to_physical[range->virtual_reg] = physical_reg;
       physical_to_virtual[physical_reg] = range->virtual_reg;
       active.insert(range);
+      std::cout << "    分配到物理寄存器 x" << physical_reg << std::endl;
     } else {
       // Spill
       if (!active.empty()) {
@@ -1375,6 +1407,13 @@ void RegisterAllocator::rewriteInstructions(
       for (auto &operand_ptr : operands_to_rewrite) {
         rewriteOperandNew(*operand_ptr, vreg_to_temp_phys_reg);
       }
+      
+      // 特殊调试：检查mv指令
+      if (auto *mv_inst = dynamic_cast<RiscvMvInstruction *>(inst)) {
+        std::cout << "  重写mv指令: " << mv_inst->rd->GetFullName() 
+                  << " <- " << mv_inst->rs1->GetFullName() << std::endl;
+      }
+      
       new_instruction_list.push_back(inst);
 
       // 后处理：为溢出的定义寄存器生成存储指令
@@ -1458,33 +1497,96 @@ void RegisterAllocator::rewriteOperand(RiscvOperand *&operand) {
 
 void RegisterAllocator::preAllocateSpecialRegisters(
     const std::map<int, RiscvBlock*> &blocks) {
-  // // std::cout << "预分配特殊寄存器..." << std::endl;
+  // 此函数保留用于其他特殊寄存器预分配
+  // 函数调用的参数预分配已移至preAllocateFunctionCallArguments
+}
 
-  // for (const auto &block_pair : blocks) {
-  //   const auto &block = block_pair.second;
-
-  //   for (const auto &inst : block->instruction_list) {
-  //     // 查找函数调用指令
-  //     if (auto *call_inst = dynamic_cast<RiscvCallInstruction *>(inst)) {
-  //       // 查找紧接着的 mv 指令，这通常是 call 的返回值赋值
-  //       // 在指令列表中查找当前指令的位置
-  //       auto it = std::find_if(
-  //           block->instruction_list.begin(), block->instruction_list.end(),
-  //           [&](RiscvInstruction* ptr) {
-  //             return ptr == call_inst;
-  //           });
-
-  //       if (it != block->instruction_list.end()) {
-  //         auto next_it = std::next(it);
-  //         if (next_it != block->instruction_list.end()) {
-  //           // 由于RiscvPseudoInstruction不存在，跳过mv指令检查
-  //           // TODO: 如果需要支持mv指令，需要确认正确的指令类型
-  //         }
-  //       }
-  //     }
-
-  //     // 由于RiscvPseudoInstruction不存在，跳过返回指令前的mv检查  
-  //     // TODO: 如果需要支持mv指令，需要确认正确的指令类型
-  //   }
-  // }
+// 新增：函数调用参数预分配
+void RegisterAllocator::preAllocateFunctionCallArguments(
+    const std::map<int, RiscvBlock*> &blocks) {
+  
+  std::cout << "=== 调试：寄存器分配前的函数调用参数处理 ===" << std::endl;
+  
+  for (const auto &block_pair : blocks) {
+    const auto &block = block_pair.second;
+    
+    // 首先检查所有call指令及其参数
+    for (const auto &inst : block->instruction_list) {
+      if (auto *call_inst = dynamic_cast<RiscvCallInstruction *>(inst)) {
+        std::cout << "发现函数调用: " << call_inst->function_name 
+                  << ", 参数数量: " << call_inst->args.size() << std::endl;
+        for (size_t i = 0; i < call_inst->args.size(); i++) {
+          std::cout << "  参数" << i << ": " << call_inst->args[i]->GetFullName() << std::endl;
+        }
+      }
+    }
+    
+    // 我们需要在函数调用指令前插入参数移动指令
+    // 先找到所有的函数调用指令
+    std::vector<size_t> call_positions;
+    for (size_t i = 0; i < block->instruction_list.size(); i++) {
+      if (dynamic_cast<RiscvCallInstruction *>(block->instruction_list[i])) {
+        call_positions.push_back(i);
+      }
+    }
+    
+    // 从后向前处理，避免索引变化问题
+    for (auto it = call_positions.rbegin(); it != call_positions.rend(); ++it) {
+      size_t call_pos = *it;
+      auto *call_inst = dynamic_cast<RiscvCallInstruction *>(block->instruction_list[call_pos]);
+      
+      if (call_inst && !call_inst->args.empty()) {
+        std::cout << "处理函数调用: " << call_inst->function_name 
+                  << ", 参数数量: " << call_inst->args.size() << std::endl;
+        
+        // 为每个参数插入移动指令
+        int arg_count = std::min(8, static_cast<int>(call_inst->args.size()));
+        
+        for (int i = arg_count - 1; i >= 0; i--) {  // 倒序插入，保持顺序
+          auto arg_operand = call_inst->args[i];
+          int param_reg = 10 + i; // a0=x10, a1=x11, ..., a7=x17
+          
+          std::cout << "  插入mv指令: a" << i << " <- " << arg_operand->GetFullName() << std::endl;
+          
+          // 创建移动指令：mv a0, arg_operand
+          auto *mv_inst = new RiscvMvInstruction(
+            new RiscvRegOperand(-param_reg),  // 目标：a0-a7 (使用负数表示物理寄存器)
+            arg_operand                       // 源：原参数
+          );
+          
+          // 标记该参数寄存器为不可用，避免被其他虚拟寄存器使用
+          for (auto &reg : available_registers) {
+            if (reg.reg_no == param_reg) {
+              reg.is_available = false;
+              std::cout << "  标记寄存器 a" << i << " (x" << param_reg << ") 为不可用" << std::endl;
+              break;
+            }
+          }
+          
+          // 在call指令前插入mv指令
+          block->instruction_list.insert(
+            block->instruction_list.begin() + call_pos, 
+            mv_inst
+          );
+        }
+        
+        // call指令的位置现在向后移动了arg_count个位置
+        // 更新call指令，清空其参数列表（因为参数已经通过mv指令处理了）
+        call_inst->args.clear();
+        std::cout << "  清空call指令参数列表" << std::endl;
+      }
+    }
+  }
+  
+  // 调试：打印当前的寄存器分配状态
+  std::cout << "=== 当前虚拟寄存器到物理寄存器的映射 ===" << std::endl;
+  for (const auto& pair : virtual_to_physical) {
+    std::cout << "  %r" << pair.first << " -> x" << pair.second << std::endl;
+  }
+  std::cout << "=== 当前物理寄存器到虚拟寄存器的映射 ===" << std::endl;
+  for (const auto& pair : physical_to_virtual) {
+    std::cout << "  x" << pair.first << " -> %r" << pair.second << std::endl;
+  }
+  
+  std::cout << "=== 函数调用参数处理完成 ===" << std::endl;
 }

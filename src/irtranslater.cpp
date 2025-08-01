@@ -110,6 +110,9 @@ void Translator::translateFunction(FuncDefInstruction func,
     entry_block->stack_size = current_stack_frame->total_frame_size;
     if (current_stack_frame->total_frame_size > 0)
       generateStackFrameProlog(entry_block);
+    
+    // 生成函数参数接收代码
+    generateFunctionParameterReceive(func, entry_block);
   }
 }
 
@@ -376,7 +379,15 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
 void Translator::translateCall(CallInstruction *inst, RiscvBlock *block) {
   if (!inst)
     return;
+  
   auto call_inst = new RiscvCallInstruction(inst->GetFuncName());
+  
+  // 处理函数参数
+  for (const auto& arg_pair : inst->GetArgs()) {
+    auto arg_operand = translateOperand(arg_pair.second);  // second是Operand
+    call_inst->AddArg(arg_operand);
+  }
+  
   block->InsertInstruction(1, call_inst);
 
   // 处理函数返回值
@@ -428,12 +439,9 @@ void Translator::translateReturn(RetInstruction *inst, RiscvBlock *block) {
       }
     }
   }
-  // 生成栈帧尾声代码
-  if (current_stack_frame && current_stack_frame->total_frame_size > 0)
-    generateStackFrameEpilog(block);
-  auto ra = getRaReg(); // ra寄存器作为返回地址
-  auto jr_inst = new RiscvJrInstruction(ra);
-  block->InsertInstruction(1, jr_inst);
+  
+  // 生成完整的函数结尾代码
+  generateFunctionEpilog(block);
 }
 
 void Translator::translateIcmp(IcmpInstruction *inst, RiscvBlock *block) {
@@ -1988,7 +1996,15 @@ RiscvRegOperand *Translator::getRaReg() {
 }
 
 RiscvRegOperand *Translator::getA0Reg() {
-  return new RiscvRegOperand(-11); // a0寄存器作为帧指针
+  return new RiscvRegOperand(-10); // a0寄存器 (x10)
+}
+
+// 获取参数寄存器 a0-a7
+RiscvRegOperand *Translator::getArgReg(int arg_index) {
+  if (arg_index >= 0 && arg_index < 8) {
+    return new RiscvRegOperand(-(10 + arg_index)); // a0=x10, a1=x11, ..., a7=x17
+  }
+  throw std::runtime_error("参数索引超出范围，只支持a0-a7");
 }
 
 RiscvRegOperand *Translator::getZeroReg() {
@@ -2148,6 +2164,37 @@ void Translator::generateStackFrameEpilog(RiscvBlock *exit_block) {
   auto sp_2 = getSpReg();
   insertAddiInstruction(sp_2->CopyOperand(), sp_2->CopyOperand(),
                         current_stack_frame->total_frame_size, exit_block);
+}
+
+// 生成函数参数接收代码
+void Translator::generateFunctionParameterReceive(FuncDefInstruction func, RiscvBlock *entry_block) {
+  // 为每个函数参数生成 mv <param_virtual_reg>, <arg_reg> 指令
+  // 逆序插入，确保参数顺序正确
+  for (int i = func->formals_reg.size() - 1; i >= 0 && i < 8; i--) {
+    // 获取参数的虚拟寄存器操作数
+    auto param_operand = translateOperand(func->formals_reg[i]);
+    
+    // 获取对应的参数寄存器 (a0, a1, ..., a7)
+    auto arg_reg = getArgReg(i);
+    
+    // 生成 mv <param_virtual_reg>, <arg_reg> 指令
+    auto mv_inst = new RiscvMvInstruction(param_operand, arg_reg);
+    
+    // 使用pos=0插入到栈帧序言之后的开头位置
+    entry_block->InsertInstruction(0, mv_inst);
+  }
+}
+
+// 生成完整的函数结尾代码
+void Translator::generateFunctionEpilog(RiscvBlock *exit_block) {
+  // 1. 生成栈帧结尾代码（如果有栈帧）
+  if (current_stack_frame && current_stack_frame->total_frame_size > 0)
+    generateStackFrameEpilog(exit_block);
+  
+  // 2. 生成返回指令
+  auto ra = getRaReg(); // ra寄存器作为返回地址
+  auto jr_inst = new RiscvJrInstruction(ra);
+  exit_block->InsertInstruction(1, jr_inst);
 }
 
 int Translator::getLocalVariableOffset(int virtual_reg) {

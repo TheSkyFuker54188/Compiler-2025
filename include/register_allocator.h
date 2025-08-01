@@ -69,6 +69,7 @@ public:
   
   // 寄存器分配算法
   void preAllocateSpecialRegisters(const std::map<int, RiscvBlock*>& blocks);
+  void preAllocateFunctionCallArguments(const std::map<int, RiscvBlock*>& blocks); // 新增：函数调用参数预分配
   void performLinearScanAllocation();
   void allocateByCategory(); // 新增：按类型分配
   bool isLocalVariable(int virtual_reg); // 新增：判断是否为局部变量

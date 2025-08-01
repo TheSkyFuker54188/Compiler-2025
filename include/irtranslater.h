@@ -86,6 +86,7 @@ private:
   RiscvRegOperand *getSpReg();
   RiscvRegOperand *getRaReg();
   RiscvRegOperand *getA0Reg();
+  RiscvRegOperand *getArgReg(int arg_index); // 获取参数寄存器 a0-a7
   RiscvRegOperand *getZeroReg();
   RiscvRegOperand *getFa0Reg();
 
@@ -152,6 +153,8 @@ private:
   void finalizeFunctionStackFrame();
   void generateStackFrameProlog(RiscvBlock *entry_block);
   void generateStackFrameEpilog(RiscvBlock *exit_block);
+  void generateFunctionParameterReceive(FuncDefInstruction func, RiscvBlock *entry_block);
+  void generateFunctionEpilog(RiscvBlock *exit_block);
   int getLocalVariableOffset(int virtual_reg);
   int getTypeSize(LLVMType type);
 

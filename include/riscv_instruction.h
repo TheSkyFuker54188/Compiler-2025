@@ -94,16 +94,18 @@ public:
         return "gp";
       if (physical_reg == 5)
         return "tp";
-      if (physical_reg >= 6 && physical_reg <= 8)
+      if (physical_reg >= 6 && physical_reg <= 7)
         return "t" + std::to_string(physical_reg - 6);
-      if (physical_reg >= 9 && physical_reg <= 10)
-        return "s" + std::to_string(physical_reg - 9);
-      if (physical_reg >= 11 && physical_reg <= 18)
-        return "a" + std::to_string(physical_reg - 11);
-      if (physical_reg >= 19 && physical_reg <= 28)
-        return "s" + std::to_string(physical_reg - 17);
-      if (physical_reg >= 29 && physical_reg <= 32)
-        return "t" + std::to_string(physical_reg - 26);
+      if (physical_reg == 8)
+        return "s0";
+      if (physical_reg == 9)
+        return "s1";
+      if (physical_reg >= 10 && physical_reg <= 17)
+        return "a" + std::to_string(physical_reg - 10);
+      if (physical_reg >= 18 && physical_reg <= 27)
+        return "s" + std::to_string(physical_reg - 16);
+      if (physical_reg >= 28 && physical_reg <= 31)
+        return "t" + std::to_string(physical_reg - 25);
       if (physical_reg >= 33 && physical_reg <= 40)
         return "ft" + std::to_string(physical_reg - 33);
       if (physical_reg >= 41 && physical_reg <= 42)
