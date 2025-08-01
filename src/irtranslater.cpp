@@ -1984,7 +1984,7 @@ RiscvRegOperand *Translator::createVirtualReg(int reg_no) {
 }
 
 RiscvRegOperand *Translator::getS0Reg() {
-  return new RiscvRegOperand(-9); // S0寄存器作为帧指针
+  return new RiscvRegOperand(-8); // S0寄存器(x8)作为帧指针
 }
 
 RiscvRegOperand *Translator::getSpReg() {
