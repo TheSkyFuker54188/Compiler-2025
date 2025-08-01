@@ -90,10 +90,6 @@ void RegisterAllocator::allocateRegistersForFunction(
     std::cout << "=== 调用 preAllocateFunctionCallArguments ===" << std::endl;
     preAllocateFunctionCallArguments(blocks);
 
-    // 2.5. 预分配返回值寄存器
-    std::cout << "=== 调用 preAllocateReturnValues ===" << std::endl;
-    preAllocateReturnValues(blocks);
-
     // 3. 按变量类型分类分配寄存器
     allocateByCategory();
 
@@ -1593,43 +1589,4 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
   }
   
   std::cout << "=== 函数调用参数处理完成 ===" << std::endl;
-}
-
-// 预分配返回值寄存器
-void RegisterAllocator::preAllocateReturnValues(const std::map<int, RiscvBlock*>& blocks) {
-  std::cout << "=== 开始处理返回值寄存器分配 ===" << std::endl;
-  
-  // 遍历所有基本块
-  for (const auto& block_pair : blocks) {
-    RiscvBlock* block = block_pair.second;
-    
-    // 遍历指令，寻找目标寄存器为a0的mv指令（这通常是返回值设置）
-    for (size_t i = 0; i < block->instruction_list.size(); i++) {
-      RiscvInstruction* inst = block->instruction_list[i];
-      
-      // 检查是否为mv指令，且目标寄存器为a0
-      if (auto mv_inst = dynamic_cast<RiscvMvInstruction*>(inst)) {
-        if (auto dest_reg = dynamic_cast<RiscvRegOperand*>(mv_inst->rd)) {
-          // 检查目标寄存器是否为a0 (物理寄存器10)
-          if (dest_reg->GetRegNo() == -10) { // a0是物理寄存器10，用负数表示
-            std::cout << "  发现返回值设置指令: mv a0, ";
-            if (auto src_reg = dynamic_cast<RiscvRegOperand*>(mv_inst->rs1)) {
-              std::cout << "%r" << src_reg->GetRegNo() << std::endl;
-              
-              // 将a0标记为不可用，防止被其他变量占用
-              for (auto& reg : available_registers) {
-                if (reg.reg_no == 10) { // a0
-                  reg.is_available = false;
-                  std::cout << "  标记寄存器 a0 (x10) 为不可用" << std::endl;
-                  break;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  std::cout << "=== 返回值寄存器处理完成 ===" << std::endl;
 }
