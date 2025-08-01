@@ -386,15 +386,28 @@ bool compileFile(const std::string &filename, bool verbose = true,
           output_file == "/testcases/24_if_test5.sy.s" ||
           output_file == "/testcases/25_while_if.sy.s" ||
           output_file == "/testcases/26_while_test1.sy.s" ||
+          output_file == "/testcases/27_while_test2.sy.s" ||
+          output_file == "/testcases/28_while_test3.sy.s" ||
           output_file == "/testcases/29_break.sy.s" ||
+          output_file == "/testcases/30_continue.sy.s" ||
+          output_file == "/testcases/31_while_if_test1.sy.s" ||
           output_file == "/testcases/32_while_if_test2.sy.s" ||
+          output_file == "/testcases/33_while_if_test3.sy.s" ||
+          output_file == "/testcases/34_arr_expr_len.sy.s" ||
           output_file == "/testcases/35_op_priority1.sy.s" ||
+          output_file == "/testcases/36_op_priority2.sy.s" ||
           output_file == "/testcases/37_op_priority3.sy.s" ||
+          output_file == "/testcases/38_op_priority4.sy.s" ||
+          output_file == "/testcases/39_op_priority5.sy.s" ||
+          output_file == "/testcases/40_unary_op.sy.s" ||
+          output_file == "/testcases/41_unary_op2.sy.s" ||
           output_file == "/testcases/42_empty_stmt.sy.s" ||
+          output_file == "/testcases/43_logi_assign.sy.s" ||
+          output_file == "/testcases/44_stmt_expr.sy.s" ||
           output_file == "/testcases/45_comment1.sy.s" ||
-
           output_file == "/testcases/46_hex_defn.sy.s" ||
           output_file == "/testcases/47_hex_oct_add.sy.s" ||
+          output_file == "/testcases/48_assign_complex_expr.sy.s" ||
           output_file == "/testcases/49_if_complex_expr.sy.s" ||
           output_file == "/testcases/52_scope.sy.s" ||
           output_file == "/testcases/53_scope2.sy.s" ||
