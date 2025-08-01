@@ -60,11 +60,26 @@ void RegisterAllocator::allocateRegistersForFunction(
     const std::string &func_name,
     std::map<int, RiscvBlock *> &blocks,
     StackFrameInfo *frame_info) {
+  std::atomic<bool> dummy_cancel{false};
+  allocateRegistersForFunction(func_name, blocks, frame_info, dummy_cancel);
+}
+
+void RegisterAllocator::allocateRegistersForFunction(
+    const std::string &func_name,
+    std::map<int, RiscvBlock *> &blocks,
+    StackFrameInfo *frame_info,
+    const std::atomic<bool>& should_cancel) {
   if (!frame_info) {
     throw std::runtime_error("StackFrameInfo is null for function: " + func_name);
   }
 
   current_frame = frame_info;
+  cancel_flag = &should_cancel;
+
+  // 检查取消标志
+  if (should_cancel.load()) {
+    throw std::runtime_error("Register allocation cancelled before processing function: " + func_name);
+  }
 
   // 清空之前的分配状态
   virtual_to_physical.clear();
@@ -84,19 +99,34 @@ void RegisterAllocator::allocateRegistersForFunction(
     std::cout << "=== 调试：寄存器分配开始 ===" << std::endl;
     
     // 1. 计算生存期
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled during setup");
+    }
     computeLiveRanges(blocks);
 
     // 2. 预分配函数调用的参数寄存器
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled before function call argument allocation");
+    }
     std::cout << "=== 调用 preAllocateFunctionCallArguments ===" << std::endl;
     preAllocateFunctionCallArguments(blocks);
 
     // 3. 按变量类型分类分配寄存器
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled before category allocation");
+    }
     allocateByCategory();
 
     // 3. 插入溢出代码
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled before spill code insertion");
+    }
     insertSpillCode(blocks);
 
     // 4. 重写指令，替换虚拟寄存器为物理寄存器
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled before instruction rewriting");
+    }
     rewriteInstructions(blocks);
 
     // 5. 更新栈帧大小（考虑溢出）
@@ -1198,6 +1228,35 @@ void RegisterAllocationPass::applyToTranslator(Translator &translator) {
     const StackFrameInfo *frame_info = translator.getFunctionStackFrame(func_name);
     if (frame_info) {
       allocator.allocateRegistersForFunction(func_name, blocks, const_cast<StackFrameInfo*>(frame_info));
+    } else {
+      // std::cerr << "Warning: No stack frame info found for function: " << func_name << std::endl;
+    }
+  }
+
+  // std::cout << "寄存器分配完成！" << std::endl;
+}
+
+void RegisterAllocationPass::applyToTranslator(Translator &translator, const std::atomic<bool>& should_cancel) {
+  // std::cout << "\n=== 开始寄存器分配阶段（支持取消） ===" << std::endl;
+
+  RegisterAllocator allocator;
+
+  // 为每个函数执行寄存器分配
+  for (auto &func_pair : translator.riscv.function_block_map) {
+    // 检查是否需要取消
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled by timeout");
+    }
+    
+    const std::string &func_name = func_pair.first;
+    auto &blocks = func_pair.second;
+
+    // std::cout << "为函数 " << func_name << " 分配寄存器..." << std::endl;
+
+    // 获取函数的栈帧信息
+    const StackFrameInfo *frame_info = translator.getFunctionStackFrame(func_name);
+    if (frame_info) {
+      allocator.allocateRegistersForFunction(func_name, blocks, const_cast<StackFrameInfo*>(frame_info), should_cancel);
     } else {
       // std::cerr << "Warning: No stack frame info found for function: " << func_name << std::endl;
     }
