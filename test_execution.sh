@@ -93,24 +93,50 @@ run_tests_in_dir() {
             continue
         fi
 
-        # 3. 运行 .exe 并获取退出码 (3分钟超时)
-        timeout 180 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file"
+        # 3. 运行 .exe，捕获标准输出和退出码 (3分钟超时)
+        temp_stdout="temp_stdout_$base_name.log"
+        timeout 180 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" > "$temp_stdout"
         actual_exit_code=$?
         if [ $actual_exit_code -eq 124 ]; then
             echo -e "\e[31m运行超时\e[0m"
             ((failed++))
+            rm -f "$temp_stdout"
             continue
         fi
+        actual_stdout=$(cat "$temp_stdout")
+        rm -f "$temp_stdout"
 
-        # 4. 读取期望退出码
-        expected_exit_code=$(cat "$out_file" | tr -d '\n\r' | xargs)
+        # 4. 读取期望的标准输出和退出码
+        # 约定：.out文件最后一行是退出码，其余是标准输出
+        expected_stdout=$(head -n -1 "$out_file" 2>/dev/null || echo "")
+        expected_exit_code=$(tail -n 1 "$out_file" | tr -d '\n\r' | xargs)
 
         # 5. 比较结果
+        stdout_ok=false
+        exit_code_ok=false
+
+        # 比较标准输出
+        if [ "$actual_stdout" == "$expected_stdout" ]; then
+            stdout_ok=true
+        fi
+
+        # 比较退出码
         if [[ "$actual_exit_code" =~ ^-?[0-9]+$ ]] && [[ "$expected_exit_code" =~ ^-?[0-9]+$ ]] && [ "$actual_exit_code" -eq "$expected_exit_code" ]; then
+            exit_code_ok=true
+        fi
+
+        # 判断测试是否通过
+        if $stdout_ok && $exit_code_ok; then
             echo -e "\e[32m通过\e[0m"
             ((passed++))
         else
-            echo -e "\e[31m失败\e[0m (期望: $expected_exit_code, 实际: $actual_exit_code)"
+            echo -e "\e[31m失败\e[0m"
+            if ! $stdout_ok; then
+                echo "  - 标准输出不匹配. 期望: '$expected_stdout', 实际: '$actual_stdout'"
+            fi
+            if ! $exit_code_ok; then
+                echo "  - 退出码不匹配. 期望: $expected_exit_code, 实际: $actual_exit_code"
+            fi
             ((failed++))
         fi
     done
