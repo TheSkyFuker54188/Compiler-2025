@@ -6,6 +6,7 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include <atomic>
 
 // 虚拟寄存器的生存期信息
 struct LiveRange {
@@ -50,6 +51,9 @@ private:
   
   // 当前函数的栈帧信息
   StackFrameInfo* current_frame;
+  
+  // 取消标志
+  const std::atomic<bool>* cancel_flag;
 
 public:
   RegisterAllocator();
@@ -58,6 +62,10 @@ public:
   void allocateRegistersForFunction(const std::string& func_name, 
                                    std::map<int, RiscvBlock*>& blocks,
                                    StackFrameInfo* frame_info);
+  void allocateRegistersForFunction(const std::string& func_name, 
+                                   std::map<int, RiscvBlock*>& blocks,
+                                   StackFrameInfo* frame_info,
+                                   const std::atomic<bool>& should_cancel);
   
   // 寄存器查询
   int getPhysicalRegister(int virtual_reg);
@@ -106,4 +114,5 @@ public:
 class RegisterAllocationPass {
 public:
   static void applyToTranslator(Translator& translator);
+  static void applyToTranslator(Translator& translator, const std::atomic<bool>& should_cancel);
 }; 

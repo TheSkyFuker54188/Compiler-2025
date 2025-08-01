@@ -12,6 +12,8 @@
 #include <string>
 #include <future>
 #include <chrono>
+#include <atomic>
+#include <thread>
 
 // 外部变量声明
 extern std::unique_ptr<CompUnit> root;
@@ -126,11 +128,14 @@ bool compileFile(const std::string &filename, bool verbose = true,
     // 执行翻译
     translator.translate(ir);
 
-    // 寄存器分配带超时机制（60秒）
+    // 寄存器分配带协作式超时机制（60秒）
     bool register_allocation_success = false;
+    std::atomic<bool> should_cancel{false};
+    
     try {
-      auto future = std::async(std::launch::async, [&translator]() {
-        RegisterAllocationPass::applyToTranslator(translator);
+      auto future = std::async(std::launch::async, [&translator, &should_cancel]() {
+        // 使用支持取消的寄存器分配版本
+        RegisterAllocationPass::applyToTranslator(translator, should_cancel);
       });
       
       auto status = future.wait_for(std::chrono::seconds(60));
@@ -141,12 +146,42 @@ bool compileFile(const std::string &filename, bool verbose = true,
           std::cout << "寄存器分配完成!" << std::endl;
       } else {
         if (verbose)
-          std::cout << "警告: 寄存器分配超时，跳过此步骤" << std::endl;
+          std::cout << "警告: 寄存器分配超时，正在协作式取消..." << std::endl;
+        
+        // 设置取消标志，让后台任务协作式退出
+        should_cancel = true;
+        
+        // 再等待最多5秒让任务响应取消信号
+        auto cancel_status = future.wait_for(std::chrono::seconds(5));
+        if (cancel_status == std::future_status::ready) {
+          try {
+            future.get();
+            if (verbose)
+              std::cout << "寄存器分配任务已协作式取消" << std::endl;
+          } catch (const std::exception& e) {
+            if (verbose)
+              std::cout << "寄存器分配任务取消: " << e.what() << std::endl;
+          }
+        } else {
+          if (verbose)
+            std::cout << "警告: 寄存器分配任务未响应取消信号，强制分离" << std::endl;
+          // 如果任务不响应取消，则强制分离
+          std::thread([fut = std::move(future)]() mutable {
+            try {
+              fut.get();
+            } catch (...) {
+              // 忽略任何异常
+            }
+          }).detach();
+        }
+        
         register_allocation_success = false;
+        if (verbose)
+          std::cout << "继续使用虚拟寄存器生成汇编代码" << std::endl;
       }
     } catch (const std::exception& e) {
       if (verbose)
-        std::cout << "警告: 寄存器分配失败，跳过此步骤: " << e.what() << std::endl;
+        std::cout << "警告: 寄存器分配失败: " << e.what() << std::endl;
       register_allocation_success = false;
     }
 
