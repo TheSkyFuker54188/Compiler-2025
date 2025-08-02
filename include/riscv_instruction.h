@@ -377,8 +377,35 @@ public:
     this->rs1 = rs1;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  fmv.w.x  " << rd->GetFullName() << "," << rs1->GetFullName()
-      << "\n";
+    // 检查源操作数是否为整数寄存器
+    bool src_is_int = false;
+    if (auto reg_op = dynamic_cast<RiscvRegOperand*>(rs1)) {
+      if (reg_op->reg_no >= -31 && reg_op->reg_no <= -1) {
+        src_is_int = true;
+      }
+    }
+    
+    // 检查目标操作数是否为浮点寄存器
+    bool dst_is_float = false;
+    if (auto reg_op = dynamic_cast<RiscvRegOperand*>(rd)) {
+      if (reg_op->reg_no >= -63 && reg_op->reg_no <= -32) {
+        dst_is_float = true;
+      }
+    }
+    
+    if (src_is_int && dst_is_float) {
+      // 整数到浮点：使用fmv.w.x
+      s << "  fmv.w.x  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    } else if (!src_is_int && dst_is_float) {
+      // 浮点到浮点：使用fmv.s
+      s << "  fmv.s  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    } else if (!src_is_int && !dst_is_float) {
+      // 浮点到整数：使用fmv.x.w
+      s << "  fmv.x.w  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    } else {
+      // 整数到整数：使用mv
+      s << "  mv  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    }
   }
 };
 

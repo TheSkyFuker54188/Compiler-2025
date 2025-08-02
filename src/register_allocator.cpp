@@ -1770,8 +1770,9 @@ void RegisterAllocator::analyzeVirtualRegisterTypes(const std::map<int, RiscvBlo
         markFloatRegister(fdiv_inst->rs1);
         markFloatRegister(fdiv_inst->rs2);
       } else if (auto *fmv_inst = dynamic_cast<RiscvFmvInstruction*>(inst)) {
-        markFloatRegister(fmv_inst->rd);
-        markFloatRegister(fmv_inst->rs1);
+        // fmv指令需要根据具体的源和目标寄存器类型来标记
+        // 但在类型分析阶段，我们需要更智能的处理
+        // 这里暂时跳过，让寄存器分配阶段处理
       } else if (auto *flw_inst = dynamic_cast<RiscvFlwInstruction*>(inst)) {
         markFloatRegister(flw_inst->rd);
       } else if (auto *fsw_inst = dynamic_cast<RiscvFswInstruction*>(inst)) {
