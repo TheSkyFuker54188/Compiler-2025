@@ -1464,13 +1464,13 @@ void IRgenerator::handleArrayInitializer(ConstInitVal *init, int base_reg,
 }
 
 // New helper function to evaluate constant expressions
-std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr) {
+std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr,int isdef) {
   if (auto *num = dynamic_cast<Number *>(expr)) {
     if (std::holds_alternative<int>(num->value)) {
       return std::get<int>(num->value);
     }
   } else if (auto *unary = dynamic_cast<UnaryExp *>(expr)) {
-    auto operand_val = evaluateConstExpression(unary->operand.get());
+    auto operand_val = evaluateConstExpression(unary->operand.get(),isdef);
     if (operand_val) {
       switch (unary->op) {
       case UnaryOp::PLUS:
@@ -1482,8 +1482,8 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr) {
       }
     }
   } else if (auto *binary = dynamic_cast<BinaryExp *>(expr)) {
-    auto lhs_val = evaluateConstExpression(binary->lhs.get());
-    auto rhs_val = evaluateConstExpression(binary->rhs.get());
+    auto lhs_val = evaluateConstExpression(binary->lhs.get(),isdef);
+    auto rhs_val = evaluateConstExpression(binary->rhs.get(),isdef);
     if (lhs_val && rhs_val) {
       switch (binary->op) {
       case BinaryOp::ADD:
@@ -1511,9 +1511,11 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr) {
         return *val;
       }
     }
-    // if (sym && irgen_table.name_to_value[lval->name]) {
-    //   return irgen_table.name_to_value[lval->name];
-    // }
+    if(isdef){
+    if (sym && irgen_table.name_to_value[lval->name]) {
+      return irgen_table.name_to_value[lval->name];
+    }
+  }
   }
   return std::nullopt;
 }
@@ -1583,7 +1585,7 @@ std::optional<double> IRgenerator::evaluateGlobalInitializer(InitVal *init) {
     Exp *expr = std::get<std::unique_ptr<Exp>>(init->value).get();
 
     // 优先尝试整数常量表达式求值
-    auto int_val = evaluateConstExpression(expr);
+    auto int_val = evaluateConstExpression(expr,0);
     if (int_val.has_value()) {
       return static_cast<double>(int_val.value());
     }
@@ -1704,7 +1706,7 @@ void IRgenerator::flattenConstInit(
 
   if (std::holds_alternative<std::unique_ptr<Exp>>(init->value)) {
     auto &expr = std::get<std::unique_ptr<Exp>>(init->value);
-    auto int_val = evaluateConstExpression(expr.get());        // 移除类名前缀
+    auto int_val = evaluateConstExpression(expr.get(),0);        // 移除类名前缀
     auto float_val = evaluateConstExpressionFloat(expr.get()); // 移除类名前缀
 
     if (int_val && type == BaseType::INT) {
@@ -1745,7 +1747,7 @@ void IRgenerator::visit(ConstDef &node) {
 
     // 处理数组维度
     for (auto &dim : node.array_dimensions) {
-      auto val = evaluateConstExpression(dim.get());
+      auto val = evaluateConstExpression(dim.get(),1);
       attr.dims.push_back(val.value_or(1));
     }
 
@@ -1785,7 +1787,7 @@ void IRgenerator::visit(ConstDef &node) {
         if (std::holds_alternative<std::unique_ptr<Exp>>(const_init->value)) {
           auto &expr = std::get<std::unique_ptr<Exp>>(const_init->value);
           if (current_type == BaseType::INT) {
-            auto int_val = evaluateConstExpression(expr.get());
+            auto int_val = evaluateConstExpression(expr.get(),0);
             if (int_val) {
               attr.IntInitVals.push_back(*int_val);
             } else {
@@ -1838,7 +1840,7 @@ void IRgenerator::visit(ConstDef &node) {
     if (!node.array_dimensions.empty()) {
       std::vector<int> dims;
       for (auto &dim : node.array_dimensions) {
-        auto val = evaluateConstExpression(dim.get());
+        auto val = evaluateConstExpression(dim.get(),1);
         dims.push_back(val.value_or(1));
       }
       IRgenAllocaArray(getCurrentBlock(), Type2LLvm[attr.type], reg, dims);
@@ -2004,7 +2006,7 @@ void IRgenerator::flattenInitVal(InitVal *init,
 
   if (std::holds_alternative<std::unique_ptr<Exp>>(init->value)) {
     auto &expr = std::get<std::unique_ptr<Exp>>(init->value);
-    if (auto int_val = evaluateConstExpression(expr.get())) {
+    if (auto int_val = evaluateConstExpression(expr.get(),0)) {
       result.push_back(*int_val);
     } else if (auto float_val = evaluateConstExpressionFloat(expr.get())) {
       result.push_back(*float_val);
@@ -2037,7 +2039,7 @@ void IRgenerator::visit(VarDef &node) {
     VarAttribute attr;
     attr.type = current_type;
     for (auto &dim : node.array_dimensions) {
-      auto val = evaluateConstExpression(dim.get());
+      auto val = evaluateConstExpression(dim.get(),1);
       attr.dims.push_back(val.value_or(1));
     }
     if (node.initializer) {
@@ -2113,7 +2115,7 @@ void IRgenerator::visit(VarDef &node) {
     attr.ConstTag = false; // 明确标记为非常量
     std::vector<int> dims;
     for (auto &dim : node.array_dimensions) {
-      auto val = evaluateConstExpression(dim.get());
+      auto val = evaluateConstExpression(dim.get(),1);
       if (val) {
         dims.push_back(*val);
       } else {
@@ -2359,7 +2361,7 @@ void IRgenerator::visit(FuncFParam &node) {
   if (node.is_array_pointer || !node.array_dimensions.empty()) {
     function_now->InsertFormal(PTR);
     for (auto &dim : node.array_dimensions) {
-      auto val = evaluateConstExpression(dim.get());
+      auto val = evaluateConstExpression(dim.get(),1);
       if (val) {
         attr.dims.push_back(*val);
       }
@@ -3479,7 +3481,7 @@ void IRgenerator::visit(LVal &node) {
       for (auto &idx : node.indices) {
         bool old_require = require_address;
         require_address = false; // Indices need values, not addresses
-        if (auto const_val = evaluateConstExpression(idx.get())) {
+        if (auto const_val = evaluateConstExpression(idx.get(),0)) {
           indices.push_back(new ImmI32Operand(*const_val));
         } else {
           idx->accept(*this);
@@ -3562,7 +3564,7 @@ void IRgenerator::visit(LVal &node) {
       for (auto &idx : node.indices) {
         bool old_require = require_address;
         require_address = false; // Indices need values, not addresses
-        if (auto const_val = evaluateConstExpression(idx.get())) {
+        if (auto const_val = evaluateConstExpression(idx.get(),0)) {
           indices.push_back(new ImmI32Operand(*const_val));
         } else {
           idx->accept(*this);
@@ -3681,7 +3683,7 @@ void IRgenerator::visit(LVal &node) {
         std::vector<Operand> indices;
         //indices.push_back(new ImmI32Operand(0)); // First index for global array
         for (auto &idx : node.indices) {
-          if (auto const_val = evaluateConstExpression(idx.get())) {
+          if (auto const_val = evaluateConstExpression(idx.get(),0)) {
             indices.push_back(new ImmI32Operand(*const_val));
           } else {
             idx->accept(*this);
