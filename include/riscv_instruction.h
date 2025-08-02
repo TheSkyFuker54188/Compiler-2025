@@ -106,16 +106,21 @@ public:
         return "s" + std::to_string(physical_reg - 16);
       if (physical_reg >= 28 && physical_reg <= 31)
         return "t" + std::to_string(physical_reg - 25);
-      if (physical_reg >= 33 && physical_reg <= 40)
-        return "ft" + std::to_string(physical_reg - 33);
-      if (physical_reg >= 41 && physical_reg <= 42)
-        return "fs" + std::to_string(physical_reg - 41);
-      if (physical_reg >= 43 && physical_reg <= 50)
-        return "fa" + std::to_string(physical_reg - 43);
-      if (physical_reg >= 51 && physical_reg <= 60)
-        return "fs" + std::to_string(physical_reg - 49);
-      if (physical_reg >= 61 && physical_reg <= 64)
-        return "ft" + std::to_string(physical_reg - 53);
+      // 浮点寄存器编码：f0=32, f1=33, ..., f31=63
+      if (physical_reg >= 32 && physical_reg <= 63) {
+        int freg_num = physical_reg - 32;  // f0=0, f1=1, ..., f31=31
+        // RISC-V 浮点寄存器命名约定
+        if (freg_num >= 0 && freg_num <= 7)
+          return "ft" + std::to_string(freg_num);      // ft0-ft7
+        if (freg_num >= 8 && freg_num <= 9)
+          return "fs" + std::to_string(freg_num - 8);  // fs0-fs1
+        if (freg_num >= 10 && freg_num <= 17)
+          return "fa" + std::to_string(freg_num - 10); // fa0-fa7
+        if (freg_num >= 18 && freg_num <= 27)
+          return "fs" + std::to_string(freg_num - 16); // fs2-fs11
+        if (freg_num >= 28 && freg_num <= 31)
+          return "ft" + std::to_string(freg_num - 20); // ft8-ft11
+      }
       return "x" + std::to_string(physical_reg);
     } else {
       // 虚拟寄存器使用%r前缀
@@ -637,7 +642,7 @@ public:
     this->rs1 = rs1;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  fcvts.w.s  " << rd->GetFullName() << "," << rs1->GetFullName()
+    s << "  fcvt.s.w  " << rd->GetFullName() << "," << rs1->GetFullName()
       << "\n";
   }
 };

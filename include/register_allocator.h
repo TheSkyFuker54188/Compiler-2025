@@ -40,6 +40,9 @@ private:
   std::map<int, int> virtual_to_physical; // 虚拟寄存器 -> 物理寄存器
   std::map<int, int> physical_to_virtual; // 物理寄存器 -> 虚拟寄存器（当前占用）
   
+  // 虚拟寄存器类型跟踪 (新增)
+  std::map<int, bool> virtual_reg_is_float; // 虚拟寄存器 -> 是否为浮点类型
+  
   // 溢出管理
   std::set<int> spilled_virtuals;         // 被溢出的虚拟寄存器
   std::map<int, int> spill_slots;         // 虚拟寄存器 -> 溢出槽偏移
@@ -98,6 +101,15 @@ public:
   void rewriteOperandNew(RiscvOperand*& operand, const std::map<int, int>& vreg_to_temp_phys_reg);
   bool usesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
   bool definesVirtualRegister(RiscvInstruction* inst, int virtual_reg);
+
+  // 新增：虚拟寄存器类型相关方法
+  void analyzeVirtualRegisterTypes(const std::map<int, RiscvBlock*>& blocks);
+  bool isFloatVirtualRegister(int virtual_reg);
+  bool isFloatPhysicalRegister(int physical_reg);
+  int findFreeFloatRegister();
+  int findFreeIntegerRegister();
+  void markFloatRegister(RiscvOperand* operand);
+  void markIntegerRegister(RiscvOperand* operand);
   
   // 调试和统计
   void printAllocationResult();

@@ -19,10 +19,10 @@ RegisterAllocator::RegisterAllocator()
 
 void RegisterAllocator::initializePhysicalRegisters() {
   // RISC-V寄存器分配策略：
-  // - t0-t6: 临时寄存器，调用方保存
-  // - s0-s11: 保存寄存器，被调用方保存
-  // - a0-a7: 参数寄存器，a0,a1也是返回值寄存器
+  // 整数寄存器: x0-x31 (0-31)
+  // 浮点寄存器: f0-f31 (32-63, 在我们的编号系统中)
 
+  // === 整数寄存器 ===
   // 临时寄存器 (caller-saved) - 注意：不使用x5(tp)，从x6开始
   available_registers.emplace_back(6, "t0", false);  // x6
   available_registers.emplace_back(7, "t1", false);  // x7
@@ -54,6 +54,45 @@ void RegisterAllocator::initializePhysicalRegisters() {
   available_registers.emplace_back(15, "a5", false); // x15
   available_registers.emplace_back(16, "a6", false); // x16
   available_registers.emplace_back(17, "a7", false); // x17
+
+  // === 浮点寄存器 (编号32-63) ===
+  // 浮点临时寄存器 (caller-saved)
+  available_registers.emplace_back(-(32 + 0), "ft0", false);  // f0
+  available_registers.emplace_back(-(32 + 1), "ft1", false);  // f1
+  available_registers.emplace_back(-(32 + 2), "ft2", false);  // f2
+  available_registers.emplace_back(-(32 + 3), "ft3", false);  // f3
+  available_registers.emplace_back(-(32 + 4), "ft4", false);  // f4
+  available_registers.emplace_back(-(32 + 5), "ft5", false);  // f5
+  available_registers.emplace_back(-(32 + 6), "ft6", false);  // f6
+  available_registers.emplace_back(-(32 + 7), "ft7", false);  // f7
+  available_registers.emplace_back(-(32 + 28), "ft8", false); // f28
+  available_registers.emplace_back(-(32 + 29), "ft9", false); // f29
+  available_registers.emplace_back(-(32 + 30), "ft10", false);// f30
+  available_registers.emplace_back(-(32 + 31), "ft11", false);// f31
+
+  // 浮点保存寄存器 (callee-saved)
+  available_registers.emplace_back(-(32 + 8), "fs0", true);   // f8
+  available_registers.emplace_back(-(32 + 9), "fs1", true);   // f9
+  available_registers.emplace_back(-(32 + 18), "fs2", true);  // f18
+  available_registers.emplace_back(-(32 + 19), "fs3", true);  // f19
+  available_registers.emplace_back(-(32 + 20), "fs4", true);  // f20
+  available_registers.emplace_back(-(32 + 21), "fs5", true);  // f21
+  available_registers.emplace_back(-(32 + 22), "fs6", true);  // f22
+  available_registers.emplace_back(-(32 + 23), "fs7", true);  // f23
+  available_registers.emplace_back(-(32 + 24), "fs8", true);  // f24
+  available_registers.emplace_back(-(32 + 25), "fs9", true);  // f25
+  available_registers.emplace_back(-(32 + 26), "fs10", true); // f26
+  available_registers.emplace_back(-(32 + 27), "fs11", true); // f27
+
+  // 浮点参数寄存器 fa0-fa7（fa0,fa1也是返回值寄存器）
+  available_registers.emplace_back(-(32 + 10), "fa0", false); // f10
+  available_registers.emplace_back(-(32 + 11), "fa1", false); // f11
+  available_registers.emplace_back(-(32 + 12), "fa2", false); // f12
+  available_registers.emplace_back(-(32 + 13), "fa3", false); // f13
+  available_registers.emplace_back(-(32 + 14), "fa4", false); // f14
+  available_registers.emplace_back(-(32 + 15), "fa5", false); // f15
+  available_registers.emplace_back(-(32 + 16), "fa6", false); // f16
+  available_registers.emplace_back(-(32 + 17), "fa7", false); // f17
 }
 
 void RegisterAllocator::allocateRegistersForFunction(
@@ -103,6 +142,12 @@ void RegisterAllocator::allocateRegistersForFunction(
       throw std::runtime_error("Register allocation cancelled during setup");
     }
     computeLiveRanges(blocks);
+
+    // 1.5. 分析虚拟寄存器类型 (新增)
+    if (should_cancel.load()) {
+      throw std::runtime_error("Register allocation cancelled before type analysis");
+    }
+    analyzeVirtualRegisterTypes(blocks);
 
     // 2. 预分配函数调用的参数寄存器
     if (should_cancel.load()) {
@@ -186,29 +231,54 @@ void RegisterAllocator::allocateRegistersForFunction(
 
 // 新增：按类型分配寄存器
 void RegisterAllocator::allocateByCategory() {
+  // 首先分析虚拟寄存器类型
+  std::cout << "=== 分析虚拟寄存器类型 ===" << std::endl;
+  // virtual_reg_is_float 将在 analyzeVirtualRegisterTypes 中填充
+  
   // 分类虚拟寄存器：局部vs全局，整数vs浮点
   std::vector<LiveRange*> global_int_ranges;
   std::vector<LiveRange*> local_int_ranges;
-  // 暂时不区分浮点，因为当前实现主要是整数
+  std::vector<LiveRange*> global_float_ranges;
+  std::vector<LiveRange*> local_float_ranges;
   
   for (auto &range : live_ranges) {
-    if (isLocalVariable(range.virtual_reg)) {
-      local_int_ranges.push_back(&range);
+    bool is_float = isFloatVirtualRegister(range.virtual_reg);
+    bool is_local = isLocalVariable(range.virtual_reg);
+    
+    if (is_float) {
+      if (is_local) {
+        local_float_ranges.push_back(&range);
+      } else {
+        global_float_ranges.push_back(&range);
+      }
     } else {
-      global_int_ranges.push_back(&range);
+      if (is_local) {
+        local_int_ranges.push_back(&range);
+      } else {
+        global_int_ranges.push_back(&range);
+      }
     }
   }
   
-  // 为全局变量分配保存寄存器(s0-s11) - 注意：s0通常用作帧指针，从s1开始
-  std::set<int> global_regs = {9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
-  std::cout << "=== 分配全局变量寄存器 ===" << std::endl;
-  allocateRangesWithRegisters(global_int_ranges, global_regs);
+  // 为全局整数变量分配保存寄存器(s1-s11)
+  std::set<int> global_int_regs = {-9, -18, -19, -20, -21, -22, -23, -24, -25, -26, -27};
+  std::cout << "=== 分配全局整数变量寄存器 ===" << std::endl;
+  allocateRangesWithRegisters(global_int_ranges, global_int_regs);
   
-  // 为局部变量分配临时寄存器(t0-t6)和部分参数寄存器(a2-a7) - 不包括x5(tp)
-  // 注意：a0,a1保留用于函数调用的参数传递和返回值
-  std::set<int> local_regs = {6, 7, 28, 29, 30, 31, 12, 13, 14, 15, 16, 17};
-  std::cout << "=== 分配局部变量寄存器 ===" << std::endl;
-  allocateRangesWithRegisters(local_int_ranges, local_regs);
+  // 为局部整数变量分配临时寄存器(t0-t6)和部分参数寄存器(a2-a7)
+  std::set<int> local_int_regs = {-6, -7, -28, -29, -30, -31, -12, -13, -14, -15, -16, -17};
+  std::cout << "=== 分配局部整数变量寄存器 ===" << std::endl;
+  allocateRangesWithRegisters(local_int_ranges, local_int_regs);
+  
+  // 为全局浮点变量分配浮点保存寄存器(fs0-fs11)
+  std::set<int> global_float_regs = {-(32+8), -(32+9), -(32+18), -(32+19), -(32+20), -(32+21), -(32+22), -(32+23), -(32+24), -(32+25), -(32+26), -(32+27)};
+  std::cout << "=== 分配全局浮点变量寄存器 ===" << std::endl;
+  allocateRangesWithRegisters(global_float_ranges, global_float_regs);
+  
+  // 为局部浮点变量分配浮点临时寄存器(ft0-ft11)和部分浮点参数寄存器(fa2-fa7)
+  std::set<int> local_float_regs = {-(32+0), -(32+1), -(32+2), -(32+3), -(32+4), -(32+5), -(32+6), -(32+7), -(32+28), -(32+29), -(32+30), -(32+31), -(32+12), -(32+13), -(32+14), -(32+15), -(32+16), -(32+17)};
+  std::cout << "=== 分配局部浮点变量寄存器 ===" << std::endl;
+  allocateRangesWithRegisters(local_float_ranges, local_float_regs);
 }
 
 // 判断是否为局部变量（简化版本）
@@ -254,7 +324,21 @@ void RegisterAllocator::allocateRangesWithRegisters(
 
   for (auto *range : ranges) {
     std::cout << "  处理虚拟寄存器 %r" << range->virtual_reg 
-              << " [" << range->start_pos << "-" << range->end_pos << "]" << std::endl;
+              << " [" << range->start_pos << "-" << range->end_pos << "]";
+    
+    // 检查虚拟寄存器类型是否与目标寄存器集合匹配
+    bool is_float_vreg = isFloatVirtualRegister(range->virtual_reg);
+    bool is_float_reg_set = false;
+    if (!reg_set.empty()) {
+      is_float_reg_set = isFloatPhysicalRegister(*reg_set.begin());
+    }
+    
+    if (is_float_vreg != is_float_reg_set) {
+      std::cout << " (类型不匹配，跳过)" << std::endl;
+      continue; // 类型不匹配，跳过
+    }
+    
+    std::cout << " (类型: " << (is_float_vreg ? "浮点" : "整数") << ")" << std::endl;
               
     // Skip already allocated ranges
     if (virtual_to_physical.find(range->virtual_reg) != virtual_to_physical.end()) {
@@ -283,7 +367,11 @@ void RegisterAllocator::allocateRangesWithRegisters(
       virtual_to_physical[range->virtual_reg] = physical_reg;
       physical_to_virtual[physical_reg] = range->virtual_reg;
       active.insert(range);
-      std::cout << "    分配到物理寄存器 x" << physical_reg << std::endl;
+      if (isFloatPhysicalRegister(physical_reg)) {
+        std::cout << "    分配到物理寄存器 f" << (physical_reg - 32) << std::endl;
+      } else {
+        std::cout << "    分配到物理寄存器 x" << physical_reg << std::endl;
+      }
     } else {
       // Spill
       if (!active.empty()) {
@@ -840,8 +928,9 @@ void RegisterAllocator::performLinearScanAllocation() {
         it = active.erase(it);
     }
 
-    // Try to find a free register
-    int physical_reg = findFreeRegister();
+    // Try to find a free register based on the virtual register type
+    bool is_float = isFloatVirtualRegister(range.virtual_reg);
+    int physical_reg = is_float ? findFreeFloatRegister() : findFreeIntegerRegister();
 
     if (physical_reg != -1) {
       // Found a free register, mark it as unavailable
@@ -1500,10 +1589,10 @@ void RegisterAllocator::rewriteOperandNew(RiscvOperand *&operand, const std::map
     if (virtual_reg >= 0) {
       auto it_phys = virtual_to_physical.find(virtual_reg);
       if (it_phys != virtual_to_physical.end()) {
-        // 分配到物理寄存器，使用负数表示物理寄存器
-        // std::cout << "重写 %r" << virtual_reg << " -> x" << it_phys->second << " (负数:" << (-it_phys->second) << ")" << std::endl;
+        // 分配到物理寄存器，直接使用物理寄存器编号（已经是负数）
+        // std::cout << "重写 %r" << virtual_reg << " -> 物理寄存器 " << it_phys->second << std::endl;
         // delete operand;
-        operand = new RiscvRegOperand(-it_phys->second);
+        operand = new RiscvRegOperand(it_phys->second);
       } else if (isSpilled(virtual_reg)) {
         // 溢出，使用临时物理寄存器
         auto it_temp = vreg_to_temp_phys_reg.find(virtual_reg);
@@ -1536,9 +1625,9 @@ void RegisterAllocator::rewriteOperand(RiscvOperand *&operand) {
         
         // 检查是否已经被替换过（避免重复删除）
         if (virtual_reg >= 0) {  // 只有虚拟寄存器才需要替换
-          // 替换为物理寄存器（使用负数表示物理寄存器）
+          // 替换为物理寄存器（直接使用物理寄存器编号，已经是负数）
           delete operand;  // 删除旧操作数
-          operand = new RiscvRegOperand(-physical_reg);
+          operand = new RiscvRegOperand(physical_reg);
         }
       } else if (isSpilled(virtual_reg)) {
         // 溢出的寄存器在这里应该已经被替换为t6了
@@ -1648,4 +1737,172 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
   }
   
   std::cout << "=== 函数调用参数处理完成 ===" << std::endl;
+}
+
+// 新增：分析虚拟寄存器类型
+void RegisterAllocator::analyzeVirtualRegisterTypes(const std::map<int, RiscvBlock*>& blocks) {
+  std::cout << "=== 开始分析虚拟寄存器类型 ===" << std::endl;
+  
+  // 清空之前的类型信息
+  virtual_reg_is_float.clear();
+  
+  for (const auto& block_pair : blocks) {
+    const auto& block = block_pair.second;
+    
+    for (const auto& inst : block->instruction_list) {
+      if (!inst) continue;
+      
+      // 分析浮点指令，标记相关虚拟寄存器为浮点类型
+      if (auto *fadd_inst = dynamic_cast<RiscvFAddInstruction*>(inst)) {
+        markFloatRegister(fadd_inst->rd);
+        markFloatRegister(fadd_inst->rs1);
+        markFloatRegister(fadd_inst->rs2);
+      } else if (auto *fsub_inst = dynamic_cast<RiscvFSubInstruction*>(inst)) {
+        markFloatRegister(fsub_inst->rd);
+        markFloatRegister(fsub_inst->rs1);
+        markFloatRegister(fsub_inst->rs2);
+      } else if (auto *fmul_inst = dynamic_cast<RiscvFMulInstruction*>(inst)) {
+        markFloatRegister(fmul_inst->rd);
+        markFloatRegister(fmul_inst->rs1);
+        markFloatRegister(fmul_inst->rs2);
+      } else if (auto *fdiv_inst = dynamic_cast<RiscvFDivInstruction*>(inst)) {
+        markFloatRegister(fdiv_inst->rd);
+        markFloatRegister(fdiv_inst->rs1);
+        markFloatRegister(fdiv_inst->rs2);
+      } else if (auto *fmv_inst = dynamic_cast<RiscvFmvInstruction*>(inst)) {
+        markFloatRegister(fmv_inst->rd);
+        markFloatRegister(fmv_inst->rs1);
+      } else if (auto *flw_inst = dynamic_cast<RiscvFlwInstruction*>(inst)) {
+        markFloatRegister(flw_inst->rd);
+      } else if (auto *fsw_inst = dynamic_cast<RiscvFswInstruction*>(inst)) {
+        markFloatRegister(fsw_inst->rs);
+      } else if (auto *fcvtsw_inst = dynamic_cast<RiscvFcvtswInstruction*>(inst)) {
+        // fcvt.s.w: 整数到浮点转换，rd是浮点，rs1是整数
+        markFloatRegister(fcvtsw_inst->rd);
+        markIntegerRegister(fcvtsw_inst->rs1);
+      } else if (auto *fcvtws_inst = dynamic_cast<RiscvFcvtwsInstruction*>(inst)) {
+        // fcvt.w.s: 浮点到整数转换，rd是整数，rs1是浮点
+        markIntegerRegister(fcvtws_inst->rd);
+        markFloatRegister(fcvtws_inst->rs1);
+      } else if (auto *feq_inst = dynamic_cast<RiscvFeqInstruction*>(inst)) {
+        markIntegerRegister(feq_inst->rd);  // 比较结果是整数
+        markFloatRegister(feq_inst->rs1);
+        markFloatRegister(feq_inst->rs2);
+      } else if (auto *flt_inst = dynamic_cast<RiscvFltInstruction*>(inst)) {
+        markIntegerRegister(flt_inst->rd);
+        markFloatRegister(flt_inst->rs1);
+        markFloatRegister(flt_inst->rs2);
+      } else if (auto *fle_inst = dynamic_cast<RiscvFleInstruction*>(inst)) {
+        markIntegerRegister(fle_inst->rd);
+        markFloatRegister(fle_inst->rs1);
+        markFloatRegister(fle_inst->rs2);
+      } else if (auto *fmvxw_inst = dynamic_cast<RiscvFmvxwInstruction*>(inst)) {
+        // fmv.x.w: 浮点到整数位传送，rd是整数，rs1是浮点
+        markIntegerRegister(fmvxw_inst->rd);
+        markFloatRegister(fmvxw_inst->rs1);
+      } else if (auto *fmvwx_inst = dynamic_cast<RiscvFmvwxInstruction*>(inst)) {
+        // fmv.w.x: 整数到浮点位传送，rd是浮点，rs1是整数
+        markFloatRegister(fmvwx_inst->rd);
+        markIntegerRegister(fmvwx_inst->rs1);
+      }
+      // 对于其他指令（整数指令），我们可以推断操作数是整数类型
+      // 但这需要更仔细的分析，暂时跳过
+    }
+  }
+  
+  std::cout << "=== 虚拟寄存器类型分析结果 ===" << std::endl;
+  for (const auto& pair : virtual_reg_is_float) {
+    std::cout << "  %r" << pair.first << " -> " << (pair.second ? "浮点" : "整数") << std::endl;
+  }
+  std::cout << "=== 虚拟寄存器类型分析完成 ===" << std::endl;
+}
+
+// 辅助方法：标记虚拟寄存器为浮点类型
+void RegisterAllocator::markFloatRegister(RiscvOperand* operand) {
+  if (auto* reg_operand = dynamic_cast<RiscvRegOperand*>(operand)) {
+    int reg_no = reg_operand->GetRegNo();
+    if (reg_no >= 0) { // 虚拟寄存器
+      virtual_reg_is_float[reg_no] = true;
+    }
+  }
+}
+
+// 辅助方法：标记虚拟寄存器为整数类型
+void RegisterAllocator::markIntegerRegister(RiscvOperand* operand) {
+  if (auto* reg_operand = dynamic_cast<RiscvRegOperand*>(operand)) {
+    int reg_no = reg_operand->GetRegNo();
+    if (reg_no >= 0) { // 虚拟寄存器
+      virtual_reg_is_float[reg_no] = false;
+    }
+  }
+}
+
+// 新增：检查虚拟寄存器是否为浮点类型
+bool RegisterAllocator::isFloatVirtualRegister(int virtual_reg) {
+  auto it = virtual_reg_is_float.find(virtual_reg);
+  return (it != virtual_reg_is_float.end()) ? it->second : false; // 默认为整数
+}
+
+// 新增：检查物理寄存器是否为浮点寄存器
+bool RegisterAllocator::isFloatPhysicalRegister(int physical_reg) {
+  // 现在使用负数编码：整数寄存器 -1 到 -31，浮点寄存器 -32 到 -63
+  return physical_reg <= -32; // 浮点寄存器从-32开始（更负）
+}
+
+// 新增：查找空闲的浮点寄存器
+int RegisterAllocator::findFreeFloatRegister() {
+  // 第一优先级：浮点临时寄存器（caller-saved）
+  for (auto &reg : available_registers) {
+    if (reg.is_available && reg.reg_no <= -32 && !reg.is_callee_saved &&
+        physical_to_virtual.find(reg.reg_no) == physical_to_virtual.end()) {
+      return reg.reg_no;
+    }
+  }
+
+  // 第二优先级：浮点参数寄存器fa2-fa7（caller-saved）
+  for (auto &reg : available_registers) {
+    if (reg.is_available && reg.reg_no >= -(32+17) && reg.reg_no <= -(32+12) &&
+        physical_to_virtual.find(reg.reg_no) == physical_to_virtual.end()) {
+      return reg.reg_no;
+    }
+  }
+
+  // 第三优先级：浮点保存寄存器（callee-saved）
+  for (auto &reg : available_registers) {
+    if (reg.is_available && reg.reg_no <= -32 && reg.is_callee_saved &&
+        physical_to_virtual.find(reg.reg_no) == physical_to_virtual.end()) {
+      return reg.reg_no;
+    }
+  }
+
+  return -1; // 没有可用寄存器
+}
+
+// 新增：查找空闲的整数寄存器
+int RegisterAllocator::findFreeIntegerRegister() {
+  // 第一优先级：整数临时寄存器（caller-saved）
+  for (auto &reg : available_registers) {
+    if (reg.is_available && reg.reg_no > -32 && !reg.is_callee_saved &&
+        physical_to_virtual.find(reg.reg_no) == physical_to_virtual.end()) {
+      return reg.reg_no;
+    }
+  }
+
+  // 第二优先级：整数参数寄存器a2-a7（caller-saved）
+  for (auto &reg : available_registers) {
+    if (reg.is_available && reg.reg_no <= -12 && reg.reg_no >= -17 &&
+        physical_to_virtual.find(reg.reg_no) == physical_to_virtual.end()) {
+      return reg.reg_no;
+    }
+  }
+
+  // 第三优先级：整数保存寄存器（callee-saved）
+  for (auto &reg : available_registers) {
+    if (reg.is_available && reg.reg_no > -32 && reg.is_callee_saved &&
+        physical_to_virtual.find(reg.reg_no) == physical_to_virtual.end()) {
+      return reg.reg_no;
+    }
+  }
+
+  return -1; // 没有可用寄存器
 }

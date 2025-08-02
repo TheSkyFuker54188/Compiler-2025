@@ -1721,8 +1721,8 @@ void Translator::translateSitofp(SitofpInstruction *inst, RiscvBlock *block) {
     return;
   auto result = translateOperand(inst->result);
   auto value = translateOperand(inst->value);
-  auto fcvtws_inst = new RiscvFcvtwsInstruction(result, value);
-  block->InsertInstruction(1, fcvtws_inst);
+  auto fcvtsw_inst = new RiscvFcvtswInstruction(result, value);
+  block->InsertInstruction(1, fcvtsw_inst);
 }
 
 void Translator::translateBr_uncond(BrUncondInstruction *inst,
