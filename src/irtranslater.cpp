@@ -2017,11 +2017,11 @@ void Translator::translatePhi(PhiInstruction *inst, RiscvBlock *block) {
   phi_info.result = translateOperand(inst->GetResult());
   // 解析phi指令的参数列表
   for (const auto &phi_pair : inst->phi_list) {
-    RiscvOperand *value = translateOperand(phi_pair.first);
+    RiscvOperand *value = translateOperand(phi_pair.second);
     // 从标签操作数中提取前驱块ID
     int pred_block_id = -1;
-    if (phi_pair.second->GetOperandType() == BasicOperand::LABEL) {
-      LabelOperand *label_op = dynamic_cast<LabelOperand *>(phi_pair.second);
+    if (phi_pair.first->GetOperandType() == BasicOperand::LABEL) {
+      LabelOperand *label_op = dynamic_cast<LabelOperand *>(phi_pair.first);
       if (label_op)
         pred_block_id = label_op->GetLabelNo();
     }
@@ -2034,6 +2034,7 @@ void Translator::translatePhi(PhiInstruction *inst, RiscvBlock *block) {
 
 void Translator::processPendingPhis() {
   // 处理所有待处理的phi指令
+  std::cout << "Start\n";
   for (const auto &phi_info : pending_phi_instructions)
     insertPhiMoveInstructions(phi_info);
   // 清空待处理列表
@@ -2110,7 +2111,8 @@ void Translator::insertBeforeTerminator(RiscvBlock *block,
                                         RiscvInstruction *inst) {
   if (!block || !inst)
     return;
-
+  std::cout << "Insert inst\n";
+  inst->PrintIR(std::cout);
   // 检查最后一个指令是否为终止指令
   if (!block->instruction_list.empty()) {
     RiscvInstruction *last_inst = block->instruction_list.back();
