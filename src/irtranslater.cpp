@@ -1696,9 +1696,9 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
   auto dim = inst->GetDims();
   auto li_inst = new RiscvLiInstruction(offset_reg, 0);
   block->InsertInstruction(1, li_inst);
-  for (size_t i = 1; i < indexes.size(); ++i) {
+  for (size_t i = 0; i < indexes.size(); ++i) {
     int size = 1;
-    for (size_t j = i; j < dim.size(); ++j)
+    for (size_t j = i + 1; j < dim.size(); ++j)
       size *= dim[j];
     auto index = indexes[i];
     if (index->GetOperandType() == BasicOperand::IMMI32) {
