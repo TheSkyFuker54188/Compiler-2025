@@ -65,6 +65,14 @@ private:
   std::map<std::string, StackFrameInfo>
       function_stack_frames;                     // 每个函数的栈帧信息
   StackFrameInfo *current_stack_frame = nullptr; // 当前函数的栈帧信息
+  
+  // Phi指令处理
+  struct PhiTranslationInfo {
+    int block_id;                                        // phi指令所在的块ID
+    RiscvOperand *result;                               // phi指令的结果操作数
+    std::vector<std::pair<RiscvOperand *, int>> phi_args; // (值, 前驱块ID)对
+  };
+  std::vector<PhiTranslationInfo> pending_phi_instructions; // 待处理的phi指令
 
   // 翻译方法
   void translateGlobal(const std::vector<Instruction> &global_def);
@@ -130,6 +138,13 @@ private:
   void translateAshr(ArithmeticInstruction *inst, RiscvBlock *block);
   void translateLshr(ArithmeticInstruction *inst, RiscvBlock *block);
   void translateTrunc(TruncInstruction *inst, RiscvBlock *block);
+  void translatePhi(PhiInstruction *inst, RiscvBlock *block);
+  
+  // Phi指令处理方法
+  void processPendingPhis(); // 处理所有待处理的phi指令
+  void insertPhiMoveInstructions(const PhiTranslationInfo &phi_info); // 在前驱块中插入move指令
+  bool isRiscvTerminatorInstruction(RiscvInstruction *inst); // 检查是否是终止指令
+  void insertBeforeTerminator(RiscvBlock *block, RiscvInstruction *inst); // 在终止指令之前插入指令
 
   // 工具方法
   std::string getLLVMTypeString(LLVMType type);
@@ -153,7 +168,8 @@ private:
   void finalizeFunctionStackFrame();
   void generateStackFrameProlog(RiscvBlock *entry_block);
   void generateStackFrameEpilog(RiscvBlock *exit_block);
-  void generateFunctionParameterReceive(FuncDefInstruction func, RiscvBlock *entry_block);
+  void generateFunctionParameterReceive(FuncDefInstruction func,
+                                        RiscvBlock *entry_block);
   void generateFunctionEpilog(RiscvBlock *exit_block);
   int getLocalVariableOffset(int virtual_reg);
   int getTypeSize(LLVMType type);

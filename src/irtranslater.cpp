@@ -105,6 +105,10 @@ void Translator::translateFunction(FuncDefInstruction func,
     riscv.function_block_map[current_function][block_pair.first] = riscv_block;
     translateBlock(block_pair.second, block_ptr);
   }
+
+  // 第四步：处理所有的phi指令
+  processPendingPhis();
+
   if (entry_block) {
     // 设置入口块的栈帧大小信息
     entry_block->stack_size = current_stack_frame->total_frame_size;
@@ -241,6 +245,9 @@ void Translator::translateInstruction(Instruction inst,
   case LLVMIROpcode::TRUNC:
     translateTrunc(dynamic_cast<TruncInstruction *>(inst), riscv_block);
     break;
+  case LLVMIROpcode::PHI:
+    translatePhi(dynamic_cast<PhiInstruction *>(inst), riscv_block);
+    break;
   default:
     std::cerr << "Unsupported instruction opcode: " << inst->GetOpcode()
               << std::endl;
@@ -313,16 +320,16 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
   if (op == RiscvOpcode::FSW) {
     // 浮点存储指令
     auto rs = translateOperand(inst->GetValue());
-    
+
     // 检查是否是浮点立即数，如果是，需要先加载到寄存器
     if (inst->GetValue()->GetOperandType() == BasicOperand::IMMF32) {
       auto imm_f32 = dynamic_cast<RiscvImmF32Operand *>(rs);
       // 创建虚拟寄存器来存储浮点立即数
       auto float_reg = createVirtualReg();
-      
+
       // 将浮点立即数的二进制表示作为整数立即数
       float float_val = imm_f32->GetFloatVal();
-      uint32_t float_bits = *(uint32_t*)&float_val;
+      uint32_t float_bits = *(uint32_t *)&float_val;
       if (float_bits == 0) {
         // 浮点0可以直接用整数0通过fmv.w.x创建
         auto zero_reg = getZeroReg();
@@ -338,7 +345,7 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
       }
       rs = float_reg;
     }
-    
+
     int offset = 0;
     RiscvOperand *s0 = nullptr;
     if (inst->GetPointer()->GetOperandType() == BasicOperand::GLOBAL) {
@@ -2001,6 +2008,128 @@ void Translator::translateTrunc(TruncInstruction *inst, RiscvBlock *block) {
   block->InsertInstruction(1, srli_inst);
 }
 
+void Translator::translatePhi(PhiInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+  // 收集phi指令信息，延迟处理
+  PhiTranslationInfo phi_info;
+  phi_info.block_id = block->block_id;
+  phi_info.result = translateOperand(inst->GetResult());
+  // 解析phi指令的参数列表
+  for (const auto &phi_pair : inst->phi_list) {
+    RiscvOperand *value = translateOperand(phi_pair.first);
+    // 从标签操作数中提取前驱块ID
+    int pred_block_id = -1;
+    if (phi_pair.second->GetOperandType() == BasicOperand::LABEL) {
+      LabelOperand *label_op = dynamic_cast<LabelOperand *>(phi_pair.second);
+      if (label_op)
+        pred_block_id = label_op->GetLabelNo();
+    }
+    if (pred_block_id != -1)
+      phi_info.phi_args.push_back(std::make_pair(value, pred_block_id));
+  }
+  // 将phi指令信息添加到待处理列表中
+  pending_phi_instructions.push_back(phi_info);
+}
+
+void Translator::processPendingPhis() {
+  // 处理所有待处理的phi指令
+  for (const auto &phi_info : pending_phi_instructions)
+    insertPhiMoveInstructions(phi_info);
+  // 清空待处理列表
+  pending_phi_instructions.clear();
+}
+
+void Translator::insertPhiMoveInstructions(const PhiTranslationInfo &phi_info) {
+  // 为每个前驱块插入mov指令
+  for (const auto &phi_arg : phi_info.phi_args) {
+    RiscvOperand *value = phi_arg.first;
+    int pred_block_id = phi_arg.second;
+    // 查找前驱块
+    auto pred_block_it =
+        riscv.function_block_map[current_function].find(pred_block_id);
+    if (pred_block_it == riscv.function_block_map[current_function].end()) {
+      std::cerr << "Warning: Predecessor block " << pred_block_id
+                << " not found for phi instruction in block "
+                << phi_info.block_id << std::endl;
+      continue;
+    }
+
+    RiscvBlock *pred_block = pred_block_it->second;
+    // 检查phi_info.result和value的类型，选择合适的指令
+    RiscvOperand *result_copy = phi_info.result->CopyOperand();
+
+    // 根据操作数类型选择合适的指令
+    if (value->GetOperandType() == RiscvOperand::REG &&
+        result_copy->GetOperandType() == RiscvOperand::REG) {
+      // 寄存器到寄存器的移动
+      auto mv_inst = new RiscvMvInstruction(result_copy, value->CopyOperand());
+      insertBeforeTerminator(pred_block, mv_inst);
+    } else if (value->GetOperandType() == RiscvOperand::IMMI32) {
+      // 立即数到寄存器
+      RiscvImmI32Operand *imm_op = dynamic_cast<RiscvImmI32Operand *>(value);
+      if (imm_op) {
+        auto li_inst =
+            new RiscvLiInstruction(result_copy, imm_op->GetIntImmVal());
+        insertBeforeTerminator(pred_block, li_inst);
+      }
+    } else if (value->GetOperandType() == RiscvOperand::IMMF32) {
+      // 浮点立即数到寄存器
+      RiscvImmF32Operand *float_imm_op =
+          dynamic_cast<RiscvImmF32Operand *>(value);
+      if (float_imm_op) {
+        auto li_inst =
+            new RiscvLiInstruction(result_copy, float_imm_op->GetFloatVal());
+        insertBeforeTerminator(pred_block, li_inst);
+      }
+    } else {
+      // 其他情况，使用通用的add指令（rd = rs1 + 0）
+      auto zero_reg = getZeroReg();
+      auto add_inst =
+          new RiscvAddInstruction(result_copy, value->CopyOperand(), zero_reg);
+      insertBeforeTerminator(pred_block, add_inst);
+    }
+  }
+}
+
+bool Translator::isRiscvTerminatorInstruction(RiscvInstruction *inst) {
+  if (!inst)
+    return false;
+
+  RiscvOpcode opcode = inst->GetOpcode();
+
+  // 检查是否是终止指令
+  return (opcode == RiscvOpcode::J ||    // 无条件跳转
+          opcode == RiscvOpcode::JR ||   // 寄存器跳转
+          opcode == RiscvOpcode::BNEZ || // 分支指令
+          dynamic_cast<RiscvBranchInstruction *>(inst) !=
+              nullptr); // 其他分支指令
+}
+
+void Translator::insertBeforeTerminator(RiscvBlock *block,
+                                        RiscvInstruction *inst) {
+  if (!block || !inst)
+    return;
+
+  // 检查最后一个指令是否为终止指令
+  if (!block->instruction_list.empty()) {
+    RiscvInstruction *last_inst = block->instruction_list.back();
+
+    if (isRiscvTerminatorInstruction(last_inst)) {
+      // 在终止指令之前插入
+      auto it = block->instruction_list.end();
+      --it; // 指向最后一个指令
+      block->instruction_list.insert(it, inst);
+    } else {
+      // 如果没有终止指令，直接添加到末尾
+      block->instruction_list.push_back(inst);
+    }
+  } else {
+    // 空块，直接添加
+    block->instruction_list.push_back(inst);
+  }
+}
+
 RiscvRegOperand *Translator::createVirtualReg() {
   return new RiscvRegOperand(++next_virtual_reg_no); // 返回一个新的虚拟寄存器
 }
@@ -2208,7 +2337,8 @@ void Translator::generateFunctionParameterReceive(FuncDefInstruction func,
     // 根据参数类型选择合适的指令
     // 浮点参数在RISC-V中通过整数寄存器传递，需要使用fmv.w.x转换
     RiscvInstruction *move_inst;
-    if (i < (int)func->formals.size() && func->formals[i] == LLVMType::FLOAT32) {
+    if (i < (int)func->formals.size() &&
+        func->formals[i] == LLVMType::FLOAT32) {
       // 浮点参数：使用智能move指令，从整数寄存器转到浮点寄存器
       // RiscvFmvInstruction会自动选择合适的指令（fmv.w.x, fmv.s, fmv.x.w, mv）
       move_inst = new RiscvFmvInstruction(param_operand, arg_reg);
