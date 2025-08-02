@@ -313,6 +313,32 @@ void Translator::translateStore(StoreInstruction *inst, RiscvBlock *block) {
   if (op == RiscvOpcode::FSW) {
     // 浮点存储指令
     auto rs = translateOperand(inst->GetValue());
+    
+    // 检查是否是浮点立即数，如果是，需要先加载到寄存器
+    if (inst->GetValue()->GetOperandType() == BasicOperand::IMMF32) {
+      auto imm_f32 = dynamic_cast<RiscvImmF32Operand *>(rs);
+      // 创建虚拟寄存器来存储浮点立即数
+      auto float_reg = createVirtualReg();
+      
+      // 将浮点立即数的二进制表示作为整数立即数
+      float float_val = imm_f32->GetFloatVal();
+      uint32_t float_bits = *(uint32_t*)&float_val;
+      if (float_bits == 0) {
+        // 浮点0可以直接用整数0通过fmv.w.x创建
+        auto zero_reg = getZeroReg();
+        auto fmv_inst = new RiscvFmvInstruction(float_reg, zero_reg);
+        block->InsertInstruction(1, fmv_inst);
+      } else {
+        // 其他浮点常量需要先用li加载到整数寄存器，再用fmv.w.x转换
+        auto int_reg = createVirtualReg();
+        auto li_inst = new RiscvLiInstruction(int_reg, (int32_t)float_bits);
+        auto fmv_inst = new RiscvFmvInstruction(float_reg, int_reg);
+        block->InsertInstruction(1, li_inst);
+        block->InsertInstruction(1, fmv_inst);
+      }
+      rs = float_reg;
+    }
+    
     int offset = 0;
     RiscvOperand *s0 = nullptr;
     if (inst->GetPointer()->GetOperandType() == BasicOperand::GLOBAL) {
@@ -1721,8 +1747,8 @@ void Translator::translateSitofp(SitofpInstruction *inst, RiscvBlock *block) {
     return;
   auto result = translateOperand(inst->result);
   auto value = translateOperand(inst->value);
-  auto fcvtws_inst = new RiscvFcvtwsInstruction(result, value);
-  block->InsertInstruction(1, fcvtws_inst);
+  auto fcvtsw_inst = new RiscvFcvtswInstruction(result, value);
+  block->InsertInstruction(1, fcvtsw_inst);
 }
 
 void Translator::translateBr_uncond(BrUncondInstruction *inst,
@@ -2179,11 +2205,20 @@ void Translator::generateFunctionParameterReceive(FuncDefInstruction func,
     // 获取对应的参数寄存器 (a0, a1, ..., a7)
     auto arg_reg = getArgReg(i);
 
-    // 生成 mv <param_virtual_reg>, <arg_reg> 指令
-    auto mv_inst = new RiscvMvInstruction(param_operand, arg_reg);
+    // 根据参数类型选择合适的指令
+    // 浮点参数在RISC-V中通过整数寄存器传递，需要使用fmv.w.x转换
+    RiscvInstruction *move_inst;
+    if (i < (int)func->formals.size() && func->formals[i] == LLVMType::FLOAT32) {
+      // 浮点参数：使用智能move指令，从整数寄存器转到浮点寄存器
+      // RiscvFmvInstruction会自动选择合适的指令（fmv.w.x, fmv.s, fmv.x.w, mv）
+      move_inst = new RiscvFmvInstruction(param_operand, arg_reg);
+    } else {
+      // 整数参数：使用普通move指令
+      move_inst = new RiscvMvInstruction(param_operand, arg_reg);
+    }
 
     // 使用pos=0插入到栈帧序言之后的开头位置
-    entry_block->InsertInstruction(0, mv_inst);
+    entry_block->InsertInstruction(0, move_inst);
   }
 }
 

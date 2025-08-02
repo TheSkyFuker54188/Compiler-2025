@@ -5,11 +5,27 @@
 # 2. 将汇编文件与运行时库链接成可执行文件。
 # 3. 在QEMU中运行可执行文件。
 # 4. 比较程序退出码与期望值，判断测试是否通过。
+#
+# 用法：
+# ./test_execution.sh                    # 测试所有文件
+# ./test_execution.sh 95_float           # 仅测试指定的测试点
+# ./test_execution.sh 95_float.sy        # 仅测试指定的测试点（带扩展名）
 
 # RISC-V工具链路径，如果不在系统PATH中，请修改这里
 # 例如: export PATH=$PATH:/path/to/riscv/toolchain/bin
 # RISC-V QEMU的库路径，根据您的环境修改
 QEMU_LD_PREFIX=/usr/riscv64-linux-gnu
+
+# 解析命令行参数
+SPECIFIC_TEST=""
+if [ $# -gt 0 ]; then
+    SPECIFIC_TEST="$1"
+    # 如果参数包含.sy扩展名，则去掉
+    SPECIFIC_TEST="${SPECIFIC_TEST%.sy}"
+    echo "======================================="
+    echo "  仅测试指定测试点: $SPECIFIC_TEST"
+    echo "======================================="
+fi
 
 # 清理函数
 cleanup() {
@@ -53,8 +69,14 @@ run_tests_in_dir() {
     for sy_file in "$test_dir"/*.sy; do
         if [ ! -f "$sy_file" ]; then continue; fi
 
-        ((total++))
         base_name=$(basename "$sy_file" .sy)
+        
+        # 如果指定了特定测试点，且当前文件不匹配，则跳过
+        if [ -n "$SPECIFIC_TEST" ] && [ "$base_name" != "$SPECIFIC_TEST" ]; then
+            continue
+        fi
+
+        ((total++))
         s_file="$test_dir/$base_name.s"
         exe_file="$test_dir/$base_name.exe"
         out_file="$test_dir/$base_name.out"
@@ -150,12 +172,33 @@ run_tests_in_dir() {
 }
 
 # 运行测试
-run_tests_in_dir "tests/functional"
-run_tests_in_dir "tests/h_functional"
+if [ -n "$SPECIFIC_TEST" ]; then
+    # 如果指定了特定测试，优先在 functional 目录查找
+    if [ -f "tests/functional/${SPECIFIC_TEST}.sy" ]; then
+        run_tests_in_dir "tests/functional"
+    elif [ -f "tests/h_functional/${SPECIFIC_TEST}.sy" ]; then
+        run_tests_in_dir "tests/h_functional"
+    else
+        echo "错误: 找不到测试文件 '${SPECIFIC_TEST}.sy'"
+        echo "请检查文件是否存在于 tests/functional/ 或 tests/h_functional/ 目录中"
+        exit 1
+    fi
+else
+    # 运行所有测试
+    run_tests_in_dir "tests/functional"
+    run_tests_in_dir "tests/h_functional"
+fi
 
 # 清理生成的文件
-rm -f tests/functional/*.s tests/functional/*.exe
-rm -f tests/h_functional/*.s tests/h_functional/*.exe
+if [ -n "$SPECIFIC_TEST" ]; then
+    # 只清理指定测试的文件
+    rm -f "tests/functional/${SPECIFIC_TEST}.s" "tests/functional/${SPECIFIC_TEST}.exe"
+    rm -f "tests/h_functional/${SPECIFIC_TEST}.s" "tests/h_functional/${SPECIFIC_TEST}.exe"
+else
+    # 清理所有生成的文件
+    rm -f tests/functional/*.s tests/functional/*.exe
+    rm -f tests/h_functional/*.s tests/h_functional/*.exe
+fi
 
 # 打印最终结果
 echo "======================================="

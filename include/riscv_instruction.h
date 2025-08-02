@@ -106,16 +106,21 @@ public:
         return "s" + std::to_string(physical_reg - 16);
       if (physical_reg >= 28 && physical_reg <= 31)
         return "t" + std::to_string(physical_reg - 25);
-      if (physical_reg >= 33 && physical_reg <= 40)
-        return "ft" + std::to_string(physical_reg - 33);
-      if (physical_reg >= 41 && physical_reg <= 42)
-        return "fs" + std::to_string(physical_reg - 41);
-      if (physical_reg >= 43 && physical_reg <= 50)
-        return "fa" + std::to_string(physical_reg - 43);
-      if (physical_reg >= 51 && physical_reg <= 60)
-        return "fs" + std::to_string(physical_reg - 49);
-      if (physical_reg >= 61 && physical_reg <= 64)
-        return "ft" + std::to_string(physical_reg - 53);
+      // 浮点寄存器编码：f0=32, f1=33, ..., f31=63
+      if (physical_reg >= 32 && physical_reg <= 63) {
+        int freg_num = physical_reg - 32;  // f0=0, f1=1, ..., f31=31
+        // RISC-V 浮点寄存器命名约定
+        if (freg_num >= 0 && freg_num <= 7)
+          return "ft" + std::to_string(freg_num);      // ft0-ft7
+        if (freg_num >= 8 && freg_num <= 9)
+          return "fs" + std::to_string(freg_num - 8);  // fs0-fs1
+        if (freg_num >= 10 && freg_num <= 17)
+          return "fa" + std::to_string(freg_num - 10); // fa0-fa7
+        if (freg_num >= 18 && freg_num <= 27)
+          return "fs" + std::to_string(freg_num - 16); // fs2-fs11
+        if (freg_num >= 28 && freg_num <= 31)
+          return "ft" + std::to_string(freg_num - 20); // ft8-ft11
+      }
       return "x" + std::to_string(physical_reg);
     } else {
       // 虚拟寄存器使用%r前缀
@@ -372,8 +377,35 @@ public:
     this->rs1 = rs1;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  fmv.w.x  " << rd->GetFullName() << "," << rs1->GetFullName()
-      << "\n";
+    // 检查源操作数是否为整数寄存器
+    bool src_is_int = false;
+    if (auto reg_op = dynamic_cast<RiscvRegOperand*>(rs1)) {
+      if (reg_op->reg_no >= -31 && reg_op->reg_no <= -1) {
+        src_is_int = true;
+      }
+    }
+    
+    // 检查目标操作数是否为浮点寄存器
+    bool dst_is_float = false;
+    if (auto reg_op = dynamic_cast<RiscvRegOperand*>(rd)) {
+      if (reg_op->reg_no >= -63 && reg_op->reg_no <= -32) {
+        dst_is_float = true;
+      }
+    }
+    
+    if (src_is_int && dst_is_float) {
+      // 整数到浮点：使用fmv.w.x
+      s << "  fmv.w.x  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    } else if (!src_is_int && dst_is_float) {
+      // 浮点到浮点：使用fmv.s
+      s << "  fmv.s  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    } else if (!src_is_int && !dst_is_float) {
+      // 浮点到整数：使用fmv.x.w
+      s << "  fmv.x.w  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    } else {
+      // 整数到整数：使用mv
+      s << "  mv  " << rd->GetFullName() << "," << rs1->GetFullName() << "\n";
+    }
   }
 };
 
@@ -637,7 +669,7 @@ public:
     this->rs1 = rs1;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  fcvts.w.s  " << rd->GetFullName() << "," << rs1->GetFullName()
+    s << "  fcvt.s.w  " << rd->GetFullName() << "," << rs1->GetFullName()
       << "\n";
   }
 };
@@ -812,8 +844,14 @@ public:
     this->rs2 = rs2;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
-      << rs2->GetFullName() << "\n";
+    // 检查是否与zero比较，如果是，需要使用f0寄存器
+    std::string rs2_name = rs2->GetFullName();
+    if (rs2_name == "zero") {
+      s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ",f0\n";
+    } else {
+      s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+        << rs2->GetFullName() << "\n";
+    }
   }
 };
 

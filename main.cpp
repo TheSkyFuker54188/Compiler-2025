@@ -99,16 +99,16 @@ bool compileFile(const std::string &filename, bool verbose = true,
     ir = irgen.getLLVMIR();
     std::string ir_filename =
         filename.substr(0, filename.find_last_of('.')) + ".ll";
-    // std::ofstream ir_file(ir_filename);
-    // if (ir_file.is_open()) {
-    //   ir.printIR(ir_file);
-    //   ir_file.close();
-    //   if (verbose)
-    //     std::cout << "中间代码已生成到 " << ir_filename << std::endl;
-    // } else {
-    //   std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
-    //   return false;
-    // }
+    std::ofstream ir_file(ir_filename);
+    if (ir_file.is_open()) {
+      ir.printIR(ir_file);
+      ir_file.close();
+      if (verbose)
+        std::cout << "中间代码已生成到 " << ir_filename << std::endl;
+    } else {
+      std::cerr << "无法创建IR文件 " << ir_filename << std::endl;
+      return false;
+    }
   }
 
   // 阶段4: SSA优化
@@ -429,9 +429,9 @@ bool compileFile(const std::string &filename, bool verbose = true,
         asm_file << asm_content;
         // std::cout<< asm_content;
       } else {
-        asm_file << "reach here ,register_allocation_success="
-                 << register_allocation_success;
-        // asm_file << asm_content;
+        // asm_file << "reach here ,register_allocation_success="
+        //          << register_allocation_success;
+        asm_file << asm_content;
       }
       asm_file.close();
       if (verbose) {
