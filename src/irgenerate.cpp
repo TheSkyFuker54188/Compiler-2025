@@ -351,6 +351,43 @@ long long Float_to_Byte(float f) {
   return int_representation;
 }
 
+// long long Float_to_Byte(float f)
+// {
+//     float rawFloat = f;
+//     unsigned long long rawFloatByte = *((int *)&rawFloat);
+//     unsigned long long signBit = rawFloatByte >> 31;
+//     unsigned long long expBits = (rawFloatByte >> 23) & ((1 << 8) - 1);
+//     unsigned long long part1 = rawFloatByte & ((1 << 23) - 1);
+
+//     unsigned long long out_signBit = signBit << 63;
+//     unsigned long long out_sigBits = part1 << 29;
+//     unsigned long long expBits_highestBit = (expBits & (1 << 7)) << 3;
+//     unsigned long long expBits_lowerBit = (expBits & (1 << 7) - 1);
+//     unsigned long long expBits_lowerBit_highestBit = expBits_lowerBit & (1 << 6);
+//     unsigned long long expBits_lowerBit_ext = (expBits_lowerBit_highestBit) | (expBits_lowerBit_highestBit << 1) |
+//                                               (expBits_lowerBit_highestBit << 2) | (expBits_lowerBit_highestBit << 3);
+//     unsigned long long expBits_full = expBits_highestBit | expBits_lowerBit | expBits_lowerBit_ext;
+//     unsigned long long out_expBits = expBits_full << 52;
+//     unsigned long long out_rawFloatByte = out_signBit | out_expBits | out_sigBits;
+//     /*
+//         Example: Float Value 114.514
+
+//         llvm Double:
+//             0                               ---1 bit    (sign bit)
+//             1000 0000 101                   ---11 bits  (exp bits)
+//             1100 1010 0000 1110 0101 011    ---23 bits  (part 1)
+//             00000000000000000000000000000   ---29 bits  (part 2 All zero)
+
+//         IEEE Float:
+//             0                               ---1 bit    (sign bit)
+//             1    0000 101                   ---8 bits   (exp bits)
+//             1100 1010 0000 1110 0101 011    ---23 bits  (part 1)
+
+//     */
+
+//     return out_rawFloatByte;
+// }
+
 void recursive_print(std::ostream &s, LLVMType type, VarAttribute &v,
                      size_t dimDph, size_t beginPos, size_t endPos) {
   if (dimDph == 0) {
@@ -1113,7 +1150,7 @@ void IRgenerator::handleArrayInitializer(InitVal *init, int base_reg,
     // 计算当前元素的线性位置
     size_t pos = current_index;
     std::vector<Operand> indices;
-    indices.push_back(new ImmI32Operand(0)); // 数组基址
+    //indices.push_back(new ImmI32Operand(0)); // 数组基址
 
     // 转换为多维索引
     size_t temp = pos;
@@ -1176,7 +1213,7 @@ void IRgenerator::handleArrayInitializer(InitVal *init, int base_reg,
       for (int j = 0; j < whole_size; j++) {
         size_t pos = current_index;
         std::vector<Operand> indices;
-        indices.push_back(new ImmI32Operand(0));
+        //indices.push_back(new ImmI32Operand(0));
 
         // 转换为多维索引
         size_t temp = pos;
@@ -1225,7 +1262,7 @@ void IRgenerator::handleArrayInitializer(InitVal *init, int base_reg,
           // 没有足够初始化值，填充0
           size_t pos = current_index;
           std::vector<Operand> indices;
-          indices.push_back(new ImmI32Operand(0));
+          //indices.push_back(new ImmI32Operand(0));
 
           // 转换为多维索引
           size_t temp = pos;
@@ -1279,7 +1316,7 @@ void IRgenerator::handleArrayInitializer(ConstInitVal *init, int base_reg,
     // 计算当前元素的线性位置
     size_t pos = current_index;
     std::vector<Operand> indices;
-    indices.push_back(new ImmI32Operand(0)); // 数组基址
+    //indices.push_back(new ImmI32Operand(0)); // 数组基址
 
     // 转换为多维索引
     size_t temp = pos;
@@ -1343,7 +1380,7 @@ void IRgenerator::handleArrayInitializer(ConstInitVal *init, int base_reg,
       for (int j = 0; j < whole_size; j++) {
         size_t pos = current_index;
         std::vector<Operand> indices;
-        indices.push_back(new ImmI32Operand(0));
+        //indices.push_back(new ImmI32Operand(0));
 
         // 转换为多维索引
         size_t temp = pos;
@@ -1392,7 +1429,7 @@ void IRgenerator::handleArrayInitializer(ConstInitVal *init, int base_reg,
           // 没有足够初始化值，填充0
           size_t pos = current_index;
           std::vector<Operand> indices;
-          indices.push_back(new ImmI32Operand(0));
+          //indices.push_back(new ImmI32Operand(0));
 
           // 转换为多维索引
           size_t temp = pos;
@@ -1474,9 +1511,9 @@ std::optional<int> IRgenerator::evaluateConstExpression(Exp *expr) {
         return *val;
       }
     }
-    if (sym && irgen_table.name_to_value[lval->name]) {
-      return irgen_table.name_to_value[lval->name];
-    }
+    // if (sym && irgen_table.name_to_value[lval->name]) {
+    //   return irgen_table.name_to_value[lval->name];
+    // }
   }
   return std::nullopt;
 }
@@ -1888,7 +1925,7 @@ void IRgenerator::visit(ConstDef &node) {
           // 计算当前元素的线性位置
           size_t pos = i;
           std::vector<Operand> indices;
-          indices.push_back(new ImmI32Operand(0)); // 数组基址
+          //indices.push_back(new ImmI32Operand(0)); // 数组基址
 
           // 转换为多维索引
           size_t temp = pos;
@@ -2162,7 +2199,7 @@ void IRgenerator::visit(VarDef &node) {
           // 计算当前元素的线性位置
           size_t pos = i;
           std::vector<Operand> indices;
-          indices.push_back(new ImmI32Operand(0)); // 数组基址
+          //indices.push_back(new ImmI32Operand(0)); // 数组基址
 
           // 转换为多维索引
           size_t temp = pos;
@@ -2803,6 +2840,7 @@ void IRgenerator::visit(UnaryExp &node) {
     IRgenLoad(getCurrentBlock(), operand_type, value_reg,
               GetNewRegOperand(operand_reg));
     operand = GetNewRegOperand(value_reg);
+    operand_reg = value_reg;
   } else if (operand_attr.IntInitVals.size() > 0) {
     // 整数常量
     operand = new ImmI32Operand(operand_attr.IntInitVals[0]);
@@ -2817,8 +2855,12 @@ void IRgenerator::visit(UnaryExp &node) {
     operand_type = Type2LLvm.at(operand_attr.type);
   }
 
-  switch (effective_op) {
+  //switch (effective_op) {
+  switch (node.op) {
   case UnaryOp::PLUS:
+    result_reg = operand_reg; // Reuse operand register
+    RegLLVMTypeMap[result_reg] = operand_type;
+    break;
   case UnaryOp::MINUS:
     if (sign == -1) {
       // 确保类型有效
@@ -2830,11 +2872,31 @@ void IRgenerator::visit(UnaryExp &node) {
       Operand zero;
       if (operand_type == LLVMType::FLOAT32) {
         zero = new ImmF32Operand(0.0f);
+        if (auto reg_op = dynamic_cast<RegOperand *>(operand)) {
+          int ptr_reg = reg_op->GetRegNo();
+          if (RegLLVMTypeMap.find(ptr_reg) != RegLLVMTypeMap.end() &&
+              RegLLVMTypeMap[ptr_reg] != LLVMType::FLOAT32) {
+            // 非指针类型，转换为指针
+            int temp_reg = newReg();
+            temp_reg=convertToType(getCurrentBlock(), ptr_reg, FLOAT32);
+            operand = GetNewRegOperand(temp_reg);
+          }
+        }
         getCurrentBlock()->InsertInstruction(
             1, new ArithmeticInstruction(FSUB, operand_type, zero, operand,
                                          GetNewRegOperand(result_reg)));
       } else {
         zero = new ImmI32Operand(0);
+        if (auto reg_op = dynamic_cast<RegOperand *>(operand)) {
+          int ptr_reg = reg_op->GetRegNo();
+          if (RegLLVMTypeMap.find(ptr_reg) != RegLLVMTypeMap.end() &&
+              RegLLVMTypeMap[ptr_reg] != LLVMType::I32) {
+            // 非指针类型，转换为指针
+            int temp_reg = newReg();
+            temp_reg=convertToType(getCurrentBlock(), ptr_reg, I32);
+            operand = GetNewRegOperand(temp_reg);
+          }
+        }
         getCurrentBlock()->InsertInstruction(
             1, new ArithmeticInstruction(SUB, operand_type, zero, operand,
                                          GetNewRegOperand(result_reg)));
@@ -2934,6 +2996,74 @@ void IRgenerator::visit(UnaryExp &node) {
 }
 
 void IRgenerator::visit(BinaryExp &node) {
+    if (node.op == BinaryOp::AND || node.op == BinaryOp::OR) {
+      int now_label_temp = now_label;
+      llvmIR.NewBlock(function_now, now_label_temp);
+      now_label_temp = now_label;
+      //int lsh_label=now_label;
+
+      node.lhs->accept(*this);
+      int lsh_label=now_label;
+      int lhs_reg = max_reg;
+      LLVMBlock B_lsh = getCurrentBlock();
+      int lhs_conv = convertToType(getCurrentBlock(), lhs_reg, I1);
+      
+      int rsh_label = newLabel();
+      int rsh_label_temp = rsh_label;
+      llvmIR.NewBlock(function_now, rsh_label_temp);
+      rsh_label_temp = rsh_label;
+
+      now_label =rsh_label;
+      node.rhs->accept(*this);
+      int rhs_label_goto=now_label;
+      int rhs_reg = max_reg;
+      LLVMBlock B_rsh = getCurrentBlock();
+      int rhs_conv = convertToType(getCurrentBlock(), rhs_reg, I1);
+
+      int end_label = newLabel();
+      int end_label_temp = end_label;
+      llvmIR.NewBlock(function_now, end_label_temp);
+      end_label_temp = end_label;
+      now_label=end_label;
+      LLVMBlock B_end = getCurrentBlock();
+      now_label =end_label;
+    std::vector<std::pair<Operand, Operand>> incoming_values;
+
+    if (node.op == BinaryOp::AND)
+    {
+      // From LHS false: false (0)
+      incoming_values.push_back(std::make_pair(
+        GetNewLabelOperand(lsh_label),new ImmI32Operand(0)));
+      // From RHS: RHS value
+      incoming_values.push_back(std::make_pair(
+        GetNewLabelOperand(rhs_label_goto), GetNewRegOperand(rhs_conv)));
+    } else { // BinaryOp::OR
+      // From LHS true: true (1)
+      incoming_values.push_back(std::make_pair(
+        GetNewLabelOperand(lsh_label),  new ImmI32Operand(1)));
+      // From RHS: RHS value
+      incoming_values.push_back(std::make_pair(
+        GetNewLabelOperand(rhs_label_goto),  GetNewRegOperand(rhs_conv)));
+    }
+
+      
+      if (node.op == BinaryOp::AND) {
+        // For AND: if LHS is false, go to end with false; else evaluate RHS
+        IRgenBrCond(B_lsh, lhs_conv, rsh_label, end_label);
+      } else { // BinaryOp::OR
+        // For OR: if LHS is true, go to end with true; else evaluate RHS
+        IRgenBrCond(B_lsh, lhs_conv, end_label, rsh_label);
+      }
+
+      IRgenBRUnCond(B_rsh, end_label);
+
+      int result_reg = newReg();
+      B_end->InsertInstruction(
+          1, new PhiInstruction(I1, GetNewRegOperand(result_reg), incoming_values));
+      RegLLVMTypeMap[result_reg] = I1;
+      irgen_table.RegTable[result_reg].type = BaseType::INT;
+      max_reg = result_reg;
+    } else {
   node.lhs->accept(*this);
   int lhs_reg = max_reg;
   VarAttribute lhs_attr = irgen_table.RegTable[lhs_reg];
@@ -3058,7 +3188,7 @@ void IRgenerator::visit(BinaryExp &node) {
       int value_reg = newReg();
       if (!lval->indices.empty()) {
         std::vector<Operand> indices;
-        indices.push_back(new ImmI32Operand(0));
+        //indices.push_back(new ImmI32Operand(0));
         for (auto &idx : lval->indices) {
           idx->accept(*this);
           int idx_reg = max_reg;
@@ -3138,7 +3268,7 @@ void IRgenerator::visit(BinaryExp &node) {
       int value_reg = newReg();
       if (!lval->indices.empty()) {
         std::vector<Operand> indices;
-        indices.push_back(new ImmI32Operand(0));
+        //indices.push_back(new ImmI32Operand(0));
         for (auto &idx : lval->indices) {
           idx->accept(*this);
           int idx_reg = max_reg;
@@ -3330,6 +3460,7 @@ void IRgenerator::visit(BinaryExp &node) {
                          : lhs_attr.type;
   irgen_table.RegTable[result_reg] = result_attr;
   max_reg = result_reg;
+  }
 }
 
 void IRgenerator::visit(LVal &node) {
@@ -3343,7 +3474,7 @@ void IRgenerator::visit(LVal &node) {
       // Only add leading 0 index for non-parameter arrays
       SymbolInfo *sym = str_table.lookup(node.name);
       if (!(sym && sym->kind == SymbolKind::PARAMETER)) {
-        indices.push_back(new ImmI32Operand(0));
+        //indices.push_back(new ImmI32Operand(0));
       }
       for (auto &idx : node.indices) {
         bool old_require = require_address;
@@ -3426,7 +3557,7 @@ void IRgenerator::visit(LVal &node) {
       // Only add leading 0 index for non-parameter arrays
       SymbolInfo *sym = str_table.lookup(node.name);
       if (!(sym && sym->kind == SymbolKind::PARAMETER)) {
-        indices.push_back(new ImmI32Operand(0));
+        //indices.push_back(new ImmI32Operand(0));
       }
       for (auto &idx : node.indices) {
         bool old_require = require_address;
@@ -3530,7 +3661,7 @@ void IRgenerator::visit(LVal &node) {
           int ptr_reg = newReg();
           std::vector<int> dims_int; // Scalar, no dimensions
           std::vector<Operand> indices;
-          indices.push_back(new ImmI32Operand(0));
+          //indices.push_back(new ImmI32Operand(0));
           IRgenGetElementptr(getCurrentBlock(), Type2LLvm.at(basic_type->type),
                              ptr_reg, GetNewGlobalOperand(node.name), dims_int,
                              indices);
@@ -3548,7 +3679,7 @@ void IRgenerator::visit(LVal &node) {
       } else {
         // Handle array access for global variable
         std::vector<Operand> indices;
-        indices.push_back(new ImmI32Operand(0)); // First index for global array
+        //indices.push_back(new ImmI32Operand(0)); // First index for global array
         for (auto &idx : node.indices) {
           if (auto const_val = evaluateConstExpression(idx.get())) {
             indices.push_back(new ImmI32Operand(*const_val));
