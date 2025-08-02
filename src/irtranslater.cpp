@@ -2034,7 +2034,6 @@ void Translator::translatePhi(PhiInstruction *inst, RiscvBlock *block) {
 
 void Translator::processPendingPhis() {
   // 处理所有待处理的phi指令
-  std::cout << "Start\n";
   for (const auto &phi_info : pending_phi_instructions)
     insertPhiMoveInstructions(phi_info);
   // 清空待处理列表
@@ -2111,8 +2110,6 @@ void Translator::insertBeforeTerminator(RiscvBlock *block,
                                         RiscvInstruction *inst) {
   if (!block || !inst)
     return;
-  std::cout << "Insert inst\n";
-  inst->PrintIR(std::cout);
   // 检查最后一个指令是否为终止指令
   if (!block->instruction_list.empty()) {
     RiscvInstruction *last_inst = block->instruction_list.back();
