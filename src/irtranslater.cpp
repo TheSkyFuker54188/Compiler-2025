@@ -2179,11 +2179,20 @@ void Translator::generateFunctionParameterReceive(FuncDefInstruction func,
     // 获取对应的参数寄存器 (a0, a1, ..., a7)
     auto arg_reg = getArgReg(i);
 
-    // 生成 mv <param_virtual_reg>, <arg_reg> 指令
-    auto mv_inst = new RiscvMvInstruction(param_operand, arg_reg);
+    // 根据参数类型选择合适的指令
+    // 浮点参数在RISC-V中通过整数寄存器传递，需要使用fmv.w.x转换
+    RiscvInstruction *move_inst;
+    if (i < (int)func->formals.size() && func->formals[i] == LLVMType::FLOAT32) {
+      // 浮点参数：使用智能move指令，从整数寄存器转到浮点寄存器
+      // RiscvFmvInstruction会自动选择合适的指令（fmv.w.x, fmv.s, fmv.x.w, mv）
+      move_inst = new RiscvFmvInstruction(param_operand, arg_reg);
+    } else {
+      // 整数参数：使用普通move指令
+      move_inst = new RiscvMvInstruction(param_operand, arg_reg);
+    }
 
     // 使用pos=0插入到栈帧序言之后的开头位置
-    entry_block->InsertInstruction(0, mv_inst);
+    entry_block->InsertInstruction(0, move_inst);
   }
 }
 

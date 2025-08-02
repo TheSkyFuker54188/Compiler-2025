@@ -844,8 +844,14 @@ public:
     this->rs2 = rs2;
   }
   void PrintIR(std::ostream &s) override {
-    s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
-      << rs2->GetFullName() << "\n";
+    // 检查是否与zero比较，如果是，需要使用f0寄存器
+    std::string rs2_name = rs2->GetFullName();
+    if (rs2_name == "zero") {
+      s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ",f0\n";
+    } else {
+      s << "  feq.s  " << rd->GetFullName() << "," << rs1->GetFullName() << ","
+        << rs2->GetFullName() << "\n";
+    }
   }
 };
 

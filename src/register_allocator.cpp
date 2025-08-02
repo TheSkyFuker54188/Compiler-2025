@@ -1696,8 +1696,8 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
           
           std::cout << "  插入mv指令: a" << i << " <- " << arg_operand->GetFullName() << std::endl;
           
-          // 创建移动指令：mv a0, arg_operand
-          auto *mv_inst = new RiscvMvInstruction(
+          // 创建智能移动指令：根据参数类型选择mv或fmv指令
+          auto *mv_inst = new RiscvFmvInstruction(
             new RiscvRegOperand(-param_reg),  // 目标：a0-a7 (使用负数表示物理寄存器)
             arg_operand                       // 源：原参数
           );
