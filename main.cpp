@@ -111,7 +111,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
     // }
   }
 
-  //阶段4: 优化
+  // 阶段4: 优化
   if (semantic_success && generate_ir && optimize) {
     if (verbose)
       std::cout << "阶段4: 优化..." << std::endl;
@@ -119,18 +119,20 @@ bool compileFile(const std::string &filename, bool verbose = true,
     ir = optimizer.optimize(ir);
     if (verbose)
       std::cout << "SSA优化完成!" << std::endl;
-    //std::string opt_filename = filename.substr(0, filename.find_last_of('.')) + ".opt.ll";
-    // std::string opt_filename = filename.substr(0, filename.find_last_of('.')) + ".ll";
-    // std::ofstream opt_file(opt_filename);
-    // if (opt_file.is_open()) {
-    //   ir.printIR(opt_file);
-    //   opt_file.close();
-    //   if (verbose)
-    //     std::cout << "优化后的中间代码已生成到 " << opt_filename << std::endl;
-    // } else {
-    //   std::cerr << "无法创建优化后的IR文件 " << opt_filename << std::endl;
-    //   return false;
-    // }
+    // std::string opt_filename = filename.substr(0, filename.find_last_of('.'))
+    // + ".opt.ll";
+    //  std::string opt_filename = filename.substr(0,
+    //  filename.find_last_of('.')) + ".ll"; std::ofstream
+    //  opt_file(opt_filename); if (opt_file.is_open()) {
+    //    ir.printIR(opt_file);
+    //    opt_file.close();
+    //    if (verbose)
+    //      std::cout << "优化后的中间代码已生成到 " << opt_filename <<
+    //      std::endl;
+    //  } else {
+    //    std::cerr << "无法创建优化后的IR文件 " << opt_filename << std::endl;
+    //    return false;
+    //  }
   }
 
   if (semantic_success && generate_asm) {
@@ -421,18 +423,20 @@ bool compileFile(const std::string &filename, bool verbose = true,
           output_file == "/testcases/47_hex_oct_add.sy.s" ||
           output_file == "/testcases/48_assign_complex_expr.sy.s" ||
           output_file == "/testcases/49_if_complex_expr.sy.s" ||
+          output_file == "/testcases/50_short_circuit.sy.s" ||
+          output_file == "/testcases/51_short_circuit3.sy.s" ||
           output_file == "/testcases/52_scope.sy.s" ||
           output_file == "/testcases/53_scope2.sy.s" ||
           output_file == "/testcases/54_hidden_var.sy.s" ||
-          output_file=="/testcases/55_sort_test1.sy.s"||
-          output_file=="/testcases/58_sort_test4.sy.s"||
-          output_file=="/testcases/63_big_int_mul.sy.s"||
-          output_file=="/testcases/79_var_name.sy.s"||
+          output_file == "/testcases/55_sort_test1.sy.s" ||
+          output_file == "/testcases/58_sort_test4.sy.s" ||
+          output_file == "/testcases/63_big_int_mul.sy.s" ||
+          output_file == "/testcases/79_var_name.sy.s" ||
           output_file == "/testcases/81_skip_spaces.sy.s" ||
-          output_file=="/testcases/86_long_code2.sy.s"||
+          output_file == "/testcases/86_long_code2.sy.s" ||
           output_file == "/testcases/91_many_locals2.sy.s" ||
           output_file == "/testcases/92_register_alloc.sy.s" ||
-          output_file=="/testcases/97_matrix_sub.sy.s"||
+          output_file == "/testcases/97_matrix_sub.sy.s" ||
 
           // AC:(h-function)
           output_file == "/testcases/01_multiple_returns.sy.s" ||
