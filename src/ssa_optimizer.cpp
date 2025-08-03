@@ -13,10 +13,12 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
   // 除法优化
   //std::cout << "  Running division optimization..." << std::endl;
   //optimizeDivision(optimized_ir);
-  
   // 删除多余add
   std::cout << "  Running redundant add removal..." << std::endl;
   removeRedundantAdd(optimized_ir);
+  // 删除冗余的alloca和store
+  std::cout << "  Running redundant param alloca removal..." << std::endl;
+  removeRedundantParamAlloca(optimized_ir);
   std::cout << "SSA optimizations completed";
 
   return optimized_ir;
@@ -334,4 +336,145 @@ void SSAOptimizer::removeRedundantAdd(LLVMIR &ir) {
       }
     }
   }
+}
+
+// New: Remove redundant alloca and store instructions for function parameters
+void SSAOptimizer::removeRedundantParamAlloca(LLVMIR &ir) {
+  for (auto &func : ir.function_block_map) {
+    auto &block_map = func.second;
+    if (block_map.empty()) continue;
+
+    // Get the entry block
+    auto entry_block_it = block_map.begin();
+    auto &entry_block = entry_block_it->second;
+    auto &inst_list = entry_block->Instruction_list;
+
+    // Get parameter registers
+    std::unordered_set<int> param_regs;
+    for (auto &formal : func.first->formals_reg) {
+      if (auto *reg = dynamic_cast<RegOperand*>(formal)) {
+        param_regs.insert(reg->GetRegNo());
+      }
+    }
+
+    // Maps and lists for optimization
+    std::unordered_map<int, Instruction> allocas;
+    std::unordered_map<int, int> remap;
+    std::vector<Instruction> to_remove;
+
+    // Process instructions in the entry block
+    for (auto it = inst_list.begin(); it != inst_list.end(); ++it) {
+      if (auto *alloca_ins = dynamic_cast<AllocaInstruction*>(*it)) {
+        if (alloca_ins->GetType() == PTR) {
+          // 修改点1: 使用动态转换获取寄存器号
+          if (auto *result_reg = dynamic_cast<RegOperand*>(alloca_ins->GetResult())) {
+            int reg_no = result_reg->GetRegNo();
+            allocas[reg_no] = *it;
+          }
+        }
+      } else if (auto *store_ins = dynamic_cast<StoreInstruction*>(*it)) {
+        if (store_ins->GetType() == PTR) {
+          Operand value = store_ins->GetValue();
+          Operand pointer = store_ins->GetPointer();
+          // 修改点2: 使用动态转换获取寄存器号
+          if (auto *reg_value = dynamic_cast<RegOperand*>(value)) {
+            if (auto *reg_pointer = dynamic_cast<RegOperand*>(pointer)) {
+              int rY = reg_value->GetRegNo();
+              int rZ = reg_pointer->GetRegNo();
+              if (allocas.count(rZ) && param_regs.count(rY)) {
+                remap[rZ] = rY;
+                to_remove.push_back(allocas[rZ]);
+                to_remove.push_back(*it);
+                allocas.erase(rZ);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Remove marked instructions
+    std::deque<Instruction> new_inst_list;
+    for (auto ins : inst_list) {
+      if (std::find(to_remove.begin(), to_remove.end(), ins) == to_remove.end()) {
+        new_inst_list.push_back(ins);
+      } else {
+        delete ins; // Free memory
+      }
+    }
+    inst_list = std::move(new_inst_list);
+
+    // Replace operands in all blocks
+    for (auto &block_pair : block_map) {
+      auto &block_inst_list = block_pair.second->Instruction_list;
+      for (auto &ins : block_inst_list) {
+        replaceOperands(ins, remap);
+      }
+    }
+  }
+}
+
+// Helper function: Replace operands in an instruction
+void SSAOptimizer::replaceOperands(Instruction ins, const std::unordered_map<int, int>& remap) {
+  if (auto *arith = dynamic_cast<ArithmeticInstruction*>(ins)) {
+    arith->op1 = replaceOperand(arith->GetOp1(), remap);
+    arith->op2 = replaceOperand(arith->GetOp2(), remap);
+    if (arith->GetOp3()) arith->op3 = replaceOperand(arith->GetOp3(), remap);
+  } else if (auto *load = dynamic_cast<LoadInstruction*>(ins)) {
+    load->pointer = replaceOperand(load->GetPointer(), remap);
+  } else if (auto *store = dynamic_cast<StoreInstruction*>(ins)) {
+    store->value = replaceOperand(store->GetValue(), remap);
+    store->pointer = replaceOperand(store->GetPointer(), remap);
+  } else if (auto *icmp = dynamic_cast<IcmpInstruction*>(ins)) {
+    icmp->op1 = replaceOperand(icmp->GetOp1(), remap);
+    icmp->op2 = replaceOperand(icmp->GetOp2(), remap);
+  } else if (auto *fcmp = dynamic_cast<FcmpInstruction*>(ins)) {
+    fcmp->op1 = replaceOperand(fcmp->GetOp1(), remap);
+    fcmp->op2 = replaceOperand(fcmp->GetOp2(), remap);
+  } else if (auto *phi = dynamic_cast<PhiInstruction*>(ins)) {
+    for (auto &pair : phi->phi_list) {
+      pair.second = replaceOperand(pair.second, remap);
+    }
+  } else if (auto *call = dynamic_cast<CallInstruction*>(ins)) {
+    for (auto &arg : call->args) {
+      arg.second = replaceOperand(arg.second, remap);
+    }
+  } else if (auto *br_cond = dynamic_cast<BrCondInstruction*>(ins)) {
+    br_cond->cond = replaceOperand(br_cond->GetCond(), remap);
+  } else if (auto *ret = dynamic_cast<RetInstruction*>(ins)) {
+    if (ret->GetRetVal()) ret->ret_val = replaceOperand(ret->GetRetVal(), remap);
+  } else if (auto *gep = dynamic_cast<GetElementptrInstruction*>(ins)) {
+    gep->ptrval = replaceOperand(gep->GetPtrVal(), remap);
+    for (auto &idx : gep->indexes) {
+      idx = replaceOperand(idx, remap);
+    }
+  } else if (auto *zext = dynamic_cast<ZextInstruction*>(ins)) {
+    zext->value = replaceOperand(zext->value, remap);
+  } else if (auto *sitofp = dynamic_cast<SitofpInstruction*>(ins)) {
+    sitofp->value = replaceOperand(sitofp->value, remap);
+  } else if (auto *fptosi = dynamic_cast<FptosiInstruction*>(ins)) {
+    fptosi->value = replaceOperand(fptosi->value, remap);
+  } else if (auto *fpext = dynamic_cast<FpextInstruction*>(ins)) {
+    fpext->value = replaceOperand(fpext->value, remap);
+  } else if (auto *bitcast = dynamic_cast<BitCastInstruction*>(ins)) {
+    bitcast->src = replaceOperand(bitcast->src, remap);
+  } else if (auto *select = dynamic_cast<SelectInstruction*>(ins)) {
+    select->cond = replaceOperand(select->cond, remap);
+    select->op1 = replaceOperand(select->op1, remap);
+    select->op2 = replaceOperand(select->op2, remap);
+  } else if (auto *trunc = dynamic_cast<TruncInstruction*>(ins)) {
+    trunc->value = replaceOperand(trunc->value, remap);
+  }
+}
+
+// Helper function: Replace a single operand
+Operand SSAOptimizer::replaceOperand(Operand op, const std::unordered_map<int, int>& remap) {
+  if (auto *reg = dynamic_cast<RegOperand*>(op)) {
+    int reg_no = reg->GetRegNo();
+    auto it = remap.find(reg_no);
+    if (it != remap.end()) {
+      return GetNewRegOperand(it->second);
+    }
+  }
+  return op;
 }

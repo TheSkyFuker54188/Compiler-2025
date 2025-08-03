@@ -252,6 +252,7 @@ public:
 };
 
 class LoadInstruction : public BasicInstruction {
+  public:
   enum LLVMType type;
   Operand pointer;
   Operand result;
@@ -277,6 +278,7 @@ public:
 };
 
 class StoreInstruction : public BasicInstruction {
+  public:
   enum LLVMType type;
   Operand pointer;
   Operand value;
@@ -338,6 +340,7 @@ public:
 };
 
 class ArithmeticInstruction : public BasicInstruction {
+public:
   enum LLVMType type;
   Operand op1;
   Operand op2;
@@ -433,6 +436,7 @@ public:
 };
 
 class IcmpInstruction : public BasicInstruction {
+  public:
   enum LLVMType type;
   Operand op1;
   Operand op2;
@@ -465,6 +469,7 @@ public:
 };
 
 class FcmpInstruction : public BasicInstruction {
+  public:
   enum LLVMType type;
   Operand op1;
   Operand op2;
@@ -562,6 +567,7 @@ public:
 };
 
 class AllocaInstruction : public BasicInstruction {
+  public:
   enum LLVMType type;
   Operand result;
   std::vector<int> dims;
@@ -599,6 +605,7 @@ public:
 };
 
 class BrCondInstruction : public BasicInstruction {
+  public:
   Operand cond;
   Operand trueLabel;
   Operand falseLabel;
@@ -625,6 +632,7 @@ public:
 };
 
 class BrUncondInstruction : public BasicInstruction {
+  public:
   Operand destLabel;
 
 public:

@@ -25,4 +25,9 @@ private:
   bool isRegAndEqual(Operand op, int reg_no);
   bool isUsedInInstruction(Instruction ins, int reg_no);
   void removeRedundantAdd(LLVMIR &ir);
+  
+  // 删除冗余的alloca和store
+  void removeRedundantParamAlloca(LLVMIR &ir);
+  void replaceOperands(Instruction ins, const std::unordered_map<int, int>& remap);
+  Operand replaceOperand(Operand op, const std::unordered_map<int, int>& remap);
 };
