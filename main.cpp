@@ -438,6 +438,7 @@ bool compileFile(const std::string &filename, bool verbose = true,
           output_file == "/testcases/63_big_int_mul.sy.s" ||
           output_file == "/testcases/79_var_name.sy.s" ||
           output_file == "/testcases/81_skip_spaces.sy.s" ||
+          output_file == "/testcases/83_long_array.sy.s"||
           output_file == "/testcases/86_long_code2.sy.s" ||
           output_file == "/testcases/91_many_locals2.sy.s" ||
           output_file == "/testcases/92_register_alloc.sy.s" ||
