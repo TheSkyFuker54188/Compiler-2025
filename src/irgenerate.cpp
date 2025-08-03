@@ -2510,20 +2510,20 @@ void IRgenerator::visit(WhileStmt &node) {
   llvmIR.NewBlock(function_now, cond_label_temp);
   cond_label_temp = cond_label;
   now_label = cond_label;
-  LLVMBlock B_cond = getCurrentBlock();
+  // LLVMBlock B_cond = getCurrentBlock();
 
-  // 2. 创建体块和结束块
-  body_label = newLabel();
-  int body_label_temp = body_label;
-  end_label = newLabel();
-  int end_label_temp = end_label;
-  loop_end_label = end_label;
-  llvmIR.NewBlock(function_now, body_label_temp);
-  body_label_temp = body_label;
-  LLVMBlock B_body = llvmIR.GetBlock(function_now, body_label_temp);
-  body_label_temp = body_label;
-  llvmIR.NewBlock(function_now, end_label_temp);
-  end_label_temp = end_label;
+  // // 2. 创建体块和结束块
+  // body_label = newLabel();
+  // int body_label_temp = body_label;
+  // end_label = newLabel();
+  // int end_label_temp = end_label;
+  // loop_end_label = end_label;
+  // llvmIR.NewBlock(function_now, body_label_temp);
+  // body_label_temp = body_label;
+  // LLVMBlock B_body = llvmIR.GetBlock(function_now, body_label_temp);
+  // body_label_temp = body_label;
+  // llvmIR.NewBlock(function_now, end_label_temp);
+  // end_label_temp = end_label;
 
   // if(now_label!=cond_label_temp){
   //  3. 入口跳转到条件块
@@ -2537,6 +2537,7 @@ void IRgenerator::visit(WhileStmt &node) {
   // 4. 在条件块插入条件判断和跳转
   now_label = cond_label;
   node.condition->accept(*this);
+  LLVMBlock B_cond = getCurrentBlock();
   int cond_reg = max_reg;
   if (RegLLVMTypeMap[cond_reg] == LLVMType::I32) {
     int tmp = newReg();
@@ -2550,6 +2551,21 @@ void IRgenerator::visit(WhileStmt &node) {
     cond_reg = tmp;
     RegLLVMTypeMap[cond_reg] = LLVMType::I1;
   }
+
+    // 2. 创建体块和结束块
+    body_label = newLabel();
+    int body_label_temp = body_label;
+    end_label = newLabel();
+    int end_label_temp = end_label;
+    loop_end_label = end_label;
+    llvmIR.NewBlock(function_now, body_label_temp);
+    body_label_temp = body_label;
+    LLVMBlock B_body = llvmIR.GetBlock(function_now, body_label_temp);
+    body_label_temp = body_label;
+    llvmIR.NewBlock(function_now, end_label_temp);
+    end_label_temp = end_label;
+
+
   IRgenBrCond(B_cond, cond_reg, body_label_temp, end_label_temp);
   body_label_temp = body_label;
   end_label_temp = end_label;
