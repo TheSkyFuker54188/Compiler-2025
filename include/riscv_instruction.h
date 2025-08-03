@@ -461,21 +461,7 @@ public:
     this->address = address;
   }
   void PrintIR(std::ostream &s) override {
-    // 检查地址操作数是否为PTR类型且偏移量超出12位立即数范围
-    if (auto *ptr = dynamic_cast<RiscvPtrOperand *>(address)) {
-      if (ptr->offset < -2048 || ptr->offset > 2047) {
-        // 大偏移量：使用临时寄存器分解偏移量
-        s << "  li  t4," << ptr->offset << "\n";
-        s << "  add t4,t4," << ptr->base_reg->GetFullName() << "\n";
-        s << "  ld  " << rd->GetFullName() << ",0(t4)\n";
-      } else {
-        // 正常范围内的偏移量
-        s << "  ld  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
-      }
-    } else {
-      // 非PTR类型的地址操作数
-      s << "  ld  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
-    }
+    s << "  ld  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
   }
 };
 
@@ -488,21 +474,7 @@ public:
     this->address = address;
   }
   void PrintIR(std::ostream &s) override {
-    // 检查地址操作数是否为PTR类型且偏移量超出12位立即数范围
-    if (auto *ptr = dynamic_cast<RiscvPtrOperand *>(address)) {
-      if (ptr->offset < -2048 || ptr->offset > 2047) {
-        // 大偏移量：使用临时寄存器分解偏移量
-        s << "  li  t4," << ptr->offset << "\n";
-        s << "  add t4,t4," << ptr->base_reg->GetFullName() << "\n";
-        s << "  lw  " << rd->GetFullName() << ",0(t4)\n";
-      } else {
-        // 正常范围内的偏移量
-        s << "  lw  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
-      }
-    } else {
-      // 非PTR类型的地址操作数
-      s << "  lw  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
-    }
+    s << "  lw  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
   }
 };
 
@@ -515,21 +487,7 @@ public:
     this->address = address;
   }
   void PrintIR(std::ostream &s) override {
-    // 检查地址操作数是否为PTR类型且偏移量超出12位立即数范围
-    if (auto *ptr = dynamic_cast<RiscvPtrOperand *>(address)) {
-      if (ptr->offset < -2048 || ptr->offset > 2047) {
-        // 大偏移量：使用临时寄存器分解偏移量
-        s << "  li  t4," << ptr->offset << "\n";
-        s << "  add t4,t4," << ptr->base_reg->GetFullName() << "\n";
-        s << "  sw  " << rs->GetFullName() << ",0(t4)\n";
-      } else {
-        // 正常范围内的偏移量
-        s << "  sw  " << rs->GetFullName() << "," << address->GetFullName() << "\n";
-      }
-    } else {
-      // 非PTR类型的地址操作数
-      s << "  sw  " << rs->GetFullName() << "," << address->GetFullName() << "\n";
-    }
+    s << "  sw  " << rs->GetFullName() << "," << address->GetFullName() << "\n";
   }
 };
 
@@ -542,21 +500,8 @@ public:
     this->address = address;
   }
   void PrintIR(std::ostream &s) override {
-    // 检查地址操作数是否为PTR类型且偏移量超出12位立即数范围
-    if (auto *ptr = dynamic_cast<RiscvPtrOperand *>(address)) {
-      if (ptr->offset < -2048 || ptr->offset > 2047) {
-        // 大偏移量：使用临时寄存器分解偏移量
-        s << "  li  t4," << ptr->offset << "\n";
-        s << "  add t4,t4," << ptr->base_reg->GetFullName() << "\n";
-        s << "  flw  " << rd->GetFullName() << ",0(t4)\n";
-      } else {
-        // 正常范围内的偏移量
-        s << "  flw  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
-      }
-    } else {
-      // 非PTR类型的地址操作数
-      s << "  flw  " << rd->GetFullName() << "," << address->GetFullName() << "\n";
-    }
+    s << "  flw  " << rd->GetFullName() << "," << address->GetFullName()
+      << "\n";
   }
 };
 
@@ -569,21 +514,8 @@ public:
     this->address = address;
   }
   void PrintIR(std::ostream &s) override {
-    // 检查地址操作数是否为PTR类型且偏移量超出12位立即数范围
-    if (auto *ptr = dynamic_cast<RiscvPtrOperand *>(address)) {
-      if (ptr->offset < -2048 || ptr->offset > 2047) {
-        // 大偏移量：使用临时寄存器分解偏移量
-        s << "  li  t4," << ptr->offset << "\n";
-        s << "  add t4,t4," << ptr->base_reg->GetFullName() << "\n";
-        s << "  fsw  " << rs->GetFullName() << ",0(t4)\n";
-      } else {
-        // 正常范围内的偏移量
-        s << "  fsw  " << rs->GetFullName() << "," << address->GetFullName() << "\n";
-      }
-    } else {
-      // 非PTR类型的地址操作数
-      s << "  fsw  " << rs->GetFullName() << "," << address->GetFullName() << "\n";
-    }
+    s << "  fsw  " << rs->GetFullName() << "," << address->GetFullName()
+      << "\n";
   }
 };
 

@@ -117,17 +117,7 @@ run_tests_in_dir() {
 
         # 3. 运行 .exe，捕获标准输出和退出码 (3分钟超时)
         temp_stdout="temp_stdout_$base_name.log"
-        in_file="$test_dir/$base_name.in"
-        
-        # 检查是否存在输入文件
-        if [ -f "$in_file" ]; then
-            # 有输入文件，从文件读取输入
-            timeout 180 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" < "$in_file" > "$temp_stdout"
-        else
-            # 没有输入文件，正常运行
-            timeout 180 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" > "$temp_stdout"
-        fi
-        
+        timeout 180 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" > "$temp_stdout"
         actual_exit_code=$?
         if [ $actual_exit_code -eq 124 ]; then
             echo -e "\e[31m运行超时\e[0m"
