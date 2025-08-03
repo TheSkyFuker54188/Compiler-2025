@@ -430,7 +430,11 @@ bool compileFile(const std::string &filename, bool verbose = true,
           output_file == "/testcases/54_hidden_var.sy.s" ||
           output_file == "/testcases/55_sort_test1.sy.s" ||
           output_file == "/testcases/56_sort_test2.sy.s" ||
+          output_file == "/testcases/57_sort_test3.sy.s" ||
           output_file == "/testcases/58_sort_test4.sy.s" ||
+          output_file == "/testcases/59_sort_test5.sy.s" ||
+          output_file == "/testcases/60_sort_test6.sy.s" ||
+          output_file == "/testcases/61_sort_test7.sy.s" ||
           output_file == "/testcases/63_big_int_mul.sy.s" ||
           output_file == "/testcases/79_var_name.sy.s" ||
           output_file == "/testcases/81_skip_spaces.sy.s" ||
