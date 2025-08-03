@@ -2111,18 +2111,18 @@ void Translator::insertBeforeTerminator(RiscvBlock *block,
   if (!block || !inst)
     return;
   // 检查最后一个指令是否为终止指令
+  // std::cout << "Insert inst" << block->block_id << ": ";
+  // inst->PrintIR(std::cout);
   if (!block->instruction_list.empty()) {
     RiscvInstruction *last_inst = block->instruction_list.back();
-
-    if (isRiscvTerminatorInstruction(last_inst)) {
-      // 在终止指令之前插入
-      auto it = block->instruction_list.end();
-      --it; // 指向最后一个指令
-      block->instruction_list.insert(it, inst);
-    } else {
-      // 如果没有终止指令，直接添加到末尾
-      block->instruction_list.push_back(inst);
+    auto it = block->instruction_list.end();
+    --it; // 指向最后一个指令
+    while (it >= block->instruction_list.begin() &&
+           isRiscvTerminatorInstruction(*it)) {
+      --it; // 向前查找直到找到非终止指令
     }
+    ++it;
+    block->instruction_list.insert(it, inst);
   } else {
     // 空块，直接添加
     block->instruction_list.push_back(inst);
