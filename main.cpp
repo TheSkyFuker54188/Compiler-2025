@@ -97,9 +97,9 @@ bool compileFile(const std::string &filename, bool verbose = true,
     IRgenerator irgen;
     root->accept(irgen);
     ir = irgen.getLLVMIR();
-    std::string ir_filename =
-        filename.substr(0, filename.find_last_of('.')) + ".ll";
-    std::ofstream ir_file(ir_filename);
+    // std::string ir_filename =
+    //     filename.substr(0, filename.find_last_of('.')) + ".ll";
+    // std::ofstream ir_file(ir_filename);
     // if (ir_file.is_open()) {
     //   ir.printIR(ir_file);
     //   ir_file.close();
@@ -111,14 +111,26 @@ bool compileFile(const std::string &filename, bool verbose = true,
     // }
   }
 
-  // 阶段4: SSA优化
+  //阶段4: 优化
   if (semantic_success && generate_ir && optimize) {
     if (verbose)
-      std::cout << "阶段4: SSA优化..." << std::endl;
+      std::cout << "阶段4: 优化..." << std::endl;
     SSAOptimizer optimizer;
     ir = optimizer.optimize(ir);
     if (verbose)
       std::cout << "SSA优化完成!" << std::endl;
+    //std::string opt_filename = filename.substr(0, filename.find_last_of('.')) + ".opt.ll";
+    // std::string opt_filename = filename.substr(0, filename.find_last_of('.')) + ".ll";
+    // std::ofstream opt_file(opt_filename);
+    // if (opt_file.is_open()) {
+    //   ir.printIR(opt_file);
+    //   opt_file.close();
+    //   if (verbose)
+    //     std::cout << "优化后的中间代码已生成到 " << opt_filename << std::endl;
+    // } else {
+    //   std::cerr << "无法创建优化后的IR文件 " << opt_filename << std::endl;
+    //   return false;
+    // }
   }
 
   if (semantic_success && generate_asm) {
@@ -429,9 +441,9 @@ bool compileFile(const std::string &filename, bool verbose = true,
         asm_file << asm_content;
         // std::cout<< asm_content;
       } else {
-        // asm_file << "reach here ,register_allocation_success="
-        //          << register_allocation_success;
-        asm_file << asm_content;
+        asm_file << "reach here ,register_allocation_success="
+                 << register_allocation_success;
+        // asm_file << asm_content;
       }
       asm_file.close();
       if (verbose) {
@@ -477,7 +489,7 @@ int main(int argc, char *argv[]) {
   bool print_ast = false;
   bool generate_ir = true;
   bool generate_asm = true;
-  bool optimize = false;
+  bool optimize = true;
   std::string filename;
   std::string output_file;
 
