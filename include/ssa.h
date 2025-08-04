@@ -30,4 +30,10 @@ private:
   void removeRedundantParamAlloca(LLVMIR &ir);
   void replaceOperands(Instruction ins, const std::unordered_map<int, int>& remap);
   Operand replaceOperand(Operand op, const std::unordered_map<int, int>& remap);
+  
+  void removeRedundantParamLoadStore(LLVMIR &ir);
+  void replaceOperands(Instruction ins, const std::unordered_map<int, Operand>& replace_map);
+  Operand replaceOperand(Operand op, const std::unordered_map<int, Operand>& replace_map);
+
+  void delayAllocaInstructions(LLVMIR &ir);
 };
