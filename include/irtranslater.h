@@ -104,6 +104,7 @@ private:
   void translateBr_uncond(BrUncondInstruction *inst, RiscvBlock *block);
   void translateBr_cond(BrCondInstruction *inst, RiscvBlock *block);
   void translateCall(CallInstruction *inst, RiscvBlock *block);
+  void translateAlloca(AllocaInstruction *inst, RiscvBlock *block);
   void translateReturn(RetInstruction *inst, RiscvBlock *block);
   void translateIcmp(IcmpInstruction *inst, RiscvBlock *block);
   void translateIeq(IcmpInstruction *inst, RiscvBlock *block);
