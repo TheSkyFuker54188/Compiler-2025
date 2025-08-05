@@ -465,9 +465,9 @@ bool compileFile(const std::string &filename, bool verbose = true,
         asm_file << asm_content;
         // std::cout<< asm_content;
       } else {
-        // asm_file << "reach here ,register_allocation_success="
-        //          << register_allocation_success;
-        asm_file << asm_content;
+        asm_file << "reach here ,register_allocation_success="
+                 << register_allocation_success;
+        //asm_file << asm_content;
       }
       asm_file.close();
       if (verbose) {
