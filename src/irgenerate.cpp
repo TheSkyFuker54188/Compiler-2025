@@ -3941,6 +3941,68 @@ void IRgenerator::visit(StringLiteral &node) {
   max_reg = reg;
 }
 
+//用于调试
+bool iserror(std::string output_file){
+  if (output_file == "/testcases/84_long_array2.sy.s" ||
+      output_file == "/testcases/66_exgcd.sy.s" ||
+      output_file == "/testcases/78_side_effect.sy.s" ||
+      output_file == "/testcases/77_substr.sy.s" ||
+      output_file == "/testcases/98_matrix_mul.sy.s" ||
+      output_file == "/testcases/68_brainfk.sy.s" ||
+      output_file == "/testcases/89_many_globals.sy.s" ||
+      output_file == "/testcases/64_calculator.sy.s" ||
+      output_file == "/testcases/87_many_params.sy.s" ||
+      output_file == "/testcases/74_kmp.sy.s" ||
+      output_file == "/testcases/99_matrix_tran.sy.s" ||
+      output_file == "/testcases/82_long_func.sy.s" ||
+      output_file == "/testcases/90_many_locals.sy.s" ||
+      output_file == "/testcases/73_int_io.sy.s" ||
+      output_file == "/testcases/69_expr_eval.sy.s" ||
+      output_file == "/testcases/67_reverse_output.sy.s" ||
+      output_file == "/testcases/76_n_queens.sy.s" ||
+
+      output_file == "/testcases/72_hanoi.sy.s" ||
+      output_file == "/testcases/62_percolation.sy.s" ||
+      output_file == "/testcases/94_nested_loops.sy.s" ||
+      output_file == "/testcases/93_nested_calls.sy.s" ||
+      output_file == "/testcases/95_float.sy.s" ||
+      output_file == "/testcases/88_many_params2.sy.s" ||
+      output_file == "/testcases/65_color.sy.s" ||
+      output_file == "/testcases/75_max_flow.sy.s" ||
+      output_file == "/testcases/70_dijkstra.sy.s" ||
+      output_file == "/testcases/71_full_conn.sy.s" ||
+      output_file == "/testcases/85_long_code.sy.s" ||
+      output_file == "/testcases/96_matrix_add.sy.s" ||
+
+      output_file == "/testcases/35_math.sy.s" ||
+      output_file == "/testcases/30_many_dimensions.sy.s" ||
+      output_file == "/testcases/29_long_line.sy.s" ||
+      output_file == "/testcases/36_rotate.sy.s" ||
+      output_file == "/testcases/09_BFS.sy.s" ||
+      output_file == "/testcases/26_scope4.sy.s" ||
+
+      output_file == "/testcases/39_fp_params.sy.s" ||
+      output_file == "/testcases/16_k_smallest.sy.s" ||
+      output_file == "/testcases/22_matrix_multiply.sy.s" ||
+      output_file == "/testcases/24_array_only.sy.s" ||
+      output_file == "/testcases/10_DFS.sy.s" ||
+      output_file == "/testcases/21_union_find.sy.s" ||
+      output_file == "/testcases/23_json.sy.s" ||
+      output_file == "/testcases/13_LCA.sy.s" ||
+      output_file == "/testcases/37_dct.sy.s" ||
+      output_file == "/testcases/15_graph_coloring.sy.s" ||
+      output_file == "/testcases/32_many_params3.sy.s" ||
+      output_file == "/testcases/12_DSU.sy.s" ||
+      output_file == "/testcases/11_BST.sy.s" ||
+      output_file == "/testcases/14_dp.sy.s" ||
+      output_file == "/testcases/38_light2d.sy.s") {
+return 1;
+}
+else{
+  return 0;
+}
+}
+
 void IRgenerator::visit(InitVal &node) {
   if (std::holds_alternative<std::unique_ptr<Exp>>(node.value)) {
     std::get<std::unique_ptr<Exp>>(node.value)->accept(*this);

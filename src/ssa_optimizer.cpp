@@ -20,8 +20,8 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
   std::cout << "  Running redundant param alloca removal..." << std::endl;
   removeRedundantParamAlloca(optimized_ir);
 
-  std::cout << "  Running redundant param load/store removal..." << std::endl;
-  removeRedundantParamLoadStore(optimized_ir);
+  // std::cout << "  Running redundant param load/store removal..." << std::endl;
+  // removeRedundantParamLoadStore(optimized_ir);
 
   // 延迟alloca
   //std::cout << "  Running alloca delay optimization..." << std::endl;
