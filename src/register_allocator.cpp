@@ -135,7 +135,7 @@ void RegisterAllocator::allocateRegistersForFunction(
   }
 
   try {
-    std::cout << "=== 调试：寄存器分配开始 ===" << std::endl;
+    // std::cout << "=== 调试：寄存器分配开始 ===" << std::endl;
     
     // 1. 计算生存期
     if (should_cancel.load()) {
@@ -153,7 +153,7 @@ void RegisterAllocator::allocateRegistersForFunction(
     if (should_cancel.load()) {
       throw std::runtime_error("Register allocation cancelled before function call argument allocation");
     }
-    std::cout << "=== 调用 preAllocateFunctionCallArguments ===" << std::endl;
+    // std::cout << "=== 调用 preAllocateFunctionCallArguments ===" << std::endl;
     preAllocateFunctionCallArguments(blocks);
 
     // 3. 按变量类型分类分配寄存器
@@ -232,7 +232,7 @@ void RegisterAllocator::allocateRegistersForFunction(
 // 新增：按类型分配寄存器
 void RegisterAllocator::allocateByCategory() {
   // 首先分析虚拟寄存器类型
-  std::cout << "=== 分析虚拟寄存器类型 ===" << std::endl;
+  // std::cout << "=== 分析虚拟寄存器类型 ===" << std::endl;
   // virtual_reg_is_float 将在 analyzeVirtualRegisterTypes 中填充
   
   // 分类虚拟寄存器：局部vs全局，整数vs浮点
@@ -262,22 +262,22 @@ void RegisterAllocator::allocateByCategory() {
   
   // 为全局整数变量分配保存寄存器(s1-s11)
   std::set<int> global_int_regs = {-9, -18, -19, -20, -21, -22, -23, -24, -25, -26, -27};
-  std::cout << "=== 分配全局整数变量寄存器 ===" << std::endl;
+  // std::cout << "=== 分配全局整数变量寄存器 ===" << std::endl;
   allocateRangesWithRegisters(global_int_ranges, global_int_regs);
   
   // 为局部整数变量分配临时寄存器(t0-t6)和部分参数寄存器(a2-a7)
   std::set<int> local_int_regs = {-6, -7, -28, -29, -30, -31, -12, -13, -14, -15, -16, -17};
-  std::cout << "=== 分配局部整数变量寄存器 ===" << std::endl;
+  // std::cout << "=== 分配局部整数变量寄存器 ===" << std::endl;
   allocateRangesWithRegisters(local_int_ranges, local_int_regs);
   
   // 为全局浮点变量分配浮点保存寄存器(fs0-fs11)
   std::set<int> global_float_regs = {-(32+8), -(32+9), -(32+18), -(32+19), -(32+20), -(32+21), -(32+22), -(32+23), -(32+24), -(32+25), -(32+26), -(32+27)};
-  std::cout << "=== 分配全局浮点变量寄存器 ===" << std::endl;
+  // std::cout << "=== 分配全局浮点变量寄存器 ===" << std::endl;
   allocateRangesWithRegisters(global_float_ranges, global_float_regs);
   
   // 为局部浮点变量分配浮点临时寄存器(ft0-ft11)和部分浮点参数寄存器(fa2-fa7)
   std::set<int> local_float_regs = {-(32+0), -(32+1), -(32+2), -(32+3), -(32+4), -(32+5), -(32+6), -(32+7), -(32+28), -(32+29), -(32+30), -(32+31), -(32+12), -(32+13), -(32+14), -(32+15), -(32+16), -(32+17)};
-  std::cout << "=== 分配局部浮点变量寄存器 ===" << std::endl;
+  // std::cout << "=== 分配局部浮点变量寄存器 ===" << std::endl;
   allocateRangesWithRegisters(local_float_ranges, local_float_regs);
 }
 
@@ -313,7 +313,7 @@ void RegisterAllocator::allocateRangesWithRegisters(
     for (const auto &reg : available_registers) {
       if (reg.reg_no == reg_no && !reg.is_available) {
         is_available = false;
-        std::cout << "  寄存器 x" << reg_no << " 被标记为不可用，跳过分配" << std::endl;
+        // std::cout << "  寄存器 x" << reg_no << " 被标记为不可用，跳过分配" << std::endl;
         break;
       }
     }
@@ -323,8 +323,8 @@ void RegisterAllocator::allocateRangesWithRegisters(
   }
 
   for (auto *range : ranges) {
-    std::cout << "  处理虚拟寄存器 %r" << range->virtual_reg 
-              << " [" << range->start_pos << "-" << range->end_pos << "]";
+    // std::cout << "  处理虚拟寄存器 %r" << range->virtual_reg 
+              // << " [" << range->start_pos << "-" << range->end_pos << "]";
     
     // 检查虚拟寄存器类型是否与目标寄存器集合匹配
     bool is_float_vreg = isFloatVirtualRegister(range->virtual_reg);
@@ -334,15 +334,15 @@ void RegisterAllocator::allocateRangesWithRegisters(
     }
     
     if (is_float_vreg != is_float_reg_set) {
-      std::cout << " (类型不匹配，跳过)" << std::endl;
+      // std::cout << " (类型不匹配，跳过)" << std::endl;
       continue; // 类型不匹配，跳过
     }
     
-    std::cout << " (类型: " << (is_float_vreg ? "浮点" : "整数") << ")" << std::endl;
+    // std::cout << " (类型: " << (is_float_vreg ? "浮点" : "整数") << ")" << std::endl;
               
     // Skip already allocated ranges
     if (virtual_to_physical.find(range->virtual_reg) != virtual_to_physical.end()) {
-      std::cout << "    已分配，跳过" << std::endl;
+      // std::cout << "    已分配，跳过" << std::endl;
       continue;
     }
     
@@ -368,9 +368,9 @@ void RegisterAllocator::allocateRangesWithRegisters(
       physical_to_virtual[physical_reg] = range->virtual_reg;
       active.insert(range);
       if (isFloatPhysicalRegister(physical_reg)) {
-        std::cout << "    分配到物理寄存器 f" << (physical_reg - 32) << std::endl;
+        // std::cout << "    分配到物理寄存器 f" << (physical_reg - 32) << std::endl;
       } else {
-        std::cout << "    分配到物理寄存器 x" << physical_reg << std::endl;
+        // std::cout << "    分配到物理寄存器 x" << physical_reg << std::endl;
       }
     } else {
       // Spill
@@ -1558,8 +1558,8 @@ void RegisterAllocator::rewriteInstructions(
       
       // 特殊调试：检查mv指令
       if (auto *mv_inst = dynamic_cast<RiscvMvInstruction *>(inst)) {
-        std::cout << "  重写mv指令: " << mv_inst->rd->GetFullName() 
-                  << " <- " << mv_inst->rs1->GetFullName() << std::endl;
+        // std::cout << "  重写mv指令: " << mv_inst->rd->GetFullName() 
+                  // << " <- " << mv_inst->rs1->GetFullName() << std::endl;
       }
       
       new_instruction_list.push_back(inst);
@@ -1653,7 +1653,7 @@ void RegisterAllocator::preAllocateSpecialRegisters(
 void RegisterAllocator::preAllocateFunctionCallArguments(
     const std::map<int, RiscvBlock*> &blocks) {
   
-  std::cout << "=== 调试：寄存器分配前的函数调用参数处理 ===" << std::endl;
+  // std::cout << "=== 调试：寄存器分配前的函数调用参数处理 ===" << std::endl;
   
   for (const auto &block_pair : blocks) {
     const auto &block = block_pair.second;
@@ -1661,10 +1661,10 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
     // 首先检查所有call指令及其参数
     for (const auto &inst : block->instruction_list) {
       if (auto *call_inst = dynamic_cast<RiscvCallInstruction *>(inst)) {
-        std::cout << "发现函数调用: " << call_inst->function_name 
-                  << ", 参数数量: " << call_inst->args.size() << std::endl;
+        // std::cout << "发现函数调用: " << call_inst->function_name 
+                  // << ", 参数数量: " << call_inst->args.size() << std::endl;
         for (size_t i = 0; i < call_inst->args.size(); i++) {
-          std::cout << "  参数" << i << ": " << call_inst->args[i]->GetFullName() << std::endl;
+          // std::cout << "  参数" << i << ": " << call_inst->args[i]->GetFullName() << std::endl;
         }
       }
     }
@@ -1684,8 +1684,8 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
       auto *call_inst = dynamic_cast<RiscvCallInstruction *>(block->instruction_list[call_pos]);
       
       if (call_inst && !call_inst->args.empty()) {
-        std::cout << "处理函数调用: " << call_inst->function_name 
-                  << ", 参数数量: " << call_inst->args.size() << std::endl;
+        // std::cout << "处理函数调用: " << call_inst->function_name 
+                  // << ", 参数数量: " << call_inst->args.size() << std::endl;
         
         // 为每个参数插入移动指令
         int arg_count = std::min(8, static_cast<int>(call_inst->args.size()));
@@ -1694,7 +1694,7 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
           auto arg_operand = call_inst->args[i];
           int param_reg = 10 + i; // a0=x10, a1=x11, ..., a7=x17
           
-          std::cout << "  插入mv指令: a" << i << " <- " << arg_operand->GetFullName() << std::endl;
+          // std::cout << "  插入mv指令: a" << i << " <- " << arg_operand->GetFullName() << std::endl;
           
           // 创建智能移动指令：根据参数类型选择mv或fmv指令
           auto *mv_inst = new RiscvFmvInstruction(
@@ -1706,7 +1706,7 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
           for (auto &reg : available_registers) {
             if (reg.reg_no == param_reg) {
               reg.is_available = false;
-              std::cout << "  标记寄存器 a" << i << " (x" << param_reg << ") 为不可用" << std::endl;
+              // std::cout << "  标记寄存器 a" << i << " (x" << param_reg << ") 为不可用" << std::endl;
               break;
             }
           }
@@ -1721,27 +1721,27 @@ void RegisterAllocator::preAllocateFunctionCallArguments(
         // call指令的位置现在向后移动了arg_count个位置
         // 更新call指令，清空其参数列表（因为参数已经通过mv指令处理了）
         call_inst->args.clear();
-        std::cout << "  清空call指令参数列表" << std::endl;
+        // std::cout << "  清空call指令参数列表" << std::endl;
       }
     }
   }
   
   // 调试：打印当前的寄存器分配状态
-  std::cout << "=== 当前虚拟寄存器到物理寄存器的映射 ===" << std::endl;
+  // std::cout << "=== 当前虚拟寄存器到物理寄存器的映射 ===" << std::endl;
   for (const auto& pair : virtual_to_physical) {
-    std::cout << "  %r" << pair.first << " -> x" << pair.second << std::endl;
+    // std::cout << "  %r" << pair.first << " -> x" << pair.second << std::endl;
   }
-  std::cout << "=== 当前物理寄存器到虚拟寄存器的映射 ===" << std::endl;
+  // std::cout << "=== 当前物理寄存器到虚拟寄存器的映射 ===" << std::endl;
   for (const auto& pair : physical_to_virtual) {
-    std::cout << "  x" << pair.first << " -> %r" << pair.second << std::endl;
+    // std::cout << "  x" << pair.first << " -> %r" << pair.second << std::endl;
   }
   
-  std::cout << "=== 函数调用参数处理完成 ===" << std::endl;
+  // std::cout << "=== 函数调用参数处理完成 ===" << std::endl;
 }
 
 // 新增：分析虚拟寄存器类型
 void RegisterAllocator::analyzeVirtualRegisterTypes(const std::map<int, RiscvBlock*>& blocks) {
-  std::cout << "=== 开始分析虚拟寄存器类型 ===" << std::endl;
+  // std::cout << "=== 开始分析虚拟寄存器类型 ===" << std::endl;
   
   // 清空之前的类型信息
   virtual_reg_is_float.clear();
@@ -1811,11 +1811,11 @@ void RegisterAllocator::analyzeVirtualRegisterTypes(const std::map<int, RiscvBlo
     }
   }
   
-  std::cout << "=== 虚拟寄存器类型分析结果 ===" << std::endl;
+  // std::cout << "=== 虚拟寄存器类型分析结果 ===" << std::endl;
   for (const auto& pair : virtual_reg_is_float) {
-    std::cout << "  %r" << pair.first << " -> " << (pair.second ? "浮点" : "整数") << std::endl;
+    // std::cout << "  %r" << pair.first << " -> " << (pair.second ? "浮点" : "整数") << std::endl;
   }
-  std::cout << "=== 虚拟寄存器类型分析完成 ===" << std::endl;
+  // std::cout << "=== 虚拟寄存器类型分析完成 ===" << std::endl;
 }
 
 // 辅助方法：标记虚拟寄存器为浮点类型

@@ -466,6 +466,7 @@ void Translator::translateAlloca(AllocaInstruction *inst, RiscvBlock *block) {
       // 因为栈向下增长，数组在负偏移位置
       auto s0_reg = getS0Reg();
       insertAddiInstruction(result_operand, s0_reg, -offset, block, 1);
+      
       // 如果这是数组类型的alloca，记录到array_offsets中
       if (!inst->GetDims().empty()) {
         current_stack_frame->array_offsets[virtual_reg] = offset;
