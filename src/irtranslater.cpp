@@ -232,6 +232,7 @@ void Translator::translateInstruction(Instruction inst,
     translateOr(dynamic_cast<ArithmeticInstruction *>(inst), riscv_block);
     break;
   case LLVMIROpcode::ALLOCA:
+    translateAlloca(dynamic_cast<AllocaInstruction *>(inst), riscv_block);
     break;
   case LLVMIROpcode::ZEXT:
     translateZext(dynamic_cast<ZextInstruction *>(inst), riscv_block);
@@ -413,14 +414,25 @@ void Translator::translateCall(CallInstruction *inst, RiscvBlock *block) {
   if (!inst)
     return;
 
-  auto call_inst = new RiscvCallInstruction(inst->GetFuncName());
+  // 生成参数传递指令 - 在call指令之前
+  auto args = inst->GetArgs();
+  for (int i = 0; i < std::min((int)args.size(), 8); i++) {
+    auto arg_operand = translateOperand(args[i].second); // second是Operand
+    auto arg_reg = getArgReg(i); // 获取参数寄存器 a0, a1, ..., a7
 
-  // 处理函数参数
-  for (const auto &arg_pair : inst->GetArgs()) {
-    auto arg_operand = translateOperand(arg_pair.second); // second是Operand
-    call_inst->AddArg(arg_operand);
+    // 根据参数类型选择合适的指令
+    if (i < (int)args.size() && args[i].first == LLVMType::FLOAT32) {
+      // 浮点参数：使用fmv指令
+      auto fmv_inst = new RiscvFmvInstruction(arg_reg, arg_operand);
+      block->InsertInstruction(1, fmv_inst);
+    } else {
+      // 整数参数：使用mv指令
+      auto mv_inst = new RiscvMvInstruction(arg_reg, arg_operand);
+      block->InsertInstruction(1, mv_inst);
+    }
   }
 
+  auto call_inst = new RiscvCallInstruction(inst->GetFuncName());
   block->InsertInstruction(1, call_inst);
 
   // 处理函数返回值
@@ -434,6 +446,31 @@ void Translator::translateCall(CallInstruction *inst, RiscvBlock *block) {
       // 整数返回值从a0移动到目标寄存器
       auto mv_inst = new RiscvMvInstruction(result_operand, getA0Reg());
       block->InsertInstruction(1, mv_inst);
+    }
+  }
+}
+
+void Translator::translateAlloca(AllocaInstruction *inst, RiscvBlock *block) {
+  if (!inst)
+    return;
+
+  auto result_operand = translateOperand(inst->GetResult());
+  auto *reg_operand = dynamic_cast<RegOperand *>(inst->GetResult());
+
+  if (reg_operand) {
+    int virtual_reg = reg_operand->GetRegNo();
+    int offset = getLocalVariableOffset(virtual_reg);
+
+    if (offset != 0) {
+      // 生成计算栈地址的指令: addi %result_reg, s0, -offset
+      // 因为栈向下增长，数组在负偏移位置
+      auto s0_reg = getS0Reg();
+      insertAddiInstruction(result_operand, s0_reg, -offset, block, 1);
+      
+      // 如果这是数组类型的alloca，记录到array_offsets中
+      if (!inst->GetDims().empty()) {
+        current_stack_frame->array_offsets[virtual_reg] = offset;
+      }
     }
   }
 }
@@ -1730,8 +1767,32 @@ void Translator::translateGetElementptr(GetElementptrInstruction *inst,
     block->InsertInstruction(1, la_inst);
   } else {
     auto ptrval = dynamic_cast<RegOperand *>(inst->GetPtrVal());
-    offset = current_stack_frame->var_offsets[ptrval->GetRegNo()];
-    base_addr = getS0Reg(); // 假设基地址存储在S0寄存器中
+    int ptr_reg_no = ptrval->GetRegNo();
+
+    // 首先检查是否是数组（在array_offsets中）
+    auto array_it = current_stack_frame->array_offsets.find(ptr_reg_no);
+    if (array_it != current_stack_frame->array_offsets.end()) {
+      // 这是栈上的数组，直接使用其地址（由translateAlloca计算）
+      base_addr =
+          dynamic_cast<RiscvRegOperand *>(translateOperand(inst->GetPtrVal()));
+      offset = 0;
+    } else {
+      // 检查是否是栈中的指针变量
+      auto var_it = current_stack_frame->var_offsets.find(ptr_reg_no);
+      if (var_it != current_stack_frame->var_offsets.end()) {
+        // 指针存储在栈中，需要先加载指针值
+        offset = var_it->second;
+        base_addr = createVirtualReg();
+        auto s0_reg = getS0Reg();
+        auto ptr_operand = new RiscvPtrOperand(-offset, s0_reg);
+        insertLwInstruction(base_addr, ptr_operand, block);
+      } else {
+        // 指针就是虚拟寄存器值，直接使用
+        base_addr = dynamic_cast<RiscvRegOperand *>(
+            translateOperand(inst->GetPtrVal()));
+        offset = 0;
+      }
+    }
   }
   auto add_inst =
       new RiscvAddInstruction(result, base_addr, offset_reg); // 计算最终地址
@@ -2111,18 +2172,18 @@ void Translator::insertBeforeTerminator(RiscvBlock *block,
   if (!block || !inst)
     return;
   // 检查最后一个指令是否为终止指令
+  // std::cout << "Insert inst" << block->block_id << ": ";
+  // inst->PrintIR(std::cout);
   if (!block->instruction_list.empty()) {
     RiscvInstruction *last_inst = block->instruction_list.back();
-
-    if (isRiscvTerminatorInstruction(last_inst)) {
-      // 在终止指令之前插入
-      auto it = block->instruction_list.end();
-      --it; // 指向最后一个指令
-      block->instruction_list.insert(it, inst);
-    } else {
-      // 如果没有终止指令，直接添加到末尾
-      block->instruction_list.push_back(inst);
+    auto it = block->instruction_list.end();
+    --it; // 指向最后一个指令
+    while (it >= block->instruction_list.begin() &&
+           isRiscvTerminatorInstruction(*it)) {
+      --it; // 向前查找直到找到非终止指令
     }
+    ++it;
+    block->instruction_list.insert(it, inst);
   } else {
     // 空块，直接添加
     block->instruction_list.push_back(inst);
