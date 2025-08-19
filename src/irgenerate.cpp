@@ -3822,8 +3822,8 @@ void IRgenerator::visit(FunctionCall &node) {
         (i < is_pointer_param.size()) ? is_pointer_param[i] : false;
     // require_address = false;
     node.arguments[i]->accept(*this);
-    require_address =
-        (i < is_pointer_param.size()) ? is_pointer_param[i] : false;
+    // require_address =
+    //     (i < is_pointer_param.size()) ? is_pointer_param[i] : false;
     int arg_reg = max_reg;
     VarAttribute arg_attr = irgen_table.RegTable[arg_reg];
 
