@@ -291,8 +291,8 @@ int main(int argc, char *argv[]) {
     } else if (arg == "--no-semantic") {
       enable_semantic = false;
     } else if (arg == "-O1") {
-      optimize = false;
-      return 0;
+      //optimize = false;
+      //return 0;
     } else if (arg[0] == '-') {
       std::cerr << "未知选项: " << arg << std::endl;
       showUsage(argv[0]);
