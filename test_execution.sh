@@ -16,6 +16,11 @@
 # RISC-V QEMU的库路径，根据您的环境修改
 QEMU_LD_PREFIX=/usr/riscv64-linux-gnu
 
+# 超时设置（与平台更接近）
+COMPILE_TIMEOUT=120
+LINK_TIMEOUT=120
+RUN_TIMEOUT=30
+
 # 解析命令行参数
 SPECIFIC_TEST=""
 if [ $# -gt 0 ]; then
@@ -111,10 +116,13 @@ skipped=0
 # 定义日志与汇总文件路径
 LOG_FILE="test_results.txt"
 SUMMARY_CSV="test_results_summary.csv"
+# 扩展汇总（含子状态/阶段/耗时等）
+SUMMARY_CSV_EXT="test_results_summary_ext.csv"
 
 # 清空日志/汇总文件
 > "$LOG_FILE"
 echo "case,status,detail" > "$SUMMARY_CSV"
+echo "case,status,substatus,phase,compile_s,link_s,run_s,exit_code,stdout_md5,expected_stdout_md5,filesize,has_in,notes" > "$SUMMARY_CSV_EXT"
 
 # 函数：打印并记录日志
 log() {
@@ -139,6 +147,16 @@ csv_write() {
     detail_clean="${detail_clean//\"/\"\"}"
     # 逗号可保留，整列用双引号包裹
     echo "$name,$status,\"$detail_clean\"" >> "$SUMMARY_CSV"
+}
+
+# 扩展CSV写入（含子状态与阶段和测量指标）
+csv_write_ext() {
+    local name="$1"; local status="$2"; local substatus="$3"; local phase="$4"; local cs="$5"; local ls="$6"; local rs="$7"; local exitc="$8"; local md5a="$9"; shift 9; local md5e="$1"; local fsz="$2"; local hasin="$3"; local notes_raw="${4:-}"
+    local notes_clean
+    notes_clean="$(printf '%s' "$notes_raw" | strip_ansi)"
+    notes_clean="$(printf '%s' "$notes_clean" | sed ':a;N;$!ba;s/\r//g; s/\n/\\n/g')"
+    notes_clean="${notes_clean//\"/\"\"}"
+    echo "$name,$status,$substatus,$phase,$cs,$ls,$rs,$exitc,$md5a,$md5e,$fsz,$hasin,\"$notes_clean\"" >> "$SUMMARY_CSV_EXT"
 }
 
 # 记录本地结果状态（修改：写入CSV时包含详情并做好转义/去色）
@@ -173,11 +191,16 @@ run_tests_in_dir() {
 
         log -n "[$base_name] 测试 $base_name ($sy_file) ... "
 
-        # 1) 编译
+    # 阶段耗时
+    compile_s=0; link_s=0; run_s=0
+
+    # 1) 编译
         compile_stderr="compile_stderr_$base_name.log"
         compile_stdout="compile_stdout_$base_name.log"
-        timeout 30 ./compiler "$sy_file" -S -o "$s_file" > "$compile_stdout" 2> "$compile_stderr"
+    c_start=$(date +%s)
+    timeout "$COMPILE_TIMEOUT" ./compiler "$sy_file" -S -o "$s_file" > "$compile_stdout" 2> "$compile_stderr"
         compile_result=$?
+    c_end=$(date +%s); compile_s=$((c_end - c_start))
 
         compile_error_output=$(cat "$compile_stderr" 2>/dev/null || echo "")
         compile_stdout_output=$(cat "$compile_stdout" 2>/dev/null || echo "")
@@ -194,7 +217,9 @@ run_tests_in_dir() {
 
         if [ $compile_result -eq 124 ]; then
             log "\e[31m编译超时\e[0m"
-            record_status "$base_name" "CE_TIMEOUT" "compile timeout"
+            # 平台记为 RE
+            record_status "$base_name" "RE" "compile timeout"
+            csv_write_ext "$base_name" "RE" "CE_TIMEOUT" "compile" "$compile_s" "0" "0" "" "" "" "" "$( [ -f "$test_dir/$base_name.in" ] && echo 1 || echo 0 )" "compile timeout"
             ((failed++))
             continue
         elif [ $compile_result -ne 0 ]; then
@@ -230,8 +255,9 @@ run_tests_in_dir() {
             if [ -n "$compile_full_output" ]; then
                 log "[$base_name] 编译错误: $compile_full_output"
             fi
-            # 关键：把完整编译错误写入CSV
-            record_status "$base_name" "CE" "编译错误: ${compile_full_output:-未知错误}"
+            # 平台：编译/汇编错误统一计为 RE
+            record_status "$base_name" "RE" "编译错误: ${compile_full_output:-未知错误}"
+            csv_write_ext "$base_name" "RE" "CE" "compile" "$compile_s" "0" "0" "" "" "" "" "$( [ -f "$test_dir/$base_name.in" ] && echo 1 || echo 0 )" "${compile_full_output:-未知错误}"
             ((failed++))
             continue
         fi
@@ -246,42 +272,57 @@ run_tests_in_dir() {
 
         # 2) 链接
         link_stderr="link_stderr_$base_name.log"
-        timeout 30 riscv64-linux-gnu-gcc -o "$exe_file" "$s_file" -L./lib -lsysy_riscv 2> "$link_stderr" > /dev/null
+    l_start=$(date +%s)
+    timeout "$LINK_TIMEOUT" riscv64-linux-gnu-gcc -o "$exe_file" "$s_file" -L./lib -lsysy_riscv 2> "$link_stderr" > /dev/null
         link_result=$?
+    l_end=$(date +%s); link_s=$((l_end - l_start))
         link_error_output=$(cat "$link_stderr" 2>/dev/null || echo "")
         rm -f "$link_stderr"
 
         if [ $link_result -eq 124 ]; then
             log "\e[31m链接超时\e[0m"
-            record_status "$base_name" "LE_TIMEOUT" "链接超时(30s)"
+            # 平台：统一为 RE
+            record_status "$base_name" "RE" "链接超时(${LINK_TIMEOUT}s)"
+            csv_write_ext "$base_name" "RE" "LE_TIMEOUT" "link" "$compile_s" "$link_s" "0" "" "" "" "" "$( [ -f "$test_dir/$base_name.in" ] && echo 1 || echo 0 )" "link timeout"
             ((failed++))
             continue
         elif [ $link_result -ne 0 ]; then
             log "\e[31m链接失败\e[0m"
             [ -n "$link_error_output" ] && log "[$base_name] 链接错误: $link_error_output"
-            # 关键：把链接错误写入CSV
-            record_status "$base_name" "LE" "链接错误: ${link_error_output:-无stderr输出}"
+            # 平台：链接错误 -> RE
+            record_status "$base_name" "RE" "链接错误: ${link_error_output:-无stderr输出}"
+            csv_write_ext "$base_name" "RE" "LE" "link" "$compile_s" "$link_s" "0" "" "" "" "" "$( [ -f "$test_dir/$base_name.in" ] && echo 1 || echo 0 )" "${link_error_output:-无stderr输出}"
             ((failed++))
             continue
         fi
 
-        # 3) 运行
+        # 3) 运行（如有 .in 则喂给 stdin）
         temp_stdout="temp_stdout_$base_name.log"
         temp_stderr="temp_stderr_$base_name.log"
-        timeout 30 qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" > "$temp_stdout" 2> "$temp_stderr"
+        in_file="$test_dir/$base_name.in"
+    r_start=$(date +%s)
+    if [ -f "$in_file" ]; then
+            timeout "$RUN_TIMEOUT" qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" < "$in_file" > "$temp_stdout" 2> "$temp_stderr"
+        else
+            timeout "$RUN_TIMEOUT" qemu-riscv64-static -L "$QEMU_LD_PREFIX" "$exe_file" > "$temp_stdout" 2> "$temp_stderr"
+        fi
         actual_exit_code=$?
+    r_end=$(date +%s); run_s=$((r_end - r_start))
+
+        # 先读取stderr，避免超时分支拿不到stderr
+        run_stderr=$(cat "$temp_stderr" 2>/dev/null || echo "")
 
         if [ $actual_exit_code -eq 124 ]; then
             log "\e[31m运行超时\e[0m"
-            # 关键：把stderr一并写入CSV
-            record_status "$base_name" "RT_TIMEOUT" "运行超时(30s)${run_stderr:+; stderr: $run_stderr}"
+            # 平台：超时/运行时错误 -> RE
+            record_status "$base_name" "RE" "运行超时(${RUN_TIMEOUT}s)${run_stderr:+; stderr: $run_stderr}"
+            csv_write_ext "$base_name" "RE" "RT_TIMEOUT" "run" "$compile_s" "$link_s" "$run_s" "" "" "" "" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "${run_stderr:-timeout}"
             ((failed++))
             rm -f "$temp_stdout" "$temp_stderr"
             continue
         fi
 
         actual_stdout=$(cat "$temp_stdout" | grep -v "TOTAL:" | tr -d '\r')
-        run_stderr=$(cat "$temp_stderr" 2>/dev/null || echo "")
         rm -f "$temp_stdout" "$temp_stderr"
 
         if [ $actual_exit_code -gt 255 ]; then
@@ -319,33 +360,24 @@ run_tests_in_dir() {
         if $stdout_ok && $exit_code_ok; then
             log "\e[32m通过\e[0m"
             record_status "$base_name" "AC" ""
+            a_md5=$(echo -n "$actual_stdout" | md5sum | cut -d' ' -f1)
+            e_md5=$(echo -n "$expected_stdout" | md5sum | cut -d' ' -f1)
+            filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
+            csv_write_ext "$base_name" "AC" "AC" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$a_md5" "$e_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" ""
             ((passed++))
         elif $stdout_ok && ! $exit_code_ok; then
-            # 输出一致，但退出码不同 => 通过 + 警告；保留组合哈希不匹配信息
-            # 组合哈希: 近似平台可能的做法——对 "stdout + 换行 + exit" 求 MD5，仅用于提示
+            # 平台口径：当输出正确但退出码不同，按WA处理
             actual_md5_stdout=$(echo -n "$actual_stdout" | md5sum | cut -d' ' -f1)
             expected_md5_stdout=$(echo -n "$expected_stdout" | md5sum | cut -d' ' -f1)
-            actual_md5_combined=$(printf '%s\n%s' "$actual_stdout" "$actual_exit_code" | md5sum | cut -d' ' -f1)
-            expected_md5_combined=$(printf '%s\n%s' "$expected_stdout" "$expected_exit_code_mod" | md5sum | cut -d' ' -f1)
-
-            log "\e[33m通过(退出码不匹配)\e[0m"
-            log "[$base_name] 退出码不匹配. 期望: $expected_exit_code, 实际: $actual_exit_code"
-            log "[$base_name] 组合哈希不匹配(仅供参考):"
-            log "[$base_name] 实际: $actual_md5_combined"
-            log "[$base_name] 预期: $expected_md5_combined"
-
             detail_text="输出正确，但退出码不匹配
 期望退出码: $expected_exit_code
 实际退出码: $actual_exit_code
-
-哈希信息(仅供参考):
 stdout_md5_actual: $actual_md5_stdout
-stdout_md5_expect: $expected_md5_stdout
-combined_md5_actual(stdout+exit): $actual_md5_combined
-combined_md5_expect(stdout+exit): $expected_md5_combined"
-            # 计为通过(AC)，但细节里保留不匹配信息
-            record_status "$base_name" "AC" "$detail_text"
-            ((passed++))
+stdout_md5_expect: $expected_md5_stdout"
+            record_status "$base_name" "WA" "$detail_text"
+            filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
+            csv_write_ext "$base_name" "WA" "EXITCODE_MISMATCH" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5_stdout" "$expected_md5_stdout" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "exit code mismatch"
+            ((failed++))
         else
             log "\e[31m失败\e[0m"
 
@@ -385,7 +417,10 @@ Failed: 0.0 result is $actual_md5"
 stderr:
 $run_stderr"
 
-                record_status "$base_name" "WA_BOTH" "$detail_text"
+                # 平台：统一写为 WA
+                record_status "$base_name" "WA" "$detail_text"
+                filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
+                csv_write_ext "$base_name" "WA" "WA_BOTH" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5" "$expected_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "stdout & exit mismatch"
 
             elif ! $stdout_ok; then
                 detail_text="结果哈希值不匹配
@@ -407,7 +442,10 @@ Failed: 0.0 result is $actual_md5
 stderr:
 $run_stderr"
 
-                record_status "$base_name" "WA_STDOUT" "$detail_text"
+                # 平台：统一写为 WA
+                record_status "$base_name" "WA" "$detail_text"
+                filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
+                csv_write_ext "$base_name" "WA" "WA_STDOUT" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5" "$expected_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "stdout mismatch"
 
             # 注意: 这里不再单独把“仅退出码不匹配”判为失败，已在上面对齐为通过
             fi
