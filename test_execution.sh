@@ -114,7 +114,7 @@ total=0
 skipped=0
 
 # 扩展汇总（含子状态/阶段/耗时等）
-SUMMARY_CSV_EXT="test_results_summary.csv"
+SUMMARY_CSV_EXT="doc/test_results_summary.csv"
 
 # 清空日志/汇总文件
 > "$LOG_FILE"
