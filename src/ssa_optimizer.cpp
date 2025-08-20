@@ -1,8 +1,6 @@
 #include "../include/ssa.h"
 #include <algorithm>
 #include <iostream>
-#include <queue>
-#include <sstream>
 
 extern std::map<std::string, int> function_name_to_maxreg;
 
@@ -20,6 +18,8 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
   std::cout << "  Running redundant param alloca removal..." << std::endl;
   removeRedundantParamAlloca(optimized_ir);
 
+  // std::cout << "  Running redundant param load/store removal..." <<
+  // std::endl; removeRedundantParamLoadStore(optimized_ir);
   // std::cout << "  Running redundant param load/store removal..." <<
   // std::endl;
   std::cout << "  Running redundant param load/store removal..." << std::endl;
