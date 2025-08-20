@@ -57,7 +57,7 @@ private:
   bool in_loop = false;                               // 是否在循环内部
   std::shared_ptr<Type> current_function_return_type; // 当前函数返回类型
   std::string current_function_name;                  // 当前函数名
-  BaseType current_decl_type = BaseType::INT;         // 当前声明的基本类型
+  BaseType current_decl_type = BaseType::INT; // 当前声明的基本类型
 
   // 辅助方法
   void reportError(SemanticErrorType type, const std::string &message,

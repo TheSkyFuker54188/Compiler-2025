@@ -138,7 +138,7 @@ public:
   void flattenInitVal(InitVal *init,
                       std::vector<std::variant<int, float>> &result,
                       BaseType type);
-  std::optional<int> evaluateConstExpression(Exp *expr,int isdef);
+  std::optional<int> evaluateConstExpression(Exp *expr, int isdef);
   std::optional<float> evaluateConstExpressionFloat(Exp *expr);
   std::optional<double> evaluateGlobalInitializer(InitVal *init);
   std::shared_ptr<Type> inferExpressionType(Exp *expression);

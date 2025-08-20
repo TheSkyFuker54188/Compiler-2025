@@ -1,6 +1,4 @@
-#include "astprinter.h"
-#include <iomanip>
-#include <variant>
+#include "../include/astprinter.h"
 
 ASTPrinter::ASTPrinter(std::ostream &output) : out(output) {}
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "block.h"
 #include "riscv_instruction.h"
 #include <deque>
 #include <iostream>
@@ -68,8 +67,8 @@ private:
 
   // Phi指令处理
   struct PhiTranslationInfo {
-    int block_id;                                         // phi指令所在的块ID
-    RiscvOperand *result;                                 // phi指令的结果操作数
+    int block_id;         // phi指令所在的块ID
+    RiscvOperand *result; // phi指令的结果操作数
     std::vector<std::pair<RiscvOperand *, int>> phi_args; // (值, 前驱块ID)对
   };
   std::vector<PhiTranslationInfo> pending_phi_instructions; // 待处理的phi指令
