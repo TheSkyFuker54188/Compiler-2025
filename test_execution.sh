@@ -113,11 +113,8 @@ failed=0
 total=0
 skipped=0
 
-# 定义日志与汇总文件路径
-LOG_FILE="test_results.txt"
-SUMMARY_CSV="test_results_summary.csv"
 # 扩展汇总（含子状态/阶段/耗时等）
-SUMMARY_CSV_EXT="test_results_summary_ext.csv"
+SUMMARY_CSV_EXT="test_results_summary.csv"
 
 # 清空日志/汇总文件
 > "$LOG_FILE"
@@ -365,18 +362,25 @@ run_tests_in_dir() {
             filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
             csv_write_ext "$base_name" "AC" "AC" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$a_md5" "$e_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" ""
             ((passed++))
-        elif $stdout_ok && ! $exit_code_ok; then
-            # 平台口径：当输出正确但退出码不同，按WA处理
-            actual_md5_stdout=$(echo -n "$actual_stdout" | md5sum | cut -d' ' -f1)
-            expected_md5_stdout=$(echo -n "$expected_stdout" | md5sum | cut -d' ' -f1)
-            detail_text="输出正确，但退出码不匹配
-期望退出码: $expected_exit_code
-实际退出码: $actual_exit_code
-stdout_md5_actual: $actual_md5_stdout
-stdout_md5_expect: $expected_md5_stdout"
+        elif ! $stdout_ok && $exit_code_ok; then
+            # 仅stdout不匹配 => WA
+            actual_md5=$(echo -n "$actual_stdout" | md5sum | cut -d' ' -f1)
+            expected_md5=$(echo -n "$expected_stdout" | md5sum | cut -d' ' -f1)
+            detail_text="结果哈希值不匹配
+实际结果: $actual_md5
+预期结果: $expected_md5
+
+FPGA运行输出:
+Running testcases/$base_name
+Filesize: $filesz
+Failed: 0.0 result is $actual_md5
+
+标准输出不匹配:
+期望: '$expected_stdout'
+实际: '$actual_stdout'${run_stderr:+\nstderr:\n$run_stderr}"
             record_status "$base_name" "WA" "$detail_text"
             filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
-            csv_write_ext "$base_name" "WA" "EXITCODE_MISMATCH" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5_stdout" "$expected_md5_stdout" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "exit code mismatch"
+            csv_write_ext "$base_name" "WA" "WA_STDOUT" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5" "$expected_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "stdout mismatch"
             ((failed++))
         else
             log "\e[31m失败\e[0m"
@@ -397,32 +401,15 @@ stdout_md5_expect: $expected_md5_stdout"
             # 详细文本模板
             detail_text=""
 
-            if ! $stdout_ok && ! $exit_code_ok; then
-                detail_text="结果哈希值不匹配
-实际结果: $actual_md5
-预期结果: $expected_md5
-
-FPGA运行输出:
-Running testcases/$base_name
-Filesize: $filesz
-Failed: 0.0 result is $actual_md5"
-                log "[$base_name] 结果哈希值不匹配"
-                log "[$base_name] 实际结果: $actual_md5"
-                log "[$base_name] 预期结果: $expected_md5"
-                log ""
-                log "[$base_name] FPGA运行输出:"
-                [ -n "$actual_stdout" ] && log "[$base_name] 输出: $actual_stdout"
-                log "[$base_name] 退出码: $actual_exit_code"
-                [ -n "$run_stderr" ] && detail_text="$detail_text
-stderr:
-$run_stderr"
-
-                # 平台：统一写为 WA
-                record_status "$base_name" "WA" "$detail_text"
-                filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
-                csv_write_ext "$base_name" "WA" "WA_BOTH" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5" "$expected_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "stdout & exit mismatch"
-
-            elif ! $stdout_ok; then
+            # 只要退出码不匹配（无论stdout是否匹配）=> RE
+            filesz="N/A"; [ -f "$exe_file" ] && filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo "N/A")
+            actual_md5=$(echo -n "$actual_stdout" | md5sum | cut -d' ' -f1)
+            expected_md5=$(echo -n "$expected_stdout" | md5sum | cut -d' ' -f1)
+            crashed_note=""
+            if [ "$actual_exit_code" -ge 128 ] || echo "$run_stderr" | grep -qiE "(dumped core|segmentation fault|illegal)"; then
+                crashed_note="; suspected crash"
+            fi
+            if ! $stdout_ok; then
                 detail_text="结果哈希值不匹配
 实际结果: $actual_md5
 预期结果: $expected_md5
@@ -431,24 +418,16 @@ FPGA运行输出:
 Running testcases/$base_name
 Filesize: $filesz
 Failed: 0.0 result is $actual_md5
-
-标准输出不匹配:
-期望: '$expected_stdout'
-实际: '$actual_stdout'"
-                log "[$base_name] 标准输出不匹配:"
-                log "[$base_name] 期望: '$expected_stdout'"
-                log "[$base_name] 实际: '$actual_stdout'"
-                [ -n "$run_stderr" ] && detail_text="$detail_text
-stderr:
-$run_stderr"
-
-                # 平台：统一写为 WA
-                record_status "$base_name" "WA" "$detail_text"
-                filesz=$(stat -c%s "$exe_file" 2>/dev/null || echo N/A)
-                csv_write_ext "$base_name" "WA" "WA_STDOUT" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5" "$expected_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "stdout mismatch"
-
-            # 注意: 这里不再单独把“仅退出码不匹配”判为失败，已在上面对齐为通过
+退出码不匹配: 期望: $expected_exit_code, 实际: $actual_exit_code${crashed_note}
+${run_stderr:+stderr:\n$run_stderr}"
+            else
+                detail_text="输出正确，但退出码不匹配
+期望退出码: $expected_exit_code
+实际退出码: $actual_exit_code${crashed_note}
+${run_stderr:+stderr:\n$run_stderr}"
             fi
+            record_status "$base_name" "RE" "$detail_text"
+            csv_write_ext "$base_name" "RE" "EXITCODE_MISMATCH" "compare" "$compile_s" "$link_s" "$run_s" "$actual_exit_code" "$actual_md5" "$expected_md5" "$filesz" "$( [ -f "$in_file" ] && echo 1 || echo 0 )" "exit code mismatch${crashed_note}"
 
             ((failed++))
         fi
