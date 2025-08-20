@@ -11,8 +11,8 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
 
   std::cout << "Starting SSA optimizations..." << std::endl;
   // 除法优化
-  //std::cout << "  Running division optimization..." << std::endl;
-  //optimizeDivision(optimized_ir);
+  // std::cout << "  Running division optimization..." << std::endl;
+  // optimizeDivision(optimized_ir);
   // 删除多余add
   std::cout << "  Running redundant add removal..." << std::endl;
   removeRedundantAdd(optimized_ir);
@@ -20,15 +20,17 @@ LLVMIR SSAOptimizer::optimize(const LLVMIR &ssa_ir) {
   std::cout << "  Running redundant param alloca removal..." << std::endl;
   removeRedundantParamAlloca(optimized_ir);
 
-  // std::cout << "  Running redundant param load/store removal..." << std::endl;
-  // removeRedundantParamLoadStore(optimized_ir);
+  // std::cout << "  Running redundant param load/store removal..." <<
+  // std::endl;
+  std::cout << "  Running redundant param load/store removal..." << std::endl;
+  removeRedundantParamLoadStore(optimized_ir);
 
   // 延迟alloca
-  //std::cout << "  Running alloca delay optimization..." << std::endl;
-  //delayAllocaInstructions(optimized_ir);
+  std::cout << "  Running alloca delay optimization..." << std::endl;
+  delayAllocaInstructions(optimized_ir);
 
   std::cout << "SSA optimizations completed";
-  
+
   return optimized_ir;
 }
 
@@ -220,7 +222,7 @@ void SSAOptimizer::optimizeDivision(LLVMIR &ir) {
 
 // Check if an operand is a specific register
 bool SSAOptimizer::isRegAndEqual(Operand op, int reg_no) {
-  if (auto *reg = dynamic_cast<RegOperand*>(op)) {
+  if (auto *reg = dynamic_cast<RegOperand *>(op)) {
     return reg->GetRegNo() == reg_no;
   }
   return false;
@@ -228,83 +230,89 @@ bool SSAOptimizer::isRegAndEqual(Operand op, int reg_no) {
 
 // Check if an instruction uses a specific register
 bool SSAOptimizer::isUsedInInstruction(Instruction ins, int reg_no) {
-  if (auto *arith = dynamic_cast<ArithmeticInstruction*>(ins)) {
-    if (isRegAndEqual(arith->GetOp1(), reg_no) || isRegAndEqual(arith->GetOp2(), reg_no)) {
+  if (auto *arith = dynamic_cast<ArithmeticInstruction *>(ins)) {
+    if (isRegAndEqual(arith->GetOp1(), reg_no) ||
+        isRegAndEqual(arith->GetOp2(), reg_no)) {
       return true;
     }
     if (arith->GetOp3() && isRegAndEqual(arith->GetOp3(), reg_no)) {
       return true;
     }
-  } else if (auto *load = dynamic_cast<LoadInstruction*>(ins)) {
+  } else if (auto *load = dynamic_cast<LoadInstruction *>(ins)) {
     if (isRegAndEqual(load->GetPointer(), reg_no)) {
       return true;
     }
-  } else if (auto *store = dynamic_cast<StoreInstruction*>(ins)) {
-    if (isRegAndEqual(store->GetValue(), reg_no) || isRegAndEqual(store->GetPointer(), reg_no)) {
+  } else if (auto *store = dynamic_cast<StoreInstruction *>(ins)) {
+    if (isRegAndEqual(store->GetValue(), reg_no) ||
+        isRegAndEqual(store->GetPointer(), reg_no)) {
       return true;
     }
-  } else if (auto *icmp = dynamic_cast<IcmpInstruction*>(ins)) {
-    if (isRegAndEqual(icmp->GetOp1(), reg_no) || isRegAndEqual(icmp->GetOp2(), reg_no)) {
+  } else if (auto *icmp = dynamic_cast<IcmpInstruction *>(ins)) {
+    if (isRegAndEqual(icmp->GetOp1(), reg_no) ||
+        isRegAndEqual(icmp->GetOp2(), reg_no)) {
       return true;
     }
-  } else if (auto *fcmp = dynamic_cast<FcmpInstruction*>(ins)) {
-    if (isRegAndEqual(fcmp->GetOp1(), reg_no) || isRegAndEqual(fcmp->GetOp2(), reg_no)) {
+  } else if (auto *fcmp = dynamic_cast<FcmpInstruction *>(ins)) {
+    if (isRegAndEqual(fcmp->GetOp1(), reg_no) ||
+        isRegAndEqual(fcmp->GetOp2(), reg_no)) {
       return true;
     }
-  } else if (auto *phi = dynamic_cast<PhiInstruction*>(ins)) {
-    for (const auto& pair : phi->phi_list) {
+  } else if (auto *phi = dynamic_cast<PhiInstruction *>(ins)) {
+    for (const auto &pair : phi->phi_list) {
       if (isRegAndEqual(pair.second, reg_no)) {
         return true;
       }
     }
-  } else if (auto *call = dynamic_cast<CallInstruction*>(ins)) {
-    for (const auto& arg : call->GetArgs()) {
+  } else if (auto *call = dynamic_cast<CallInstruction *>(ins)) {
+    for (const auto &arg : call->GetArgs()) {
       if (isRegAndEqual(arg.second, reg_no)) {
         return true;
       }
     }
-  } else if (auto *br_cond = dynamic_cast<BrCondInstruction*>(ins)) {
+  } else if (auto *br_cond = dynamic_cast<BrCondInstruction *>(ins)) {
     if (isRegAndEqual(br_cond->GetCond(), reg_no)) {
       return true;
     }
-  } else if (auto *ret = dynamic_cast<RetInstruction*>(ins)) {
+  } else if (auto *ret = dynamic_cast<RetInstruction *>(ins)) {
     if (ret->GetRetVal() && isRegAndEqual(ret->GetRetVal(), reg_no)) {
       return true;
     }
-  } else if (auto *gep = dynamic_cast<GetElementptrInstruction*>(ins)) {
+  } else if (auto *gep = dynamic_cast<GetElementptrInstruction *>(ins)) {
     if (isRegAndEqual(gep->GetPtrVal(), reg_no)) {
       return true;
     }
-    for (const auto& idx : gep->GetIndexes()) {
+    for (const auto &idx : gep->GetIndexes()) {
       if (isRegAndEqual(idx, reg_no)) {
         return true;
       }
     }
-  } else if (auto *zext = dynamic_cast<ZextInstruction*>(ins)) {
+  } else if (auto *zext = dynamic_cast<ZextInstruction *>(ins)) {
     if (isRegAndEqual(zext->value, reg_no)) {
       return true;
     }
-  } else if (auto *sitofp = dynamic_cast<SitofpInstruction*>(ins)) {
+  } else if (auto *sitofp = dynamic_cast<SitofpInstruction *>(ins)) {
     if (isRegAndEqual(sitofp->value, reg_no)) {
       return true;
     }
-  } else if (auto *fptosi = dynamic_cast<FptosiInstruction*>(ins)) {
+  } else if (auto *fptosi = dynamic_cast<FptosiInstruction *>(ins)) {
     if (isRegAndEqual(fptosi->value, reg_no)) {
       return true;
     }
-  } else if (auto *fpext = dynamic_cast<FpextInstruction*>(ins)) {
+  } else if (auto *fpext = dynamic_cast<FpextInstruction *>(ins)) {
     if (isRegAndEqual(fpext->value, reg_no)) {
       return true;
     }
-  } else if (auto *bitcast = dynamic_cast<BitCastInstruction*>(ins)) {
+  } else if (auto *bitcast = dynamic_cast<BitCastInstruction *>(ins)) {
     if (isRegAndEqual(bitcast->src, reg_no)) {
       return true;
     }
-  } else if (auto *select = dynamic_cast<SelectInstruction*>(ins)) {
-    if (isRegAndEqual(select->cond, reg_no) || isRegAndEqual(select->op1, reg_no) || isRegAndEqual(select->op2, reg_no)) {
+  } else if (auto *select = dynamic_cast<SelectInstruction *>(ins)) {
+    if (isRegAndEqual(select->cond, reg_no) ||
+        isRegAndEqual(select->op1, reg_no) ||
+        isRegAndEqual(select->op2, reg_no)) {
       return true;
     }
-  } else if (auto *trunc = dynamic_cast<TruncInstruction*>(ins)) {
+  } else if (auto *trunc = dynamic_cast<TruncInstruction *>(ins)) {
     if (isRegAndEqual(trunc->value, reg_no)) {
       return true;
     }
@@ -317,16 +325,17 @@ void SSAOptimizer::removeRedundantAdd(LLVMIR &ir) {
   for (auto &func : ir.function_block_map) {
     for (auto &block_pair : func.second) {
       auto &inst_list = block_pair.second->Instruction_list;
-      for (auto it = inst_list.begin(); it != inst_list.end(); ) {
-        if (auto *arith = dynamic_cast<ArithmeticInstruction*>(*it)) {
-          if (arith->GetOpcode() == ADD && 
-              dynamic_cast<ImmI32Operand*>(arith->GetOp1()) && 
-              dynamic_cast<ImmI32Operand*>(arith->GetOp2())) {
+      for (auto it = inst_list.begin(); it != inst_list.end();) {
+        if (auto *arith = dynamic_cast<ArithmeticInstruction *>(*it)) {
+          if (arith->GetOpcode() == ADD &&
+              dynamic_cast<ImmI32Operand *>(arith->GetOp1()) &&
+              dynamic_cast<ImmI32Operand *>(arith->GetOp2())) {
             Operand result = arith->GetResult();
-            if (auto *reg = dynamic_cast<RegOperand*>(result)) {
+            if (auto *reg = dynamic_cast<RegOperand *>(result)) {
               int reg_no = reg->GetRegNo();
               bool is_used_after = false;
-              for (auto check_it = it + 1; check_it != inst_list.end(); ++check_it) {
+              for (auto check_it = it + 1; check_it != inst_list.end();
+                   ++check_it) {
                 if (isUsedInInstruction(*check_it, reg_no)) {
                   is_used_after = true;
                   break;
@@ -334,7 +343,8 @@ void SSAOptimizer::removeRedundantAdd(LLVMIR &ir) {
               }
               if (!is_used_after) {
                 delete *it; // Free memory
-                it = inst_list.erase(it); // Remove instruction and update iterator
+                it = inst_list.erase(
+                    it); // Remove instruction and update iterator
                 continue;
               }
             }
@@ -350,7 +360,8 @@ void SSAOptimizer::removeRedundantAdd(LLVMIR &ir) {
 void SSAOptimizer::removeRedundantParamAlloca(LLVMIR &ir) {
   for (auto &func : ir.function_block_map) {
     auto &block_map = func.second;
-    if (block_map.empty()) continue;
+    if (block_map.empty())
+      continue;
 
     // Get the entry block
     auto entry_block_it = block_map.begin();
@@ -360,7 +371,7 @@ void SSAOptimizer::removeRedundantParamAlloca(LLVMIR &ir) {
     // Get parameter registers
     std::unordered_set<int> param_regs;
     for (auto &formal : func.first->formals_reg) {
-      if (auto *reg = dynamic_cast<RegOperand*>(formal)) {
+      if (auto *reg = dynamic_cast<RegOperand *>(formal)) {
         param_regs.insert(reg->GetRegNo());
       }
     }
@@ -372,21 +383,22 @@ void SSAOptimizer::removeRedundantParamAlloca(LLVMIR &ir) {
 
     // Process instructions in the entry block
     for (auto it = inst_list.begin(); it != inst_list.end(); ++it) {
-      if (auto *alloca_ins = dynamic_cast<AllocaInstruction*>(*it)) {
+      if (auto *alloca_ins = dynamic_cast<AllocaInstruction *>(*it)) {
         if (alloca_ins->GetType() == PTR) {
           // 修改点1: 使用动态转换获取寄存器号
-          if (auto *result_reg = dynamic_cast<RegOperand*>(alloca_ins->GetResult())) {
+          if (auto *result_reg =
+                  dynamic_cast<RegOperand *>(alloca_ins->GetResult())) {
             int reg_no = result_reg->GetRegNo();
             allocas[reg_no] = *it;
           }
         }
-      } else if (auto *store_ins = dynamic_cast<StoreInstruction*>(*it)) {
+      } else if (auto *store_ins = dynamic_cast<StoreInstruction *>(*it)) {
         if (store_ins->GetType() == PTR) {
           Operand value = store_ins->GetValue();
           Operand pointer = store_ins->GetPointer();
           // 修改点2: 使用动态转换获取寄存器号
-          if (auto *reg_value = dynamic_cast<RegOperand*>(value)) {
-            if (auto *reg_pointer = dynamic_cast<RegOperand*>(pointer)) {
+          if (auto *reg_value = dynamic_cast<RegOperand *>(value)) {
+            if (auto *reg_pointer = dynamic_cast<RegOperand *>(pointer)) {
               int rY = reg_value->GetRegNo();
               int rZ = reg_pointer->GetRegNo();
               if (allocas.count(rZ) && param_regs.count(rY)) {
@@ -404,7 +416,8 @@ void SSAOptimizer::removeRedundantParamAlloca(LLVMIR &ir) {
     // Remove marked instructions
     std::deque<Instruction> new_inst_list;
     for (auto ins : inst_list) {
-      if (std::find(to_remove.begin(), to_remove.end(), ins) == to_remove.end()) {
+      if (std::find(to_remove.begin(), to_remove.end(), ins) ==
+          to_remove.end()) {
         new_inst_list.push_back(ins);
       } else {
         delete ins; // Free memory
@@ -423,61 +436,66 @@ void SSAOptimizer::removeRedundantParamAlloca(LLVMIR &ir) {
 }
 
 // Helper function: Replace operands in an instruction
-void SSAOptimizer::replaceOperands(Instruction ins, const std::unordered_map<int, int>& remap) {
-  if (auto *arith = dynamic_cast<ArithmeticInstruction*>(ins)) {
+void SSAOptimizer::replaceOperands(Instruction ins,
+                                   const std::unordered_map<int, int> &remap) {
+  if (auto *arith = dynamic_cast<ArithmeticInstruction *>(ins)) {
     arith->op1 = replaceOperand(arith->GetOp1(), remap);
     arith->op2 = replaceOperand(arith->GetOp2(), remap);
-    if (arith->GetOp3()) arith->op3 = replaceOperand(arith->GetOp3(), remap);
-  } else if (auto *load = dynamic_cast<LoadInstruction*>(ins)) {
+    if (arith->GetOp3())
+      arith->op3 = replaceOperand(arith->GetOp3(), remap);
+  } else if (auto *load = dynamic_cast<LoadInstruction *>(ins)) {
     load->pointer = replaceOperand(load->GetPointer(), remap);
-  } else if (auto *store = dynamic_cast<StoreInstruction*>(ins)) {
+  } else if (auto *store = dynamic_cast<StoreInstruction *>(ins)) {
     store->value = replaceOperand(store->GetValue(), remap);
     store->pointer = replaceOperand(store->GetPointer(), remap);
-  } else if (auto *icmp = dynamic_cast<IcmpInstruction*>(ins)) {
+  } else if (auto *icmp = dynamic_cast<IcmpInstruction *>(ins)) {
     icmp->op1 = replaceOperand(icmp->GetOp1(), remap);
     icmp->op2 = replaceOperand(icmp->GetOp2(), remap);
-  } else if (auto *fcmp = dynamic_cast<FcmpInstruction*>(ins)) {
+  } else if (auto *fcmp = dynamic_cast<FcmpInstruction *>(ins)) {
     fcmp->op1 = replaceOperand(fcmp->GetOp1(), remap);
     fcmp->op2 = replaceOperand(fcmp->GetOp2(), remap);
-  } else if (auto *phi = dynamic_cast<PhiInstruction*>(ins)) {
+  } else if (auto *phi = dynamic_cast<PhiInstruction *>(ins)) {
     for (auto &pair : phi->phi_list) {
       pair.second = replaceOperand(pair.second, remap);
     }
-  } else if (auto *call = dynamic_cast<CallInstruction*>(ins)) {
+  } else if (auto *call = dynamic_cast<CallInstruction *>(ins)) {
     for (auto &arg : call->args) {
       arg.second = replaceOperand(arg.second, remap);
     }
-  } else if (auto *br_cond = dynamic_cast<BrCondInstruction*>(ins)) {
+  } else if (auto *br_cond = dynamic_cast<BrCondInstruction *>(ins)) {
     br_cond->cond = replaceOperand(br_cond->GetCond(), remap);
-  } else if (auto *ret = dynamic_cast<RetInstruction*>(ins)) {
-    if (ret->GetRetVal()) ret->ret_val = replaceOperand(ret->GetRetVal(), remap);
-  } else if (auto *gep = dynamic_cast<GetElementptrInstruction*>(ins)) {
+  } else if (auto *ret = dynamic_cast<RetInstruction *>(ins)) {
+    if (ret->GetRetVal())
+      ret->ret_val = replaceOperand(ret->GetRetVal(), remap);
+  } else if (auto *gep = dynamic_cast<GetElementptrInstruction *>(ins)) {
     gep->ptrval = replaceOperand(gep->GetPtrVal(), remap);
     for (auto &idx : gep->indexes) {
       idx = replaceOperand(idx, remap);
     }
-  } else if (auto *zext = dynamic_cast<ZextInstruction*>(ins)) {
+  } else if (auto *zext = dynamic_cast<ZextInstruction *>(ins)) {
     zext->value = replaceOperand(zext->value, remap);
-  } else if (auto *sitofp = dynamic_cast<SitofpInstruction*>(ins)) {
+  } else if (auto *sitofp = dynamic_cast<SitofpInstruction *>(ins)) {
     sitofp->value = replaceOperand(sitofp->value, remap);
-  } else if (auto *fptosi = dynamic_cast<FptosiInstruction*>(ins)) {
+  } else if (auto *fptosi = dynamic_cast<FptosiInstruction *>(ins)) {
     fptosi->value = replaceOperand(fptosi->value, remap);
-  } else if (auto *fpext = dynamic_cast<FpextInstruction*>(ins)) {
+  } else if (auto *fpext = dynamic_cast<FpextInstruction *>(ins)) {
     fpext->value = replaceOperand(fpext->value, remap);
-  } else if (auto *bitcast = dynamic_cast<BitCastInstruction*>(ins)) {
+  } else if (auto *bitcast = dynamic_cast<BitCastInstruction *>(ins)) {
     bitcast->src = replaceOperand(bitcast->src, remap);
-  } else if (auto *select = dynamic_cast<SelectInstruction*>(ins)) {
+  } else if (auto *select = dynamic_cast<SelectInstruction *>(ins)) {
     select->cond = replaceOperand(select->cond, remap);
     select->op1 = replaceOperand(select->op1, remap);
     select->op2 = replaceOperand(select->op2, remap);
-  } else if (auto *trunc = dynamic_cast<TruncInstruction*>(ins)) {
+  } else if (auto *trunc = dynamic_cast<TruncInstruction *>(ins)) {
     trunc->value = replaceOperand(trunc->value, remap);
   }
 }
 
 // Helper function: Replace a single operand
-Operand SSAOptimizer::replaceOperand(Operand op, const std::unordered_map<int, int>& remap) {
-  if (auto *reg = dynamic_cast<RegOperand*>(op)) {
+Operand
+SSAOptimizer::replaceOperand(Operand op,
+                             const std::unordered_map<int, int> &remap) {
+  if (auto *reg = dynamic_cast<RegOperand *>(op)) {
     int reg_no = reg->GetRegNo();
     auto it = remap.find(reg_no);
     if (it != remap.end()) {
@@ -489,13 +507,17 @@ Operand SSAOptimizer::replaceOperand(Operand op, const std::unordered_map<int, i
 
 void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
   for (auto &func : ir.function_block_map) {
-    if (func.second.empty()) continue;
+    if (func.second.empty())
+      continue;
 
     // Step 1: Get parameter registers
     std::unordered_set<int> param_regs;
+    // Also map param register number -> its Operand for later replacement
+    std::unordered_map<int, Operand> param_reg_to_operand;
     for (auto &formal : func.first->formals_reg) {
-      if (auto *reg = dynamic_cast<RegOperand*>(formal)) {
+      if (auto *reg = dynamic_cast<RegOperand *>(formal)) {
         param_regs.insert(reg->GetRegNo());
+        param_reg_to_operand[reg->GetRegNo()] = formal;
       }
     }
 
@@ -504,10 +526,12 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
     auto &inst_list = entry_block->Instruction_list;
 
     // Step 3: Collect allocas in entry block
-    std::unordered_map<int, AllocaInstruction*> allocas; // reg_no -> alloca instruction
+    std::unordered_map<int, AllocaInstruction *>
+        allocas; // reg_no -> alloca instruction
     for (auto ins : inst_list) {
-      if (auto *alloca_ins = dynamic_cast<AllocaInstruction*>(ins)) {
-        if (auto *result_reg = dynamic_cast<RegOperand*>(alloca_ins->GetResult())) {
+      if (auto *alloca_ins = dynamic_cast<AllocaInstruction *>(ins)) {
+        if (auto *result_reg =
+                dynamic_cast<RegOperand *>(alloca_ins->GetResult())) {
           int reg_no = result_reg->GetRegNo();
           allocas[reg_no] = alloca_ins;
         }
@@ -515,14 +539,18 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
     }
 
     // Step 4: Collect initial stores (parameter to alloca)
-    std::unordered_map<int, int> alloca_to_param; // alloca_reg_no -> param_reg_no
-    std::unordered_map<int, StoreInstruction*> initial_stores; // alloca_reg_no -> store instruction
+    std::unordered_map<int, int>
+        alloca_to_param; // alloca_reg_no -> param_reg_no
+    std::unordered_map<int, StoreInstruction *>
+        initial_stores; // alloca_reg_no -> store instruction
     for (auto ins : inst_list) {
-      if (auto *store_ins = dynamic_cast<StoreInstruction*>(ins)) {
-        if (auto *pointer_reg = dynamic_cast<RegOperand*>(store_ins->GetPointer())) {
+      if (auto *store_ins = dynamic_cast<StoreInstruction *>(ins)) {
+        if (auto *pointer_reg =
+                dynamic_cast<RegOperand *>(store_ins->GetPointer())) {
           int pointer_reg_no = pointer_reg->GetRegNo();
           if (allocas.count(pointer_reg_no)) {
-            if (auto *value_reg = dynamic_cast<RegOperand*>(store_ins->GetValue())) {
+            if (auto *value_reg =
+                    dynamic_cast<RegOperand *>(store_ins->GetValue())) {
               int value_reg_no = value_reg->GetRegNo();
               if (param_regs.count(value_reg_no)) {
                 alloca_to_param[pointer_reg_no] = value_reg_no;
@@ -536,14 +564,15 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
 
     // Step 5: Identify candidate allocas (only one store)
     std::unordered_set<int> candidate_allocas; // alloca_reg_no
-    for (const auto& pair : alloca_to_param) {
+    for (const auto &pair : alloca_to_param) {
       int alloca_reg = pair.first;
       int store_count = 0;
-      for (const auto& block_pair : func.second) {
+      for (const auto &block_pair : func.second) {
         auto &block_inst_list = block_pair.second->Instruction_list;
         for (auto ins : block_inst_list) {
-          if (auto *store_ins = dynamic_cast<StoreInstruction*>(ins)) {
-            if (auto *pointer_reg = dynamic_cast<RegOperand*>(store_ins->GetPointer())) {
+          if (auto *store_ins = dynamic_cast<StoreInstruction *>(ins)) {
+            if (auto *pointer_reg =
+                    dynamic_cast<RegOperand *>(store_ins->GetPointer())) {
               if (pointer_reg->GetRegNo() == alloca_reg) {
                 store_count++;
               }
@@ -557,18 +586,27 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
     }
 
     // Step 6: Map load results to parameters and collect instructions to remove
-    std::unordered_map<int, Operand> replace_map; // load_result_reg_no -> param_operand
+    std::unordered_map<int, Operand>
+        replace_map; // load_result_reg_no -> param_operand
     std::vector<Instruction> to_remove;
-    for (const auto& block_pair : func.second) {
+    for (const auto &block_pair : func.second) {
       auto &block_inst_list = block_pair.second->Instruction_list;
       for (auto ins : block_inst_list) {
-        if (auto *load_ins = dynamic_cast<LoadInstruction*>(ins)) {
-          if (auto *pointer_reg = dynamic_cast<RegOperand*>(load_ins->GetPointer())) {
+        if (auto *load_ins = dynamic_cast<LoadInstruction *>(ins)) {
+          if (auto *pointer_reg =
+                  dynamic_cast<RegOperand *>(load_ins->GetPointer())) {
             int pointer_reg_no = pointer_reg->GetRegNo();
             if (candidate_allocas.count(pointer_reg_no)) {
               int param_reg_no = alloca_to_param[pointer_reg_no];
-              Operand param_operand = func.first->formals_reg[param_reg_no]; // Direct use of parameter operand
-              if (auto *result_reg = dynamic_cast<RegOperand*>(load_ins->GetResult())) {
+              // Use the captured mapping instead of indexing by register number
+              auto it_param = param_reg_to_operand.find(param_reg_no);
+              if (it_param == param_reg_to_operand.end()) {
+                continue; // safety guard; unexpected, skip
+              }
+              Operand param_operand =
+                  it_param->second; // Direct use of parameter operand
+              if (auto *result_reg =
+                      dynamic_cast<RegOperand *>(load_ins->GetResult())) {
                 int result_reg_no = result_reg->GetRegNo();
                 replace_map[result_reg_no] = param_operand;
                 to_remove.push_back(load_ins);
@@ -593,7 +631,8 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
     for (auto &block_pair : func.second) {
       auto &block_inst_list = block_pair.second->Instruction_list;
       for (auto &ins : block_inst_list) {
-        if (std::find(to_remove.begin(), to_remove.end(), ins) == to_remove.end()) {
+        if (std::find(to_remove.begin(), to_remove.end(), ins) ==
+            to_remove.end()) {
           replaceOperands(ins, replace_map);
         }
       }
@@ -604,7 +643,8 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
       auto &block_inst_list = block_pair.second->Instruction_list;
       std::deque<Instruction> new_inst_list;
       for (auto ins : block_inst_list) {
-        if (std::find(to_remove.begin(), to_remove.end(), ins) == to_remove.end()) {
+        if (std::find(to_remove.begin(), to_remove.end(), ins) ==
+            to_remove.end()) {
           new_inst_list.push_back(ins);
         } else {
           delete ins; // Free memory
@@ -616,61 +656,65 @@ void SSAOptimizer::removeRedundantParamLoadStore(LLVMIR &ir) {
 }
 
 // New helper function: Replace operands with Operand map
-void SSAOptimizer::replaceOperands(Instruction ins, const std::unordered_map<int, Operand>& replace_map) {
-  if (auto *arith = dynamic_cast<ArithmeticInstruction*>(ins)) {
+void SSAOptimizer::replaceOperands(
+    Instruction ins, const std::unordered_map<int, Operand> &replace_map) {
+  if (auto *arith = dynamic_cast<ArithmeticInstruction *>(ins)) {
     arith->op1 = replaceOperand(arith->GetOp1(), replace_map);
     arith->op2 = replaceOperand(arith->GetOp2(), replace_map);
-    if (arith->GetOp3()) arith->op3 = replaceOperand(arith->GetOp3(), replace_map);
-  } else if (auto *load = dynamic_cast<LoadInstruction*>(ins)) {
+    if (arith->GetOp3())
+      arith->op3 = replaceOperand(arith->GetOp3(), replace_map);
+  } else if (auto *load = dynamic_cast<LoadInstruction *>(ins)) {
     load->pointer = replaceOperand(load->GetPointer(), replace_map);
-  } else if (auto *store = dynamic_cast<StoreInstruction*>(ins)) {
+  } else if (auto *store = dynamic_cast<StoreInstruction *>(ins)) {
     store->value = replaceOperand(store->GetValue(), replace_map);
     store->pointer = replaceOperand(store->GetPointer(), replace_map);
-  } else if (auto *icmp = dynamic_cast<IcmpInstruction*>(ins)) {
+  } else if (auto *icmp = dynamic_cast<IcmpInstruction *>(ins)) {
     icmp->op1 = replaceOperand(icmp->GetOp1(), replace_map);
     icmp->op2 = replaceOperand(icmp->GetOp2(), replace_map);
-  } else if (auto *fcmp = dynamic_cast<FcmpInstruction*>(ins)) {
+  } else if (auto *fcmp = dynamic_cast<FcmpInstruction *>(ins)) {
     fcmp->op1 = replaceOperand(fcmp->GetOp1(), replace_map);
     fcmp->op2 = replaceOperand(fcmp->GetOp2(), replace_map);
-  } else if (auto *phi = dynamic_cast<PhiInstruction*>(ins)) {
+  } else if (auto *phi = dynamic_cast<PhiInstruction *>(ins)) {
     for (auto &pair : phi->phi_list) {
       pair.second = replaceOperand(pair.second, replace_map);
     }
-  } else if (auto *call = dynamic_cast<CallInstruction*>(ins)) {
+  } else if (auto *call = dynamic_cast<CallInstruction *>(ins)) {
     for (auto &arg : call->args) {
       arg.second = replaceOperand(arg.second, replace_map);
     }
-  } else if (auto *br_cond = dynamic_cast<BrCondInstruction*>(ins)) {
+  } else if (auto *br_cond = dynamic_cast<BrCondInstruction *>(ins)) {
     br_cond->cond = replaceOperand(br_cond->GetCond(), replace_map);
-  } else if (auto *ret = dynamic_cast<RetInstruction*>(ins)) {
-    if (ret->GetRetVal()) ret->ret_val = replaceOperand(ret->GetRetVal(), replace_map);
-  } else if (auto *gep = dynamic_cast<GetElementptrInstruction*>(ins)) {
+  } else if (auto *ret = dynamic_cast<RetInstruction *>(ins)) {
+    if (ret->GetRetVal())
+      ret->ret_val = replaceOperand(ret->GetRetVal(), replace_map);
+  } else if (auto *gep = dynamic_cast<GetElementptrInstruction *>(ins)) {
     gep->ptrval = replaceOperand(gep->GetPtrVal(), replace_map);
     for (auto &idx : gep->indexes) {
       idx = replaceOperand(idx, replace_map);
     }
-  } else if (auto *zext = dynamic_cast<ZextInstruction*>(ins)) {
+  } else if (auto *zext = dynamic_cast<ZextInstruction *>(ins)) {
     zext->value = replaceOperand(zext->value, replace_map);
-  } else if (auto *sitofp = dynamic_cast<SitofpInstruction*>(ins)) {
+  } else if (auto *sitofp = dynamic_cast<SitofpInstruction *>(ins)) {
     sitofp->value = replaceOperand(sitofp->value, replace_map);
-  } else if (auto *fptosi = dynamic_cast<FptosiInstruction*>(ins)) {
+  } else if (auto *fptosi = dynamic_cast<FptosiInstruction *>(ins)) {
     fptosi->value = replaceOperand(fptosi->value, replace_map);
-  } else if (auto *fpext = dynamic_cast<FpextInstruction*>(ins)) {
+  } else if (auto *fpext = dynamic_cast<FpextInstruction *>(ins)) {
     fpext->value = replaceOperand(fpext->value, replace_map);
-  } else if (auto *bitcast = dynamic_cast<BitCastInstruction*>(ins)) {
+  } else if (auto *bitcast = dynamic_cast<BitCastInstruction *>(ins)) {
     bitcast->src = replaceOperand(bitcast->src, replace_map);
-  } else if (auto *select = dynamic_cast<SelectInstruction*>(ins)) {
+  } else if (auto *select = dynamic_cast<SelectInstruction *>(ins)) {
     select->cond = replaceOperand(select->cond, replace_map);
     select->op1 = replaceOperand(select->op1, replace_map);
     select->op2 = replaceOperand(select->op2, replace_map);
-  } else if (auto *trunc = dynamic_cast<TruncInstruction*>(ins)) {
+  } else if (auto *trunc = dynamic_cast<TruncInstruction *>(ins)) {
     trunc->value = replaceOperand(trunc->value, replace_map);
   }
 }
 
 // New helper function: Replace a single operand with Operand map
-Operand SSAOptimizer::replaceOperand(Operand op, const std::unordered_map<int, Operand>& replace_map) {
-  if (auto *reg = dynamic_cast<RegOperand*>(op)) {
+Operand SSAOptimizer::replaceOperand(
+    Operand op, const std::unordered_map<int, Operand> &replace_map) {
+  if (auto *reg = dynamic_cast<RegOperand *>(op)) {
     int reg_no = reg->GetRegNo();
     auto it = replace_map.find(reg_no);
     if (it != replace_map.end()) {
@@ -683,7 +727,8 @@ Operand SSAOptimizer::replaceOperand(Operand op, const std::unordered_map<int, O
 void SSAOptimizer::delayAllocaInstructions(LLVMIR &ir) {
   for (auto &func : ir.function_block_map) {
     auto &block_map = func.second;
-    if (block_map.empty()) continue;
+    if (block_map.empty())
+      continue;
 
     // Get the entry block
     auto entry_block_it = block_map.begin();
@@ -691,10 +736,11 @@ void SSAOptimizer::delayAllocaInstructions(LLVMIR &ir) {
     auto &entry_inst_list = entry_block->Instruction_list;
 
     // Collect all alloca instructions from the entry block
-    std::unordered_map<int, AllocaInstruction*> alloca_map;
-    for (auto it = entry_inst_list.begin(); it != entry_inst_list.end(); ) {
-      if (auto *alloca_ins = dynamic_cast<AllocaInstruction*>(*it)) {
-        if (auto *result_reg = dynamic_cast<RegOperand*>(alloca_ins->GetResult())) {
+    std::unordered_map<int, AllocaInstruction *> alloca_map;
+    for (auto it = entry_inst_list.begin(); it != entry_inst_list.end();) {
+      if (auto *alloca_ins = dynamic_cast<AllocaInstruction *>(*it)) {
+        if (auto *result_reg =
+                dynamic_cast<RegOperand *>(alloca_ins->GetResult())) {
           int reg_no = result_reg->GetRegNo();
           alloca_map[reg_no] = alloca_ins;
           it = entry_inst_list.erase(it);
@@ -707,12 +753,13 @@ void SSAOptimizer::delayAllocaInstructions(LLVMIR &ir) {
     // Process each alloca instruction
     for (auto &pair : alloca_map) {
       int reg_no = pair.first;
-      AllocaInstruction* alloca_ins = pair.second;
+      AllocaInstruction *alloca_ins = pair.second;
       bool placed = false;
       bool find = false;
 
       // Search all blocks for the first use
-      for (auto block_it = block_map.begin(); block_it != block_map.end() && !placed; ++block_it) {
+      for (auto block_it = block_map.begin();
+           block_it != block_map.end() && !placed; ++block_it) {
         auto &block = block_it->second;
         auto &inst_list = block->Instruction_list;
 
@@ -722,17 +769,20 @@ void SSAOptimizer::delayAllocaInstructions(LLVMIR &ir) {
             // Found the first use, check block conditions
             bool is_last_block = (std::next(block_it) == block_map.end());
             Instruction last_ins = inst_list.back();
-            bool ends_with_br_uncond = dynamic_cast<BrUncondInstruction*>(last_ins) != nullptr;
+            bool ends_with_br_uncond =
+                dynamic_cast<BrUncondInstruction *>(last_ins) != nullptr;
             bool jumps_to_next = false;
 
             if (ends_with_br_uncond) {
-              auto *br_uncond = dynamic_cast<BrUncondInstruction*>(last_ins);
+              auto *br_uncond = dynamic_cast<BrUncondInstruction *>(last_ins);
               if (br_uncond) {
-                auto *label_op = dynamic_cast<LabelOperand*>(br_uncond->GetLabel());
+                auto *label_op =
+                    dynamic_cast<LabelOperand *>(br_uncond->GetLabel());
                 if (label_op) {
                   int target_label = label_op->GetLabelNo();
                   auto next_block_it = std::next(block_it);
-                  if (next_block_it != block_map.end() && next_block_it->first == target_label) {
+                  if (next_block_it != block_map.end() &&
+                      next_block_it->first == target_label) {
                     jumps_to_next = true;
                   }
                 }
@@ -747,7 +797,7 @@ void SSAOptimizer::delayAllocaInstructions(LLVMIR &ir) {
             break; // Stop after finding the first use in this block
           }
         }
-        if(find){
+        if (find) {
           break;
         }
       }
