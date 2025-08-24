@@ -43,16 +43,16 @@
 
 ### 2.2 主要模块
 
-| 模块 | 文件 | 功能描述 |
-|------|------|----------|
-| 词法分析 | `lexer/lex.l` | Token识别和分类 |
-| 语法分析 | `parser/parser.y` | AST构建 |
-| AST定义 | `include/ast.h` | 抽象语法树节点定义 |
-| 语义分析 | `include/semantic.h`<br>`src/semantic.cpp` | 类型检查、符号表管理 |
-| IR生成 | `src/irgenerate.cpp` | 中间代码生成 |
-| SSA优化 | `src/ssa_optimizer.cpp` | SSA形式优化 |
-| 代码生成 | `src/irtranslater.cpp` | RISC-V代码生成 |
-| 寄存器分配 | `src/register_allocator.cpp` | 寄存器分配算法 |
+| 模块       | 文件                                       | 功能描述             |
+| ---------- | ------------------------------------------ | -------------------- |
+| 词法分析   | `lexer/lex.l`                              | Token识别和分类      |
+| 语法分析   | `parser/parser.y`                          | AST构建              |
+| AST定义    | `include/ast.h`                            | 抽象语法树节点定义   |
+| 语义分析   | `include/semantic.h`<br>`src/semantic.cpp` | 类型检查、符号表管理 |
+| IR生成     | `src/irgenerate.cpp`                       | 中间代码生成         |
+| SSA优化    | `src/ssa_optimizer.cpp`                    | SSA形式优化          |
+| 代码生成   | `src/irtranslater.cpp`                     | RISC-V代码生成       |
+| 寄存器分配 | `src/register_allocator.cpp`               | 寄存器分配算法       |
 
 ## 3. 详细设计分析
 
@@ -194,21 +194,28 @@ class LLVMBlock {
 
 **优化Pass实现**:
 
-1. **死代码消除** (Dead Code Elimination):
-   - 识别未使用的变量和指令
-   - 删除无副作用的死指令
+- 前向数据流优化（自上游向下游传播信息）
+  - 常量传播（Constant Propagation）
+  - 复制传播（Copy Propagation）
+  - 条件常量传播（CCP，实用版）
+- 局部/代数类简化（块内、指令级等价变换）
+  - 常量折叠（Constant Folding）
+  - 代数化简（Algebraic Simplification）
+  - 强度削减（Strength Reduction，含除法/取模的幂次特化）
+  - φ 函数简化（Phi Simplification）
+- 全局冗余消除（跨指令/跨块的表达式合并）
+  - 公共子表达式消除（CSE，表达式规范化、交换律处理）
+  - 全局值编号（GVN，轻量复用 CSE Key）
+- 控制流/CFG 优化
+  - 不可达代码消除（UCE）
+  - 分支折叠（由 CCP 触发：br cond→br_uncond）
+- 循环优化
+  - 2×循环展开（Loop Unrolling，保守形态）
+  - 循环不变量外提（LICM，占位，路标已给）
+- 过程间优化
+  - 函数内联（Inlining，单基本块纯函数，保守安全）
 
-2. **常量传播** (Constant Propagation):
-   - 编译期计算常量表达式
-   - 替换已知常量值
 
-3. **代数简化** (Algebraic Simplification):
-   - 强度折减 (如 `x*2` → `x<<1`)
-   - 身份元素消除 (如 `x+0` → `x`, `x*1` → `x`)
-
-4. **公共子表达式消除** (Common Subexpression Elimination):
-   - 识别重复计算
-   - 重用已计算结果
 
 **优化器架构**:
 ```cpp
@@ -420,3 +427,9 @@ debug: DEBUG=1 all             # Debug版本构建
 - 具备良好的可扩展性
 - 包含完整的测试验证
 
+## 10. 结果
+> 最终成果：
+功能分：71
+性能分：0
+**优胜奖**
+明年的起点就是今年的终点，再接再厉~   
